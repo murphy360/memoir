@@ -13,6 +13,8 @@ class MemoryResponse(BaseModel):
     event_description: str
     estimated_date_text: Optional[str]
     date_precision: Optional[str]
+    response_to_question_id: Optional[int]
+    response_to_question_text: Optional[str]
     recorder_name: Optional[str]
     recorder_person_id: Optional[int]
     referenced_people: list[str] = Field(default_factory=list)

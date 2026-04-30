@@ -82,6 +82,27 @@ def seed_initial_questions(db: Session) -> None:
         db.commit()
 
 
+def normalize_question_text(value: Optional[str]) -> str:
+    return " ".join((value or "").split()).strip().casefold()
+
+
+def add_unique_pending_questions(db: Session, question_texts: list[str], source_memory_id: int) -> None:
+    existing_pending = db.query(Question).filter(Question.status == "pending").all()
+    seen_pending = {
+        normalized
+        for question in existing_pending
+        for normalized in [normalize_question_text(question.text)]
+        if normalized
+    }
+
+    for q_text in question_texts:
+        normalized = normalize_question_text(q_text)
+        if not normalized or normalized in seen_pending:
+            continue
+        db.add(Question(text=q_text, source_memory_id=source_memory_id, status="pending"))
+        seen_pending.add(normalized)
+
+
 def normalize_directory_name(value: Optional[str]) -> Optional[str]:
     candidate = (value or "").strip()
     if not candidate:
@@ -746,8 +767,11 @@ async def create_memory(
 
     if transcription_enabled and transcript not in ("Transcription failed.", "Transcription disabled."):
         try:
-            for q_text in generate_questions_from_memory(transcript, event_description, metadata):
-                db.add(Question(text=q_text, source_memory_id=entry.id, status="pending"))
+            add_unique_pending_questions(
+                db,
+                generate_questions_from_memory(transcript, event_description, metadata),
+                entry.id,
+            )
             db.commit()
         except Exception as exc:
             logger.warning("Could not generate questions for memory %s: %s", entry.id, exc)
@@ -804,8 +828,11 @@ def reanalyze_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEnt
     ).delete(synchronize_session=False)
 
     if transcription_enabled and transcript not in ("Transcription failed.", "Transcription disabled."):
-        for q_text in generate_questions_from_memory(transcript, event_description, metadata):
-            db.add(Question(text=q_text, source_memory_id=memory.id, status="pending"))
+        add_unique_pending_questions(
+            db,
+            generate_questions_from_memory(transcript, event_description, metadata),
+            memory.id,
+        )
 
     db.commit()
     db.refresh(memory)
@@ -863,12 +890,23 @@ def delete_memory(memory_id: int, db: Session = Depends(get_db)) -> dict:
 
 @app.get("/api/questions", response_model=list[QuestionResponse])
 def list_questions(db: Session = Depends(get_db)) -> list[Question]:
-    return (
+    pending = (
         db.query(Question)
         .filter(Question.status == "pending")
         .order_by(Question.created_at.asc())
         .all()
     )
+
+    deduped: list[Question] = []
+    seen: set[str] = set()
+    for question in pending:
+        normalized = normalize_question_text(question.text)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(question)
+
+    return deduped
 
 
 @app.post("/api/questions/{question_id}/answer")
@@ -880,8 +918,18 @@ def answer_question(
     question = db.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+
+    memory: Optional[MemoryEntry] = None
+    if body.answer_memory_id is not None:
+        memory = db.get(MemoryEntry, body.answer_memory_id)
+        if not memory:
+            raise HTTPException(status_code=404, detail="Answer memory not found")
+
     question.status = "answered"
     question.answer_memory_id = body.answer_memory_id
+    if memory:
+        memory.response_to_question_id = question.id
+        memory.response_to_question_text = question.text
     db.commit()
     return {"status": "answered"}
 

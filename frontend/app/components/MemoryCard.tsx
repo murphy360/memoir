@@ -42,6 +42,11 @@ export function MemoryCard({
   return (
     <article className="memory">
       <h3>{memory.event_description}</h3>
+      {memory.response_to_question_text && (
+        <p className="memoryResponseLink">
+          <strong>In response to:</strong> {memory.response_to_question_text}
+        </p>
+      )}
       <div className="metaList">
         <p className="meta">
           Date: <span className="badge">{memory.estimated_date_text || "Unknown"}</span>

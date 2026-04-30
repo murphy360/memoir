@@ -38,6 +38,22 @@ function resolveApiUrl(path: string): string {
   return `${API_BASE}${path}`;
 }
 
+function normalizeQuestionText(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function dedupeQuestions(items: Question[]): Question[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = normalizeQuestionText(item.text);
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 export default function HomePage() {
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState("Ready to record a memory.");
@@ -77,7 +93,7 @@ export default function HomePage() {
       setTimeline(data);
       if (questionsRes.ok) {
         const questionsData: Question[] = await questionsRes.json();
-        setQuestions(questionsData);
+        setQuestions(dedupeQuestions(questionsData));
       }
       if (peopleRes.ok) {
         const peopleData: DirectoryEntry[] = await peopleRes.json();

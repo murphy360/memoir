@@ -4,6 +4,8 @@ export type MemoryEntry = {
   event_description: string;
   estimated_date_text: string | null;
   date_precision: string | null;
+  response_to_question_id: number | null;
+  response_to_question_text: string | null;
   recorder_name: string | null;
   recorder_person_id: number | null;
   referenced_people: string[];

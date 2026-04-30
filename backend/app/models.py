@@ -82,6 +82,8 @@ class MemoryEntry(Base):
     date_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     date_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     date_decade: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    response_to_question_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    response_to_question_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     recorder_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     recorder_person_id: Mapped[Optional[int]] = mapped_column(ForeignKey("people.id"), nullable=True)
     people_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

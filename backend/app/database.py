@@ -36,6 +36,10 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE memories ADD COLUMN date_day INTEGER"))
         if "date_decade" not in columns:
             connection.execute(text("ALTER TABLE memories ADD COLUMN date_decade INTEGER"))
+        if "response_to_question_id" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN response_to_question_id INTEGER"))
+        if "response_to_question_text" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN response_to_question_text TEXT"))
         if "people_json" not in columns:
             connection.execute(text("ALTER TABLE memories ADD COLUMN people_json TEXT"))
         if "locations_json" not in columns:
