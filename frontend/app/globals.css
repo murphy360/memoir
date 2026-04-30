@@ -307,6 +307,20 @@ button:disabled {
   line-height: 1.35;
 }
 
+.memoryDocumentActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.45rem 0;
+}
+
+.linkButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .memoryToggle {
   flex: 0 0 auto;
 }

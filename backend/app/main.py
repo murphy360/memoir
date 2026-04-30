@@ -28,6 +28,7 @@ from app.schemas import (
     UpdateSettingRequest,
 )
 from app.services.audio_storage import save_audio_file
+from app.services.document_storage import save_document_file
 from app.services.gemini_client import (
     extract_metadata_with_gemini_function_call,
     generate_research_questions,
@@ -35,6 +36,7 @@ from app.services.gemini_client import (
     suggest_date_from_research,
     transcribe_audio,
 )
+from app.services.gemini_client import extract_text_from_document
 from app.services.memory_analysis import (
     MemoryMetadata,
     build_sort_date,
@@ -47,6 +49,7 @@ from app.services.memory_analysis import (
 
 logger = logging.getLogger("memoir.api")
 AUDIO_STORAGE_DIR = Path(os.getenv("AUDIO_STORAGE_DIR", "/data/audio"))
+DOCUMENT_STORAGE_DIR = Path(os.getenv("DOCUMENT_STORAGE_DIR", "/data/documents"))
 
 
 app = FastAPI(title="Memoir API", version="0.1.0")
@@ -69,6 +72,7 @@ def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
     logger.info("Tables after create_all: %s", [t for t in Base.metadata.tables.keys()])
     AUDIO_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    DOCUMENT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     logger.info("Running schema migrations...")
     ensure_schema_migrations()
     logger.info("Schema migrations complete")
@@ -727,6 +731,26 @@ def get_memory_audio(memory_id: int, db: Session = Depends(get_db)) -> FileRespo
     )
 
 
+@app.get("/api/memories/{memory_id}/document")
+def get_memory_document(memory_id: int, download: bool = False, db: Session = Depends(get_db)) -> FileResponse:
+    memory = db.get(MemoryEntry, memory_id)
+    if not memory or not memory.document_filename:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_path = DOCUMENT_STORAGE_DIR / memory.document_filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Document file missing from storage")
+
+    filename = memory.document_original_filename or memory.document_filename
+    disposition = "attachment" if download else "inline"
+    return FileResponse(
+        path=file_path,
+        media_type=(memory.document_content_type or "application/octet-stream"),
+        filename=filename,
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+    )
+
+
 @app.post("/api/memories", response_model=MemoryResponse)
 async def create_memory(
     audio: UploadFile = File(...),
@@ -788,6 +812,102 @@ async def create_memory(
             db.commit()
         except Exception as exc:
             logger.warning("Could not generate questions for memory %s: %s", entry.id, exc)
+
+    return entry
+
+
+SUPPORTED_DOCUMENT_MIME_TYPES = {
+    "application/pdf",
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "text/plain",
+}
+
+_EXTENSION_TO_MIME: dict[str, str] = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".txt": "text/plain",
+}
+
+
+@app.post("/api/memories/document", response_model=MemoryResponse)
+async def create_memory_from_document(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> MemoryEntry:
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Document file is empty")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in SUPPORTED_DOCUMENT_MIME_TYPES:
+        ext = Path(file.filename or "").suffix.lower()
+        content_type = _EXTENSION_TO_MIME.get(ext, content_type)
+
+    if content_type not in SUPPORTED_DOCUMENT_MIME_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                f"Unsupported file type '{content_type}'. "
+                "Supported: PDF, JPEG, PNG, GIF, WEBP, TXT"
+            ),
+        )
+
+    transcript = extract_text_from_document(file.filename or "document", file_bytes, content_type)
+
+    (
+        document_filename,
+        document_content_type,
+        document_size_bytes,
+        document_original_filename,
+    ) = save_document_file(file, file_bytes, DOCUMENT_STORAGE_DIR)
+
+    metadata = extract_metadata_with_gemini_function_call(transcript)
+    if metadata is None:
+        metadata = fallback_metadata_from_transcript(transcript)
+
+    emotional_tone = "neutral"
+    event_description = f"Document analysis: {document_original_filename}"
+    follow_up_question = "What additional factual details should be captured from this document?"
+
+    entry = MemoryEntry(
+        transcript=transcript,
+        event_description=event_description,
+        estimated_date_text=metadata.date_text,
+        estimated_date_sort=metadata.sort_date,
+        date_recorded=date.today(),
+        date_precision=metadata.date_precision,
+        date_year=metadata.date_year,
+        date_month=metadata.date_month,
+        date_day=metadata.date_day,
+        date_decade=metadata.date_decade,
+        recorder_name=metadata.recorder_name,
+        people_json=json.dumps(metadata.people),
+        locations_json=json.dumps(metadata.locations),
+        emotional_tone=emotional_tone,
+        follow_up_question=follow_up_question,
+        audio_filename=None,
+        audio_content_type=None,
+        audio_size_bytes=None,
+        document_filename=document_filename,
+        document_original_filename=document_original_filename,
+        document_content_type=document_content_type,
+        document_size_bytes=document_size_bytes,
+    )
+    db.add(entry)
+    db.flush()
+    assign_recorder_person(db, entry, metadata.recorder_name)
+    sync_memory_people(db, entry, metadata.people)
+    sync_memory_places(db, entry, metadata.locations)
+    db.commit()
+    db.refresh(entry)
 
     return entry
 
@@ -973,6 +1093,7 @@ def delete_memory(memory_id: int, db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=404, detail="Memory not found")
 
     file_path = AUDIO_STORAGE_DIR / memory.audio_filename if memory.audio_filename else None
+    document_path = DOCUMENT_STORAGE_DIR / memory.document_filename if memory.document_filename else None
     db.query(Question).filter(Question.source_memory_id == memory.id).delete(synchronize_session=False)
     db.query(Question).filter(Question.answer_memory_id == memory.id).update(
         {Question.answer_memory_id: None},
@@ -988,6 +1109,12 @@ def delete_memory(memory_id: int, db: Session = Depends(get_db)) -> dict:
             file_path.unlink()
         except OSError:
             logger.warning("Could not delete audio file for memory %s", memory_id)
+
+    if document_path and document_path.exists():
+        try:
+            document_path.unlink()
+        except OSError:
+            logger.warning("Could not delete document file for memory %s", memory_id)
 
     return {"status": "deleted", "memory_id": memory_id}
 

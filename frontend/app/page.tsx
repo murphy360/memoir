@@ -78,6 +78,9 @@ export default function HomePage() {
   const [isSavingCharacter, setIsSavingCharacter] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+  const [documentUploadError, setDocumentUploadError] = useState<string | null>(null);
+  const documentFileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const currentPreviewAudioUrlRef = useRef<string | null>(null);
@@ -636,6 +639,38 @@ export default function HomePage() {
     }
   }
 
+  async function uploadDocument(file: File) {
+    setIsUploadingDocument(true);
+    setDocumentUploadError(null);
+    setStatus("Analyzing document...");
+    try {
+      const formData = new FormData();
+      formData.append("file", file, file.name);
+
+      const response = await fetch(`${API_BASE}/api/memories/document`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: "Upload failed" }));
+        throw new Error(errorData.detail || "Upload failed");
+      }
+
+      await loadTimeline();
+      setStatus("Document analyzed and saved as a memory.");
+      if (documentFileInputRef.current) {
+        documentFileInputRef.current.value = "";
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to process document.";
+      setDocumentUploadError(message);
+      setStatus("Document upload failed.");
+    } finally {
+      setIsUploadingDocument(false);
+    }
+  }
+
   return (
     <main>
       <section className="hero">
@@ -714,6 +749,28 @@ export default function HomePage() {
           </button>
         </div>
         <p className="status">{status}</p>
+      </section>
+
+      <section className="panel">
+        <h2>Upload a Document</h2>
+        <p className="meta">Upload a PDF, image, or text file — Gemini will produce a factual document analysis and save it as a memory entry.</p>
+        <div className="controls">
+          <input
+            ref={documentFileInputRef}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt"
+            disabled={isUploadingDocument || isRecording || isLoading}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                uploadDocument(file);
+              }
+            }}
+            style={{ flex: 1 }}
+          />
+        </div>
+        {isUploadingDocument && <p className="status">Analyzing document with Gemini...</p>}
+        {documentUploadError && <p className="status" style={{ color: "var(--error, #c00)" }}>{documentUploadError}</p>}
       </section>
 
       <section className="directoryGrid">

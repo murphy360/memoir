@@ -42,6 +42,9 @@ class MemoryResponse(BaseModel):
     research_suggested_metadata: Optional[ResearchDateSuggestion] = None
     audio_size_bytes: Optional[int]
     audio_url: Optional[str]
+    document_filename: Optional[str]
+    document_size_bytes: Optional[int]
+    document_url: Optional[str]
     date_recorded: Optional[date]
     created_at: datetime
 

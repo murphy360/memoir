@@ -23,6 +23,14 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE memories ADD COLUMN audio_content_type VARCHAR(100)"))
         if "audio_size_bytes" not in columns:
             connection.execute(text("ALTER TABLE memories ADD COLUMN audio_size_bytes INTEGER"))
+        if "document_filename" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN document_filename VARCHAR(255)"))
+        if "document_original_filename" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN document_original_filename VARCHAR(255)"))
+        if "document_content_type" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN document_content_type VARCHAR(100)"))
+        if "document_size_bytes" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN document_size_bytes INTEGER"))
 
         if "recorder_name" not in columns:
             connection.execute(text("ALTER TABLE memories ADD COLUMN recorder_name VARCHAR(120)"))

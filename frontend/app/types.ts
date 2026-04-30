@@ -33,6 +33,9 @@ export type MemoryEntry = {
   research_suggested_metadata: ResearchDateSuggestion | null;
   audio_size_bytes: number | null;
   audio_url: string | null;
+  document_filename: string | null;
+  document_size_bytes: number | null;
+  document_url: string | null;
   date_recorded: string | null;
   created_at: string;
 };

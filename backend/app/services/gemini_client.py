@@ -634,3 +634,80 @@ def _safe_string_list(value: object) -> list[str]:
         if isinstance(item, str):
             result.append(item)
     return result
+
+
+def extract_text_from_document(filename: str, file_bytes: bytes, mime_type: str) -> str:
+    """Use Gemini to extract memory-relevant content from a document or image.
+
+    Returns a plain-text transcript suitable for further metadata extraction.
+    """
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        raise HTTPException(status_code=502, detail="GEMINI_API_KEY not configured")
+
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
+    encoded_data = base64.b64encode(file_bytes).decode("utf-8")
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": (
+                            "IMPORTANT: Your response must be plain text only. "
+                            "Do NOT use any markdown formatting. "
+                            "Do NOT use asterisks (*), double asterisks (**), underscores, pound signs (#), or backticks. "
+                            "Do NOT bold or italicize any text. "
+                            "Use only regular letters, numbers, hyphens, colons, and periods.\n\n"
+                            "Analyze this uploaded document and write a 2-3 sentence plain-text summary of the most important facts: "
+                            "who is involved, what action or order is described, key dates, units, roles, and any modifications. "
+                            "Do not use first-person language. Do not frame it as a story or memory. "
+                            "Clean up awkward wording and OCR noise, but do not invent facts. "
+                            "If a date or value appears truncated or unclear, give a best-effort version and note it as uncertain. "
+                            "Preserve full unit names and identifiers exactly as written. "
+                            "Write only the 2-3 sentence summary. Do not add headers, bullet points, or any other structure."
+                        )
+                    },
+                    {
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data": encoded_data,
+                        }
+                    },
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.1,
+        },
+    }
+
+    try:
+        response = requests.post(endpoint, params={"key": gemini_key}, json=payload, timeout=60)
+        if not response.ok:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Gemini document analysis failed: {response.text[:300]}",
+            )
+        data = response.json()
+        text_parts = (
+            data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+        )
+        text = "\n".join(
+            part.get("text", "").strip() for part in text_parts if part.get("text")
+        ).strip()
+        if not text:
+            raise HTTPException(
+                status_code=502,
+                detail="Gemini returned empty analysis for document",
+            )
+        return text
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Document analysis request failed for %s", filename)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Document analysis failed: {str(exc)}",
+        )

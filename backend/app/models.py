@@ -97,6 +97,10 @@ class MemoryEntry(Base):
     audio_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     audio_content_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     audio_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    document_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    document_original_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    document_content_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    document_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     date_recorded: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -109,6 +113,12 @@ class MemoryEntry(Base):
         if not self.audio_filename:
             return None
         return f"/api/memories/{self.id}/audio"
+
+    @property
+    def document_url(self) -> Optional[str]:
+        if not self.document_filename:
+            return None
+        return f"/api/memories/{self.id}/document"
 
     @property
     def referenced_people(self) -> list[str]:
