@@ -1,0 +1,174 @@
+:root {
+  --bg: #f8efe3;
+  --ink: #1f1b18;
+  --card: #fffaf4;
+  --accent: #0f766e;
+  --accent-soft: #d5f5ef;
+  --muted: #6b625a;
+  --border: #e4d5c4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  font-family: "Segoe UI", "Avenir Next", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 15% 20%, #fff6ea 0%, transparent 40%),
+    radial-gradient(circle at 85% 10%, #dff7f3 0%, transparent 35%),
+    var(--bg);
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+.hero {
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+}
+
+.hero p {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+}
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1rem;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.05);
+}
+
+.inputSection {
+  margin-bottom: 0.8rem;
+}
+
+.micSelect {
+  width: 100%;
+  margin-top: 0.3rem;
+  margin-bottom: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  background: #fff;
+  color: var(--ink);
+}
+
+.levelWrap {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.levelTrack {
+  height: 10px;
+  width: 100%;
+  border-radius: 999px;
+  background: #ebe2d9;
+  overflow: hidden;
+}
+
+.levelFill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #0f766e 0%, #25a18e 60%, #f59e0b 100%);
+  transition: width 80ms linear;
+}
+
+.levelText {
+  display: inline-block;
+}
+
+.controls {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+button {
+  border: none;
+  border-radius: 999px;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--accent);
+  color: white;
+}
+
+button.secondary {
+  background: var(--accent-soft);
+  color: #0f4f49;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.timeline {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.memory {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9rem;
+  background: #fffdf9;
+}
+
+.memory h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1rem;
+}
+
+.memory p {
+  margin: 0.3rem 0;
+  line-height: 1.35;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  background: #eef7f6;
+  color: #0b4e49;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  main {
+    padding: 0.9rem;
+  }
+}

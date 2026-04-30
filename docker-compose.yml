@@ -1,0 +1,31 @@
+services:
+  api:
+    build:
+      context: ./backend
+    container_name: memoir-api
+    environment:
+      DATABASE_URL: sqlite:////data/memoir.db
+      AUDIO_STORAGE_DIR: /data/audio
+      FRONTEND_ORIGIN: http://localhost:3000
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      TRANSCRIPTION_ENABLED: ${TRANSCRIPTION_ENABLED:-true}
+      ALLOW_PLACEHOLDER_TRANSCRIPT: ${ALLOW_PLACEHOLDER_TRANSCRIPT:-false}
+    volumes:
+      - memoir_data:/data
+    ports:
+      - "8001:8000"
+
+  web:
+    build:
+      context: ./frontend
+    container_name: memoir-web
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8001
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  memoir_data:
