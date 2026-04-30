@@ -51,3 +51,7 @@ export type Question = {
   status: string;
   created_at: string;
 };
+
+export type AppSettings = {
+  main_character_name: string | null;
+};

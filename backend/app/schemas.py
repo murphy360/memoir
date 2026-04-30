@@ -91,3 +91,11 @@ class UpdateMemoryRecorderRequest(BaseModel):
 
 class AnswerQuestionRequest(BaseModel):
     answer_memory_id: Optional[int] = None
+
+
+class SettingsResponse(BaseModel):
+    main_character_name: Optional[str] = None
+
+
+class UpdateSettingRequest(BaseModel):
+    value: Optional[str] = None

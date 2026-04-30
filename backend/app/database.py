@@ -112,6 +112,24 @@ def ensure_schema_migrations() -> None:
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_person_aliases_person_id ON person_aliases (person_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_person_aliases_alias ON person_aliases (alias)"))
 
+        # Ensure questions table has source_memory_id and answer_memory_id columns
+        q_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(questions)")).fetchall()
+        }
+        if "source_memory_id" not in q_columns:
+            connection.execute(text("ALTER TABLE questions ADD COLUMN source_memory_id INTEGER"))
+        if "answer_memory_id" not in q_columns:
+            connection.execute(text("ALTER TABLE questions ADD COLUMN answer_memory_id INTEGER"))
+
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key VARCHAR(100) PRIMARY KEY,
+                value TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+
 
 def get_db():
     db = SessionLocal()

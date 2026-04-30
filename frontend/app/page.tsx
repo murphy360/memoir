@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DirectoryManager } from "./components/DirectoryManager";
 import { MemoryCard } from "./components/MemoryCard";
-import { DirectoryEntry, MemoryEntry, Question } from "./types";
+import { DirectoryEntry, MemoryEntry, Question, AppSettings } from "./types";
 
 type PendingRecording = {
   id: string;
@@ -71,6 +71,12 @@ export default function HomePage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
 
+  // undefined = not yet loaded, null = loaded but not set, string = set
+  const [mainCharacterName, setMainCharacterName] = useState<string | null | undefined>(undefined);
+  const [showCharacterInput, setShowCharacterInput] = useState(false);
+  const [characterInputValue, setCharacterInputValue] = useState("");
+  const [isSavingCharacter, setIsSavingCharacter] = useState(false);
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -80,11 +86,12 @@ export default function HomePage() {
 
   async function loadTimeline() {
     try {
-      const [memoriesRes, questionsRes, peopleRes, placesRes] = await Promise.all([
+      const [memoriesRes, questionsRes, peopleRes, placesRes, settingsRes] = await Promise.all([
         fetch(`${API_BASE}/api/memories`, { cache: "no-store" }),
         fetch(`${API_BASE}/api/questions`, { cache: "no-store" }),
         fetch(`${API_BASE}/api/people`, { cache: "no-store" }),
         fetch(`${API_BASE}/api/places`, { cache: "no-store" }),
+        fetch(`${API_BASE}/api/settings`, { cache: "no-store" }),
       ]);
       if (!memoriesRes.ok) {
         throw new Error("Failed to load timeline");
@@ -103,6 +110,10 @@ export default function HomePage() {
         const placesData: DirectoryEntry[] = await placesRes.json();
         setPlacesDirectory(placesData);
       }
+      if (settingsRes.ok) {
+        const settingsData: AppSettings = await settingsRes.json();
+        setMainCharacterName(settingsData.main_character_name);
+      }
     } catch (error) {
       setStatus("Could not load timeline from API.");
     }
@@ -118,6 +129,24 @@ export default function HomePage() {
       setQuestions((current) => current.filter((q) => q.id !== questionId));
     } catch {
       // silently ignore dismiss errors
+    }
+  }
+
+  async function saveMainCharacterName(name: string | null) {
+    setIsSavingCharacter(true);
+    try {
+      await fetch(`${API_BASE}/api/settings/main_character_name`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: name }),
+      });
+      setMainCharacterName(name);
+      setShowCharacterInput(false);
+      setCharacterInputValue("");
+    } catch {
+      // ignore errors silently
+    } finally {
+      setIsSavingCharacter(false);
     }
   }
 
@@ -610,7 +639,7 @@ export default function HomePage() {
   return (
     <main>
       <section className="hero">
-        <h1>Memoir MVP</h1>
+        <h1>{mainCharacterName ? `${mainCharacterName}'s Memoir` : "Memoir MVP"}</h1>
         <p>Record a memory, extract a timeline clue, and get one follow-up question.</p>
         <p className="meta">Tip: start each recording with your name, where this memory happened, and when it happened (even if you only remember the year or decade).</p>
       </section>
@@ -715,11 +744,83 @@ export default function HomePage() {
       </section>
 
       <section className="timeline">
+        {mainCharacterName === null && (
+          <article className="questionCard characterPromptCard">
+            <p className="questionText">Before we continue, what should we call you on your memory cards?</p>
+            {showCharacterInput ? (
+              <div className="characterInputRow">
+                <input
+                  className="characterInput"
+                  type="text"
+                  placeholder="Your name or nickname"
+                  value={characterInputValue}
+                  onChange={(e) => setCharacterInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && characterInputValue.trim()) {
+                      saveMainCharacterName(characterInputValue.trim());
+                    }
+                  }}
+                  autoFocus
+                  disabled={isSavingCharacter}
+                />
+                <button
+                  className="primary"
+                  type="button"
+                  onClick={() => {
+                    if (characterInputValue.trim()) {
+                      saveMainCharacterName(characterInputValue.trim());
+                    }
+                  }}
+                  disabled={isSavingCharacter || !characterInputValue.trim()}
+                >
+                  Save
+                </button>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={() => {
+                    setShowCharacterInput(false);
+                    setCharacterInputValue("");
+                  }}
+                  disabled={isSavingCharacter}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="questionActions">
+                <button
+                  className="primary"
+                  type="button"
+                  onClick={() => setShowCharacterInput(true)}
+                >
+                  Answer this
+                </button>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={() => saveMainCharacterName("")}
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+          </article>
+        )}
         {questions.length > 0 && (
           <div className="questionsSection">
-            {questions.map((q) => (
+            {questions.map((q) => {
+              const sourceMemory = q.source_memory_id
+                ? timeline.find((m) => m.id === q.source_memory_id)
+                : null;
+              return (
               <article key={q.id} className="questionCard">
                 <p className="questionText">{q.text}</p>
+                {sourceMemory && (
+                  <p className="questionSource">
+                    From research on: <em>{sourceMemory.event_description}</em>
+                  </p>
+                )}
                 <div className="questionActions">
                   <button
                     className="primary"
@@ -738,11 +839,12 @@ export default function HomePage() {
                     onClick={() => dismissQuestion(q.id)}
                     disabled={isRecording || isLoading}
                   >
-                    Not now
+                    Remove
                   </button>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         )}
         {pendingRecording && (
@@ -763,6 +865,7 @@ export default function HomePage() {
           <MemoryCard
             key={memory.id}
             memory={memory}
+            linkedQuestions={questions.filter((q) => q.source_memory_id === memory.id)}
             peopleOptions={peopleDirectory}
             formatBytes={formatBytes}
             resolveApiUrl={resolveApiUrl}

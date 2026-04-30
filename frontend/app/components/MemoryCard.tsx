@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DirectoryEntry, MemoryEntry } from "../types";
+import { DirectoryEntry, MemoryEntry, Question } from "../types";
 
 type MemoryCardProps = {
   memory: MemoryEntry;
+  linkedQuestions: Question[];
   peopleOptions: DirectoryEntry[];
   formatBytes: (bytes: number) => string;
   resolveApiUrl: (path: string) => string;
@@ -26,6 +27,7 @@ function asLabelList(items: string[]): string {
 
 export function MemoryCard({
   memory,
+  linkedQuestions,
   peopleOptions,
   formatBytes,
   resolveApiUrl,
@@ -187,6 +189,16 @@ export function MemoryCard({
                       {source.title}
                     </a>
                   </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {linkedQuestions.length > 0 && (
+            <div className="researchLinkedQuestions">
+              <p className="researchSubhead">Follow-up questions from research</p>
+              <ul className="linkedQuestionList">
+                {linkedQuestions.map((q) => (
+                  <li key={q.id} className="linkedQuestionItem">{q.text}</li>
                 ))}
               </ul>
             </div>

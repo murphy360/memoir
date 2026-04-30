@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine, ensure_schema_migrations, get_db
-from app.models import Base, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place, Question
+from app.models import Base, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place, Question, Setting
 from app.schemas import (
     AddAliasRequest,
     AnswerQuestionRequest,
@@ -21,13 +21,16 @@ from app.schemas import (
     MemoryResponse,
     MergePersonRequest,
     QuestionResponse,
+    SettingsResponse,
     SplitPersonRequest,
     UpdateDirectoryEntryRequest,
     UpdateMemoryRecorderRequest,
+    UpdateSettingRequest,
 )
 from app.services.audio_storage import save_audio_file
 from app.services.gemini_client import (
     extract_metadata_with_gemini_function_call,
+    generate_research_questions,
     research_memory_details,
     suggest_date_from_research,
     transcribe_audio,
@@ -60,9 +63,15 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup() -> None:
+    logger.info("=== APP STARTUP ===")
+    logger.info("Registered models: %s", [t for t in Base.metadata.tables.keys()])
+    logger.info("Creating tables...")
     Base.metadata.create_all(bind=engine)
+    logger.info("Tables after create_all: %s", [t for t in Base.metadata.tables.keys()])
     AUDIO_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info("Running schema migrations...")
     ensure_schema_migrations()
+    logger.info("Schema migrations complete")
     db = SessionLocal()
     try:
         backfill_normalized_directory(db)
@@ -877,6 +886,21 @@ def research_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEntr
 
     db.commit()
     db.refresh(memory)
+
+    # Generate and store follow-up research questions
+    logger.info("About to generate research questions for memory %s", memory_id)
+    follow_up_questions = generate_research_questions(
+        research_summary=research.summary,
+        event_description=memory.event_description,
+        referenced_people=memory.referenced_people,
+    )
+    logger.info("Generated %d research questions: %s", len(follow_up_questions), follow_up_questions)
+    for question_text in follow_up_questions:
+        logger.info("Adding question: %s", question_text)
+        db.add(Question(text=question_text, source_memory_id=memory_id, status="pending"))
+    logger.info("Committing %d new questions", len(follow_up_questions))
+    db.commit()
+
     return memory
 
 
@@ -1022,3 +1046,31 @@ def dismiss_question(question_id: int, db: Session = Depends(get_db)) -> dict:
     question.status = "dismissed"
     db.commit()
     return {"status": "dismissed"}
+
+
+_ALLOWED_SETTING_KEYS = {"main_character_name"}
+
+
+@app.get("/api/settings", response_model=SettingsResponse)
+def get_settings(db: Session = Depends(get_db)) -> SettingsResponse:
+    rows = db.query(Setting).all()
+    mapping = {row.key: row.value for row in rows}
+    return SettingsResponse(main_character_name=mapping.get("main_character_name"))
+
+
+@app.put("/api/settings/{key}")
+def update_setting(
+    key: str,
+    body: UpdateSettingRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    if key not in _ALLOWED_SETTING_KEYS:
+        raise HTTPException(status_code=400, detail=f"Unknown setting key: {key}")
+    setting = db.get(Setting, key)
+    if setting:
+        setting.value = body.value
+        setting.updated_at = datetime.utcnow()
+    else:
+        db.add(Setting(key=key, value=body.value))
+    db.commit()
+    return {"key": key, "value": body.value}

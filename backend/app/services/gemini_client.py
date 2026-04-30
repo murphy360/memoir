@@ -157,6 +157,78 @@ def _int_or_none(value: object) -> Optional[int]:
         return None
 
 
+def generate_research_questions(
+    research_summary: str,
+    event_description: str,
+    referenced_people: list[str],
+) -> list[str]:
+    """Generate 2-3 follow-up research questions based on findings.
+    
+    Uses Gemini to extract the most important unanswered questions or entities
+    worth exploring further from the research summary.
+    """
+    logger.info("GENERATE_RESEARCH_QUESTIONS called with event: %s, num_people: %d", event_description[:50], len(referenced_people))
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        logger.warning("No GEMINI_API_KEY found")
+        return []
+
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": (
+                            "Based on this research summary, generate 2-3 specific follow-up questions "
+                            "that would help deepen understanding of the memory. "
+                            "Focus on:\n"
+                            "- Key people or organizations mentioned that deserve deeper investigation\n"
+                            "- Important events or situations referenced that warrant their own memory\n"
+                            "- Gaps or contradictions that need clarification\n"
+                            "- Related events that might connect to other memories\n\n"
+                            "Each question should be concrete, answerable, and directly connected to something in the research.\n\n"
+                            "IMPORTANT: Return exactly 2-3 complete questions, one per line, with NO numbering, bullets, or extra text. "
+                            "Each line must be a complete question ending with a question mark.\n\n"
+                            f"Original event: {event_description}\n"
+                            f"Research findings:\n{research_summary}"
+                        )
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.3,
+            "maxOutputTokens": 500,
+        },
+    }
+
+    try:
+        response = requests.post(endpoint, params={"key": gemini_key}, json=payload, timeout=30)
+        if not response.ok:
+            logger.warning("Research questions request failed: %s", response.text[:200])
+            return []
+        data = response.json()
+        candidate = data.get("candidates", [{}])[0]
+        parts = candidate.get("content", {}).get("parts", [])
+        text = "\n".join(part.get("text", "").strip() for part in parts if part.get("text")).strip()
+        logger.info("Research questions raw response: %s", text[:300])
+        if not text:
+            logger.warning("Research questions returned empty text")
+            return []
+        # Split by newline, filter empty lines, and keep only lines ending with ?
+        all_lines = [q.strip() for q in text.split("\n") if q.strip()]
+        logger.info("All extracted lines: %s", all_lines)
+        questions = [q for q in all_lines if q.endswith("?")]
+        logger.info("Questions with question marks: %s", questions)
+        return questions[:3]  # Return at most 3 questions
+    except Exception as exc:
+        logger.warning("Generate research questions exception: %s", exc)
+        return []
+
+
 def research_memory_details(
     transcript: str,
     event_description: str,
@@ -179,16 +251,28 @@ def research_memory_details(
                     "parts": [
                         {
                             "text": (
-                                "Research this personal memory using live web results. "
-                                "Use Google Search grounding to verify likely historical context and local leads. "
-                                "Produce a concise plain-text note with exactly these sections: 'What likely fits', 'Historical context', and 'Unknowns to verify'. "
-                                "Only make claims that can be supported by grounded search results. "
-                                "If evidence is weak, say that explicitly. Avoid invented details and avoid mentioning source ids or raw URLs in the prose.\n\n"
+                                "Research this personal memory using multiple targeted Google Search queries to uncover details. "
+                                "Conduct systematic searches for: people named/implied, organizations/units, locations, and events at that date/place.\n\n"
+                                "For EACH person, organization, or entity mentioned:\n"
+                                "1. Search them individually (e.g., 'John Smith military' or 'USS Lake Erie 2014')\n"
+                                "2. Look for leadership changes, departures, or notable incidents\n"
+                                "3. Find biographical/organizational details that might corroborate the memory\n\n"
+                                "For the DATE + LOCATION combination:\n"
+                                "- Search for major events, operations, news at that specific time/place\n"
+                                "- Look for organizational deployments or maintenance schedules\n"
+                                "- Find historical patterns or recurring events (if repeating annually, etc.)\n\n"
+                                "Structure your response with these sections:\n"
+                                "- 'Key findings': The most significant corroborating or contextual details discovered\n"
+                                "- 'People/organizations involved': Names, roles, and any notable history found\n"
+                                "- 'Historical context': What was happening at that time/place more broadly\n"
+                                "- 'Unknowns to verify': What still needs confirmation\n\n"
+                                "Only claim facts that can be supported by search results. If information is incomplete, say so explicitly. "
+                                "Flag any claims that could queue up follow-up memories or additional research.\n\n"
                                 f"Event description: {event_description}\n"
                                 f"Estimated date: {estimated_date_text or 'Unknown'}\n"
                                 f"Referenced locations: {location_text}\n"
                                 f"Referenced people: {people_text}\n"
-                                f"Transcript: {transcript}"
+                                f"Transcript:\n{transcript}"
                             )
                         }
                     ]
@@ -204,8 +288,8 @@ def research_memory_details(
                 }
             ],
             "generationConfig": {
-                "temperature": 0.2,
-                "maxOutputTokens": 700,
+                "temperature": 0.15,
+                "maxOutputTokens": 1200,
                 "responseMimeType": "text/plain"
             }
         }
@@ -229,42 +313,65 @@ def research_memory_details(
 
     lead = event_description.strip() or "This memory"
     bullets: list[str] = [
-        "What likely fits",
-        f"- {lead} is anchored to {estimated_date_text or 'an unknown date'}.",
+        "Key findings",
+        f"- {lead} occurred around {estimated_date_text or 'an unknown date'}.",
     ]
+    if referenced_people:
+        bullets.append(
+            f"- Key people mentioned: {', '.join(referenced_people)}. Search each individually to find biographical details, military records, employment history, or public mentions around that timeframe."
+        )
     if referenced_locations:
         bullets.append(
-            f"- Place clues to investigate: {', '.join(referenced_locations)}. Look for local newspapers, scouting councils, school yearbooks, and town historical societies."
+            f"- Locations to research: {', '.join(referenced_locations)}. Look for local archives, newspapers from that era, town/county historical societies, and institutional records."
         )
-    if "scout" in transcript.lower() or "pack" in transcript.lower() or "troop" in transcript.lower():
-        bullets.append(
-            "- If this involved Scouting, likely verification sources include local council histories, church or school charter partners, pack or troop newsletters, and Eagle Scout court-of-honor programs from that era."
-        )
+    
+    bullets.extend(
+        [
+            "",
+            "People/organizations involved",
+            "- Any named individuals should be researched individually (name + relevant context like military, school, company, etc.)",
+            "- Organizations or units mentioned (military units, companies, agencies, schools) benefit from dedicated searches on their history and leadership during that period.",
+        ]
+    )
+    
     bullets.extend(
         [
             "",
             "Historical context",
-            "- Memories tied to a decade often benefit from narrowing by school grade, address, church, employer, or recurring annual events.",
-            "- Local youth groups in the 1990s were commonly organized through schools, churches, volunteer fire halls, or civic clubs.",
+            f"- Events in {estimated_date_text or 'that era'} at {', '.join(referenced_locations) or 'those locations'} may have been tied to larger historical events, deployments, policy changes, or public incidents.",
+            "- Consider what was happening more broadly (nationally, locally, in that organization) at that exact time.",
             "",
             "Unknowns to verify",
-            "- Exact year, the formal organization name, and any specific troop or pack number still need confirmation.",
-            "- A follow-up detail that would help most is who led the group or where meetings were held.",
+            "- Specific dates, names, and organizational details can help narrow down corroborating sources.",
+            "- Any named person or organizational unit warrants a targeted search.",
         ]
     )
     fallback_sources: list[ResearchSource] = []
     if referenced_locations:
         fallback_sources.append(
             ResearchSource(
-                title="Local history leads",
-                url="https://www.google.com/search?q=" + requests.utils.quote(f"{' '.join(referenced_locations)} local history"),
+                title="Local records and archives",
+                url="https://www.google.com/search?q=" + requests.utils.quote(f"{' '.join(referenced_locations)} history {estimated_date_text or ''}"),
             )
         )
+    if referenced_people:
+        fallback_sources.append(
+            ResearchSource(
+                title="People search",
+                url="https://www.google.com/search?q=" + requests.utils.quote(f"{' '.join(referenced_people)} {estimated_date_text or ''}"),
+            )
+        )
+    fallback_sources.append(
+        ResearchSource(
+            title="General event search",
+            url="https://www.google.com/search?q=" + requests.utils.quote(f"{event_description} {estimated_date_text or ''}"),
+        )
+    )
     if "scout" in transcript.lower() or "pack" in transcript.lower() or "troop" in transcript.lower():
         fallback_sources.append(
             ResearchSource(
-                title="Scouting history leads",
-                url="https://www.google.com/search?q=" + requests.utils.quote("cub scouts pack troop history local council"),
+                title="Scouting organization records",
+                url="https://www.google.com/search?q=" + requests.utils.quote("scouting history council troops packs"),
             )
         )
     return ResearchResult(summary="\n".join(bullets)[:4000], sources=fallback_sources)
