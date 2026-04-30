@@ -27,7 +27,16 @@ type AudioInputDevice = {
   label: string;
 };
 
+type Question = {
+  id: number;
+  text: string;
+  source_memory_id: number | null;
+  status: string;
+  created_at: string;
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
+const AUDIO_DEVICE_STORAGE_KEY = "memoir:last-audio-device-id";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
@@ -56,6 +65,9 @@ export default function HomePage() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -65,12 +77,19 @@ export default function HomePage() {
 
   async function loadTimeline() {
     try {
-      const response = await fetch(`${API_BASE}/api/memories`, { cache: "no-store" });
-      if (!response.ok) {
+      const [memoriesRes, questionsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/memories`, { cache: "no-store" }),
+        fetch(`${API_BASE}/api/questions`, { cache: "no-store" }),
+      ]);
+      if (!memoriesRes.ok) {
         throw new Error("Failed to load timeline");
       }
-      const data: MemoryEntry[] = await response.json();
+      const data: MemoryEntry[] = await memoriesRes.json();
       setTimeline(data);
+      if (questionsRes.ok) {
+        const questionsData: Question[] = await questionsRes.json();
+        setQuestions(questionsData);
+      }
     } catch (error) {
       setStatus("Could not load timeline from API.");
     }
@@ -79,6 +98,15 @@ export default function HomePage() {
   useEffect(() => {
     loadTimeline();
   }, []);
+
+  async function dismissQuestion(questionId: number) {
+    try {
+      await fetch(`${API_BASE}/api/questions/${questionId}/dismiss`, { method: "POST" });
+      setQuestions((current) => current.filter((q) => q.id !== questionId));
+    } catch {
+      // silently ignore dismiss errors
+    }
+  }
 
   async function refreshAudioDevices() {
     try {
@@ -95,7 +123,19 @@ export default function HomePage() {
         if (current && inputs.some((item) => item.deviceId === current)) {
           return current;
         }
-        return inputs[0]?.deviceId || "";
+
+        const savedDeviceId = localStorage.getItem(AUDIO_DEVICE_STORAGE_KEY);
+        if (savedDeviceId && inputs.some((item) => item.deviceId === savedDeviceId)) {
+          return savedDeviceId;
+        }
+
+        const fallbackDeviceId = inputs[0]?.deviceId || "";
+        if (fallbackDeviceId) {
+          localStorage.setItem(AUDIO_DEVICE_STORAGE_KEY, fallbackDeviceId);
+        } else {
+          localStorage.removeItem(AUDIO_DEVICE_STORAGE_KEY);
+        }
+        return fallbackDeviceId;
       });
     } catch {
       setStatus("Unable to enumerate microphone devices.");
@@ -254,7 +294,19 @@ export default function HomePage() {
       }
 
       const created: MemoryEntry = await response.json();
-      setTimeline((current) => [created, ...current]);
+      if (activeQuestion) {
+        try {
+          await fetch(`${API_BASE}/api/questions/${activeQuestion.id}/answer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ answer_memory_id: created.id }),
+          });
+        } catch {
+          // ignore answer errors
+        }
+        setActiveQuestion(null);
+      }
+      await loadTimeline();
       setStatus("Memory saved and analyzed.");
       setPendingRecording((current) =>
         current && current.id === pendingId
@@ -295,7 +347,15 @@ export default function HomePage() {
             id="mic-select"
             className="micSelect"
             value={selectedDeviceId}
-            onChange={(event) => setSelectedDeviceId(event.target.value)}
+            onChange={(event) => {
+              const nextDeviceId = event.target.value;
+              setSelectedDeviceId(nextDeviceId);
+              if (nextDeviceId) {
+                localStorage.setItem(AUDIO_DEVICE_STORAGE_KEY, nextDeviceId);
+              } else {
+                localStorage.removeItem(AUDIO_DEVICE_STORAGE_KEY);
+              }
+            }}
             disabled={isRecording || isLoading || audioDevices.length === 0}
           >
             {audioDevices.length === 0 && <option value="">No microphones found</option>}
@@ -313,6 +373,23 @@ export default function HomePage() {
             <span className="meta levelText">Input level: {Math.round(audioLevel * 100)}%</span>
           </div>
         </div>
+
+        {activeQuestion && (
+          <div className="activePrompt">
+            <div className="activePromptBody">
+              <p className="activePromptLabel">Answering:</p>
+              <p className="activePromptText">{activeQuestion.text}</p>
+            </div>
+            <button
+              className="ghost"
+              type="button"
+              onClick={() => setActiveQuestion(null)}
+              disabled={isRecording}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
 
         <div className="controls">
           <button
@@ -336,6 +413,36 @@ export default function HomePage() {
       </section>
 
       <section className="timeline">
+        {questions.length > 0 && (
+          <div className="questionsSection">
+            {questions.map((q) => (
+              <article key={q.id} className="questionCard">
+                <p className="questionText">{q.text}</p>
+                <div className="questionActions">
+                  <button
+                    className="primary"
+                    type="button"
+                    onClick={() => {
+                      setActiveQuestion(q);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    disabled={isRecording || isLoading}
+                  >
+                    Answer this
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    onClick={() => dismissQuestion(q.id)}
+                    disabled={isRecording || isLoading}
+                  >
+                    Not now
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
         {pendingRecording && (
           <article className="memory">
             <h3>Latest Recording Preview</h3>
@@ -363,9 +470,6 @@ export default function HomePage() {
               <audio controls preload="metadata" src={resolveApiUrl(memory.audio_url)} style={{ width: "100%" }} />
             )}
             <p>{memory.transcript}</p>
-            <p>
-              <strong>Follow-up:</strong> {memory.follow_up_question}
-            </p>
           </article>
         ))}
         {timeline.length === 0 && <p className="meta">No memories yet. Record your first one.</p>}

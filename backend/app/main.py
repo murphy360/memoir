@@ -66,6 +66,31 @@ class MemoryResponse(BaseModel):
     created_at: datetime
 
 
+class Question(Base):
+    __tablename__ = "questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    text: Mapped[str] = mapped_column(Text)
+    source_memory_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    answer_memory_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class QuestionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    text: str
+    source_memory_id: Optional[int]
+    status: str
+    created_at: datetime
+
+
+class AnswerQuestionRequest(BaseModel):
+    answer_memory_id: Optional[int] = None
+
+
 app = FastAPI(title="Memoir API", version="0.1.0")
 
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
@@ -83,6 +108,11 @@ def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
     AUDIO_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     ensure_schema_migrations()
+    db = SessionLocal()
+    try:
+        seed_initial_questions(db)
+    finally:
+        db.close()
 
 
 def ensure_schema_migrations() -> None:
@@ -98,6 +128,21 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE memories ADD COLUMN audio_content_type VARCHAR(100)"))
         if "audio_size_bytes" not in columns:
             connection.execute(text("ALTER TABLE memories ADD COLUMN audio_size_bytes INTEGER"))
+
+
+SEED_QUESTIONS = [
+    "Who are you? Tell me your name, where you grew up, and a little about yourself.",
+    "When and where were you born? What do you know about that time in your family's life?",
+    "Tell me about your family — who are the most important people in your life?",
+]
+
+
+def seed_initial_questions(db: Session) -> None:
+    """Insert starter questions the first time the app launches."""
+    if db.query(Question).count() == 0:
+        for q_text in SEED_QUESTIONS:
+            db.add(Question(text=q_text, status="pending"))
+        db.commit()
 
 
 def get_db():
@@ -300,6 +345,83 @@ def generate_follow_up_question(transcript: str, event_description: str) -> str:
     )
 
 
+RELATIONSHIP_PATTERNS: list[tuple[str, str]] = [
+    (r"\bson\b", "You mentioned your son. What is his name, and when was he born?"),
+    (r"\bdaughter\b", "You mentioned your daughter. What is her name, and when was she born?"),
+    (r"\bwife\b", "You mentioned your wife. How did you two meet, and when did you get married?"),
+    (r"\bhusband\b", "You mentioned your husband. How did you two meet, and when did you get married?"),
+    (r"\bmother\b|\bmom\b|\bmum\b", "You mentioned your mother. Where was she from and what was she like?"),
+    (r"\bfather\b|\bdad\b", "You mentioned your father. What do you remember most about him?"),
+    (r"\bbrother\b", "You mentioned your brother. What is one strong memory you have of him?"),
+    (r"\bsister\b", "You mentioned your sister. What is one strong memory you have of her?"),
+    (r"\bgrandmother\b|\bgrandma\b|\bnana\b", "You mentioned your grandmother. What do you remember most about her?"),
+    (r"\bgrandfather\b|\bgrandpa\b", "You mentioned your grandfather. What do you remember most about him?"),
+    (r"\bfriend\b", "You mentioned a friend. Who was this person and how did you first meet?"),
+]
+
+_COMMON_CAPS = frozenset({
+    "I", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+    "January", "February", "March", "April", "May", "June", "July", "August",
+    "September", "October", "November", "December", "The", "A", "An", "We", "He",
+    "She", "They", "It", "But", "And", "Or", "So", "Yet", "For", "Nor",
+})
+
+
+def generate_questions_from_memory(transcript: str, event_description: str) -> list[str]:
+    """Generate insightful follow-up questions derived from a memory transcript."""
+    questions: list[str] = []
+    lowered = transcript.lower()
+
+    for pattern, question in RELATIONSHIP_PATTERNS:
+        if re.search(pattern, lowered):
+            questions.append(question)
+            if len(questions) >= 2:
+                break
+
+    if len(questions) < 3:
+        words = transcript.split()
+        seen_names: set[str] = set()
+        for word in words[1:]:
+            clean = re.sub(r"[^a-zA-Z'-]", "", word)
+            if (
+                clean
+                and clean[0].isupper()
+                and clean not in _COMMON_CAPS
+                and len(clean) > 2
+                and not any(c.isdigit() for c in clean)
+            ):
+                if clean not in seen_names:
+                    seen_names.add(clean)
+                    questions.append(
+                        f"You mentioned {clean} \u2014 who is {clean} and what role do they play in your life?"
+                    )
+                    break
+
+    if len(questions) < 3:
+        year_match = re.search(r"\b(19\d{2}|20\d{2})\b", transcript)
+        if year_match:
+            year = year_match.group(1)
+            questions.append(
+                f"You mentioned {year}. What else was happening in your life around that time?"
+            )
+
+    if len(questions) < 3 and re.search(
+        r"\b(went to|drove to|moved to|lived in|grew up in|born in|visited)\b", lowered
+    ):
+        questions.append(
+            "Where exactly were you at this time in your life, and how did that place shape you?"
+        )
+
+    if not questions:
+        short_desc = event_description[:120].rstrip()
+        questions.append(
+            f"You shared: \u2018{short_desc}\u2019. What happened just before this moment "
+            "that might help place it on your timeline?"
+        )
+
+    return questions[:3]
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -388,4 +510,47 @@ async def create_memory(
     db.commit()
     db.refresh(entry)
 
+    if transcription_enabled and transcript not in ("Transcription failed.", "Transcription disabled."):
+        try:
+            for q_text in generate_questions_from_memory(transcript, event_description):
+                db.add(Question(text=q_text, source_memory_id=entry.id, status="pending"))
+            db.commit()
+        except Exception as exc:
+            logger.warning("Could not generate questions for memory %s: %s", entry.id, exc)
+
     return entry
+
+
+@app.get("/api/questions", response_model=list[QuestionResponse])
+def list_questions(db: Session = Depends(get_db)) -> list[Question]:
+    return (
+        db.query(Question)
+        .filter(Question.status == "pending")
+        .order_by(Question.created_at.asc())
+        .all()
+    )
+
+
+@app.post("/api/questions/{question_id}/answer")
+def answer_question(
+    question_id: int,
+    body: AnswerQuestionRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    question = db.get(Question, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    question.status = "answered"
+    question.answer_memory_id = body.answer_memory_id
+    db.commit()
+    return {"status": "answered"}
+
+
+@app.post("/api/questions/{question_id}/dismiss")
+def dismiss_question(question_id: int, db: Session = Depends(get_db)) -> dict:
+    question = db.get(Question, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    question.status = "dismissed"
+    db.commit()
+    return {"status": "dismissed"}

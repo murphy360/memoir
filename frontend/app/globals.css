@@ -172,3 +172,73 @@ button:disabled {
     padding: 0.9rem;
   }
 }
+
+button.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+button.ghost:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.questionsSection {
+  display: grid;
+  gap: 0.7rem;
+  margin-bottom: 0.25rem;
+}
+
+.questionCard {
+  border: 1.5px solid var(--accent);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  background: linear-gradient(135deg, #f0fdf9 0%, #e8f8f4 100%);
+}
+
+.questionText {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.questionActions {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.activePrompt {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: var(--accent-soft);
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.activePromptBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.activePromptLabel {
+  margin: 0 0 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.activePromptText {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--ink);
+  line-height: 1.4;
+}
