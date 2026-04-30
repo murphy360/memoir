@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { DirectoryManager } from "./components/DirectoryManager";
 import { MemoryCard } from "./components/MemoryCard";
-import { MemoryEntry, Question } from "./types";
+import { DirectoryEntry, MemoryEntry, Question } from "./types";
 
 type PendingRecording = {
   id: string;
@@ -41,11 +42,15 @@ export default function HomePage() {
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState("Ready to record a memory.");
   const [timeline, setTimeline] = useState<MemoryEntry[]>([]);
+  const [peopleDirectory, setPeopleDirectory] = useState<DirectoryEntry[]>([]);
+  const [placesDirectory, setPlacesDirectory] = useState<DirectoryEntry[]>([]);
   const [pendingRecording, setPendingRecording] = useState<PendingRecording | null>(null);
   const [audioDevices, setAudioDevices] = useState<AudioInputDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [audioLevel, setAudioLevel] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [memoryActionId, setMemoryActionId] = useState<number | null>(null);
+  const [directoryBusyKey, setDirectoryBusyKey] = useState<string | null>(null);
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
@@ -59,9 +64,11 @@ export default function HomePage() {
 
   async function loadTimeline() {
     try {
-      const [memoriesRes, questionsRes] = await Promise.all([
+      const [memoriesRes, questionsRes, peopleRes, placesRes] = await Promise.all([
         fetch(`${API_BASE}/api/memories`, { cache: "no-store" }),
         fetch(`${API_BASE}/api/questions`, { cache: "no-store" }),
+        fetch(`${API_BASE}/api/people`, { cache: "no-store" }),
+        fetch(`${API_BASE}/api/places`, { cache: "no-store" }),
       ]);
       if (!memoriesRes.ok) {
         throw new Error("Failed to load timeline");
@@ -71,6 +78,14 @@ export default function HomePage() {
       if (questionsRes.ok) {
         const questionsData: Question[] = await questionsRes.json();
         setQuestions(questionsData);
+      }
+      if (peopleRes.ok) {
+        const peopleData: DirectoryEntry[] = await peopleRes.json();
+        setPeopleDirectory(peopleData);
+      }
+      if (placesRes.ok) {
+        const placesData: DirectoryEntry[] = await placesRes.json();
+        setPlacesDirectory(placesData);
       }
     } catch (error) {
       setStatus("Could not load timeline from API.");
@@ -87,6 +102,215 @@ export default function HomePage() {
       setQuestions((current) => current.filter((q) => q.id !== questionId));
     } catch {
       // silently ignore dismiss errors
+    }
+  }
+
+  async function reanalyzeMemory(memoryId: number) {
+    setMemoryActionId(memoryId);
+    setStatus("Reanalyzing memory...");
+    try {
+      const response = await fetch(`${API_BASE}/api/memories/${memoryId}/reanalyze`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        throw new Error("Reanalyze failed");
+      }
+      await loadTimeline();
+      setStatus("Memory reanalyzed.");
+    } catch {
+      setStatus("Failed to reanalyze memory.");
+    } finally {
+      setMemoryActionId(null);
+    }
+  }
+
+  async function deleteMemory(memoryId: number) {
+    if (!window.confirm("Delete this memory permanently?")) {
+      return;
+    }
+
+    setMemoryActionId(memoryId);
+    setStatus("Deleting memory...");
+    try {
+      const response = await fetch(`${API_BASE}/api/memories/${memoryId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error("Delete failed");
+      }
+      await loadTimeline();
+      setStatus("Memory deleted.");
+    } catch {
+      setStatus("Failed to delete memory.");
+    } finally {
+      setMemoryActionId(null);
+    }
+  }
+
+  async function assignRecorder(memoryId: number, personId: number) {
+    setMemoryActionId(memoryId);
+    setStatus("Saving recorder...");
+    try {
+      const response = await fetch(`${API_BASE}/api/memories/${memoryId}/recorder`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ person_id: personId }),
+      });
+      if (!response.ok) {
+        throw new Error("Recorder update failed");
+      }
+      await loadTimeline();
+      setStatus("Recorder saved.");
+    } catch {
+      setStatus("Failed to save recorder.");
+    } finally {
+      setMemoryActionId(null);
+    }
+  }
+
+  async function mergePersonEntry(sourceId: number, intoId: number) {
+    setDirectoryBusyKey(`people:merge:${sourceId}`);
+    setStatus("Merging people...");
+    try {
+      const response = await fetch(`${API_BASE}/api/people/${sourceId}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ into_person_id: intoId }),
+      });
+      if (!response.ok) {
+        throw new Error("Merge failed");
+      }
+      await loadTimeline();
+      setStatus("People merged.");
+    } catch {
+      setStatus("Failed to merge people.");
+    } finally {
+      setDirectoryBusyKey(null);
+    }
+  }
+
+  async function splitPersonEntry(sourceId: number, newNames: string[], keepAlias: boolean) {
+    setDirectoryBusyKey(`people:split:${sourceId}`);
+    setStatus("Splitting person...");
+    try {
+      const response = await fetch(`${API_BASE}/api/people/${sourceId}/split`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ new_names: newNames, keep_alias: keepAlias }),
+      });
+      if (!response.ok) {
+        throw new Error("Split failed");
+      }
+      await loadTimeline();
+      setStatus("Person split.");
+    } catch {
+      setStatus("Failed to split person.");
+    } finally {
+      setDirectoryBusyKey(null);
+    }
+  }
+
+  async function addPersonAlias(personId: number, alias: string) {
+    setDirectoryBusyKey(`people:alias:${personId}`);
+    try {
+      const response = await fetch(`${API_BASE}/api/people/${personId}/aliases`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ alias }),
+      });
+      if (!response.ok) {
+        throw new Error("Add alias failed");
+      }
+      await loadTimeline();
+      setStatus("Alias saved.");
+    } catch {
+      setStatus("Failed to save alias.");
+    } finally {
+      setDirectoryBusyKey(null);
+    }
+  }
+
+  async function removePersonAlias(personId: number, alias: string) {
+    setDirectoryBusyKey(`people:alias:${personId}`);
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/people/${personId}/aliases/${encodeURIComponent(alias)}`,
+        { method: "DELETE" }
+      );
+      if (!response.ok) {
+        throw new Error("Remove alias failed");
+      }
+      await loadTimeline();
+      setStatus("Alias removed.");
+    } catch {
+      setStatus("Failed to remove alias.");
+    } finally {
+      setDirectoryBusyKey(null);
+    }
+  }
+
+  async function createDirectoryEntry(kind: "people" | "places", name: string) {
+    setDirectoryBusyKey(`${kind}:create`);
+    setStatus(`Adding ${kind === "people" ? "person" : "place"}...`);
+    try {
+      const response = await fetch(`${API_BASE}/api/${kind}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!response.ok) {
+        throw new Error("Create failed");
+      }
+      await loadTimeline();
+      setStatus(`${kind === "people" ? "Person" : "Place"} saved.`);
+    } catch {
+      setStatus(`Failed to save ${kind === "people" ? "person" : "place"}.`);
+    } finally {
+      setDirectoryBusyKey(null);
+    }
+  }
+
+  async function renameDirectoryEntry(kind: "people" | "places", itemId: number, name: string) {
+    setDirectoryBusyKey(`${kind}:rename:${itemId}`);
+    setStatus(`Renaming ${kind === "people" ? "person" : "place"}...`);
+    try {
+      const response = await fetch(`${API_BASE}/api/${kind}/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!response.ok) {
+        throw new Error("Rename failed");
+      }
+      await loadTimeline();
+      setStatus(`${kind === "people" ? "Person" : "Place"} renamed.`);
+    } catch {
+      setStatus(`Failed to rename ${kind === "people" ? "person" : "place"}.`);
+    } finally {
+      setDirectoryBusyKey(null);
+    }
+  }
+
+  async function deleteDirectoryEntry(kind: "people" | "places", itemId: number) {
+    if (!window.confirm(`Delete this ${kind === "people" ? "person" : "place"} from the directory?`)) {
+      return;
+    }
+
+    setDirectoryBusyKey(`${kind}:delete:${itemId}`);
+    setStatus(`Deleting ${kind === "people" ? "person" : "place"}...`);
+    try {
+      const response = await fetch(`${API_BASE}/api/${kind}/${itemId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error("Delete failed");
+      }
+      await loadTimeline();
+      setStatus(`${kind === "people" ? "Person" : "Place"} deleted.`);
+    } catch {
+      setStatus(`Failed to delete ${kind === "people" ? "person" : "place"}.`);
+    } finally {
+      setDirectoryBusyKey(null);
     }
   }
 
@@ -395,6 +619,33 @@ export default function HomePage() {
         <p className="status">{status}</p>
       </section>
 
+      <section className="directoryGrid">
+        <DirectoryManager
+          title="People Directory"
+          addLabel="Add a person"
+          emptyLabel="No people have been added yet."
+          items={peopleDirectory}
+          isBusy={directoryBusyKey !== null || isLoading || isRecording}
+          onCreate={(name) => createDirectoryEntry("people", name)}
+          onRename={(itemId, name) => renameDirectoryEntry("people", itemId, name)}
+          onDelete={(itemId) => deleteDirectoryEntry("people", itemId)}
+          onMerge={mergePersonEntry}
+          onSplit={splitPersonEntry}
+          onAddAlias={addPersonAlias}
+          onRemoveAlias={removePersonAlias}
+        />
+        <DirectoryManager
+          title="Places Directory"
+          addLabel="Add a place"
+          emptyLabel="No places have been added yet."
+          items={placesDirectory}
+          isBusy={directoryBusyKey !== null || isLoading || isRecording}
+          onCreate={(name) => createDirectoryEntry("places", name)}
+          onRename={(itemId, name) => renameDirectoryEntry("places", itemId, name)}
+          onDelete={(itemId) => deleteDirectoryEntry("places", itemId)}
+        />
+      </section>
+
       <section className="timeline">
         {questions.length > 0 && (
           <div className="questionsSection">
@@ -441,7 +692,17 @@ export default function HomePage() {
           </article>
         )}
         {timeline.map((memory) => (
-          <MemoryCard key={memory.id} memory={memory} formatBytes={formatBytes} resolveApiUrl={resolveApiUrl} />
+          <MemoryCard
+            key={memory.id}
+            memory={memory}
+            peopleOptions={peopleDirectory}
+            formatBytes={formatBytes}
+            resolveApiUrl={resolveApiUrl}
+            onReanalyze={reanalyzeMemory}
+            onDelete={deleteMemory}
+            onAssignRecorder={assignRecorder}
+            isBusy={isLoading || memoryActionId === memory.id || isRecording}
+          />
         ))}
         {timeline.length === 0 && <p className="meta">No memories yet. Record your first one.</p>}
       </section>

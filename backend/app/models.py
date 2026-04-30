@@ -2,12 +2,71 @@ import json
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, Integer, String, Text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class Person(Base):
+    __tablename__ = "people"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    aliases: Mapped[list["PersonAlias"]] = relationship(back_populates="person", cascade="all, delete-orphan")
+
+
+class PersonAlias(Base):
+    """Alternative names / relationship terms that resolve to a Person.
+
+    A single alias (e.g. 'parents') can map to *multiple* people by having
+    one row per target person, so expand_person_names() can return both.
+    """
+    __tablename__ = "person_aliases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id", ondelete="CASCADE"), nullable=False, index=True)
+    alias: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    person: Mapped["Person"] = relationship(back_populates="aliases")
+
+
+class Place(Base):
+    __tablename__ = "places"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class MemoryPerson(Base):
+    __tablename__ = "memory_people"
+    __table_args__ = (UniqueConstraint("memory_id", "person_id", name="uq_memory_person"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    memory_id: Mapped[int] = mapped_column(ForeignKey("memories.id", ondelete="CASCADE"), nullable=False, index=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id", ondelete="CASCADE"), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(20), default="mentioned")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    person: Mapped["Person"] = relationship()
+
+
+class MemoryPlace(Base):
+    __tablename__ = "memory_places"
+    __table_args__ = (UniqueConstraint("memory_id", "place_id", name="uq_memory_place"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    memory_id: Mapped[int] = mapped_column(ForeignKey("memories.id", ondelete="CASCADE"), nullable=False, index=True)
+    place_id: Mapped[int] = mapped_column(ForeignKey("places.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    place: Mapped["Place"] = relationship()
 
 
 class MemoryEntry(Base):
@@ -24,6 +83,7 @@ class MemoryEntry(Base):
     date_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     date_decade: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     recorder_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    recorder_person_id: Mapped[Optional[int]] = mapped_column(ForeignKey("people.id"), nullable=True)
     people_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     locations_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     emotional_tone: Mapped[str] = mapped_column(String(50), default="neutral")
@@ -31,7 +91,12 @@ class MemoryEntry(Base):
     audio_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     audio_content_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     audio_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    date_recorded: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    recorder_person: Mapped[Optional["Person"]] = relationship(foreign_keys=[recorder_person_id])
+    people_links: Mapped[list["MemoryPerson"]] = relationship(cascade="all, delete-orphan")
+    place_links: Mapped[list["MemoryPlace"]] = relationship(cascade="all, delete-orphan")
 
     @property
     def audio_url(self) -> Optional[str]:
@@ -41,10 +106,14 @@ class MemoryEntry(Base):
 
     @property
     def referenced_people(self) -> list[str]:
+        if self.people_links:
+            return [link.person.name for link in self.people_links if link.person and link.person.name]
         return _deserialize_list(self.people_json)
 
     @property
     def referenced_locations(self) -> list[str]:
+        if self.place_links:
+            return [link.place.name for link in self.place_links if link.place and link.place.name]
         return _deserialize_list(self.locations_json)
 
 

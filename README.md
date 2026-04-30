@@ -124,4 +124,6 @@ docker compose down
 - `GET /api/health`: Health status.
 - `GET /api/memories`: Returns processed memories in timeline order.
 - `POST /api/memories`: Accepts multipart form-data with `audio` file and returns processed memory metadata including date labels and relationship/location tags when available.
+- `POST /api/memories/{id}/reanalyze`: Re-runs transcription and metadata extraction on stored audio for an existing memory.
+- `DELETE /api/memories/{id}`: Deletes a memory entry and its stored audio file.
 - `GET /api/memories/{id}/audio`: Streams the stored MP3 recording for playback.

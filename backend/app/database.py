@@ -40,6 +40,65 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE memories ADD COLUMN people_json TEXT"))
         if "locations_json" not in columns:
             connection.execute(text("ALTER TABLE memories ADD COLUMN locations_json TEXT"))
+        if "date_recorded" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN date_recorded DATE"))
+        if "recorder_person_id" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN recorder_person_id INTEGER"))
+
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS people (
+                id INTEGER PRIMARY KEY,
+                name VARCHAR(120) NOT NULL UNIQUE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_people_name ON people (name)"))
+
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS places (
+                id INTEGER PRIMARY KEY,
+                name VARCHAR(120) NOT NULL UNIQUE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_places_name ON places (name)"))
+
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS memory_people (
+                id INTEGER PRIMARY KEY,
+                memory_id INTEGER NOT NULL,
+                person_id INTEGER NOT NULL,
+                role VARCHAR(20) DEFAULT 'mentioned',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(memory_id, person_id)
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_memory_people_memory_id ON memory_people (memory_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_memory_people_person_id ON memory_people (person_id)"))
+
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS memory_places (
+                id INTEGER PRIMARY KEY,
+                memory_id INTEGER NOT NULL,
+                place_id INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(memory_id, place_id)
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_memory_places_memory_id ON memory_places (memory_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_memory_places_place_id ON memory_places (place_id)"))
+
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS person_aliases (
+                id INTEGER PRIMARY KEY,
+                person_id INTEGER NOT NULL,
+                alias VARCHAR(120) NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE CASCADE
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_person_aliases_person_id ON person_aliases (person_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_person_aliases_alias ON person_aliases (alias)"))
 
 
 def get_db():

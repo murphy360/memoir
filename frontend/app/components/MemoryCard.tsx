@@ -1,9 +1,17 @@
-import { MemoryEntry } from "../types";
+"use client";
+
+import { useEffect, useState } from "react";
+import { DirectoryEntry, MemoryEntry } from "../types";
 
 type MemoryCardProps = {
   memory: MemoryEntry;
+  peopleOptions: DirectoryEntry[];
   formatBytes: (bytes: number) => string;
   resolveApiUrl: (path: string) => string;
+  onReanalyze: (memoryId: number) => Promise<void>;
+  onDelete: (memoryId: number) => Promise<void>;
+  onAssignRecorder: (memoryId: number, personId: number) => Promise<void>;
+  isBusy: boolean;
 };
 
 function asLabelList(items: string[]): string {
@@ -13,7 +21,24 @@ function asLabelList(items: string[]): string {
   return items.join(", ");
 }
 
-export function MemoryCard({ memory, formatBytes, resolveApiUrl }: MemoryCardProps) {
+export function MemoryCard({
+  memory,
+  peopleOptions,
+  formatBytes,
+  resolveApiUrl,
+  onReanalyze,
+  onDelete,
+  onAssignRecorder,
+  isBusy,
+}: MemoryCardProps) {
+  const [selectedRecorder, setSelectedRecorder] = useState("");
+
+  useEffect(() => {
+    setSelectedRecorder(memory.recorder_person_id ? `${memory.recorder_person_id}` : "");
+  }, [memory.id, memory.recorder_person_id]);
+
+  const canAssignRecorder = !memory.recorder_name && selectedRecorder;
+
   return (
     <article className="memory">
       <h3>{memory.event_description}</h3>
@@ -36,7 +61,45 @@ export function MemoryCard({ memory, formatBytes, resolveApiUrl }: MemoryCardPro
         <p className="meta">
           Tone: <span className="badge">{memory.emotional_tone}</span>
         </p>
+        <p className="meta">
+          Date recorded: <span className="badge">{memory.date_recorded || "Unknown"}</span>
+        </p>
       </div>
+
+      {!memory.recorder_name && (
+        <div className="recorderAssign">
+          <label className="meta" htmlFor={`recorder-${memory.id}`}>
+            Assign recorder
+          </label>
+          <div className="recorderAssignControls">
+            <select
+              id={`recorder-${memory.id}`}
+              className="micSelect"
+              value={selectedRecorder}
+              onChange={(event) => setSelectedRecorder(event.target.value)}
+              disabled={isBusy || peopleOptions.length === 0}
+            >
+              <option value="">Select a person</option>
+              {peopleOptions.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="secondary"
+              type="button"
+              onClick={() => onAssignRecorder(memory.id, Number(selectedRecorder))}
+              disabled={!canAssignRecorder || isBusy}
+            >
+              Save Recorder
+            </button>
+          </div>
+          {peopleOptions.length === 0 && (
+            <p className="meta">No known people are available yet to assign as the recorder.</p>
+          )}
+        </div>
+      )}
 
       {memory.audio_size_bytes !== null && (
         <p className="meta">Stored audio size: {formatBytes(memory.audio_size_bytes)}</p>
@@ -45,6 +108,14 @@ export function MemoryCard({ memory, formatBytes, resolveApiUrl }: MemoryCardPro
         <audio controls preload="metadata" src={resolveApiUrl(memory.audio_url)} style={{ width: "100%" }} />
       )}
       <p>{memory.transcript}</p>
+      <div className="memoryActions">
+        <button className="secondary" type="button" onClick={() => onReanalyze(memory.id)} disabled={isBusy}>
+          Reanalyze
+        </button>
+        <button className="ghost" type="button" onClick={() => onDelete(memory.id)} disabled={isBusy}>
+          Delete
+        </button>
+      </div>
     </article>
   );
 }
