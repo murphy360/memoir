@@ -31,6 +31,7 @@ export function MemoryCard({
   onAssignRecorder,
   isBusy,
 }: MemoryCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const [selectedRecorder, setSelectedRecorder] = useState("");
 
   useEffect(() => {
@@ -41,16 +42,34 @@ export function MemoryCard({
 
   return (
     <article className="memory">
-      <h3>{memory.event_description}</h3>
-      {memory.response_to_question_text && (
+      <div className="memoryHeader">
+        <div className="memoryHeaderText">
+          <h3>{memory.event_description}</h3>
+          <div className="memoryDateSummary">
+            <p className="meta">
+              Date: <span className="badge">{memory.estimated_date_text || "Unknown"}</span>
+            </p>
+            <p className="meta">
+              Recorded: <span className="badge">{memory.date_recorded || "Unknown"}</span>
+            </p>
+          </div>
+        </div>
+        <button
+          className="secondary memoryToggle"
+          type="button"
+          onClick={() => setIsExpanded((current) => !current)}
+          aria-expanded={isExpanded}
+        >
+          {isExpanded ? "Collapse" : "Expand"}
+        </button>
+      </div>
+
+      {isExpanded && memory.response_to_question_text && (
         <p className="memoryResponseLink">
           <strong>In response to:</strong> {memory.response_to_question_text}
         </p>
       )}
-      <div className="metaList">
-        <p className="meta">
-          Date: <span className="badge">{memory.estimated_date_text || "Unknown"}</span>
-        </p>
+      {isExpanded && <div className="metaList">
         <p className="meta">
           Date precision: <span className="badge">{memory.date_precision || "unknown"}</span>
         </p>
@@ -66,12 +85,9 @@ export function MemoryCard({
         <p className="meta">
           Tone: <span className="badge">{memory.emotional_tone}</span>
         </p>
-        <p className="meta">
-          Date recorded: <span className="badge">{memory.date_recorded || "Unknown"}</span>
-        </p>
-      </div>
+      </div>}
 
-      {!memory.recorder_name && (
+      {isExpanded && !memory.recorder_name && (
         <div className="recorderAssign">
           <label className="meta" htmlFor={`recorder-${memory.id}`}>
             Assign recorder
@@ -106,21 +122,21 @@ export function MemoryCard({
         </div>
       )}
 
-      {memory.audio_size_bytes !== null && (
+      {isExpanded && memory.audio_size_bytes !== null && (
         <p className="meta">Stored audio size: {formatBytes(memory.audio_size_bytes)}</p>
       )}
-      {memory.audio_url && (
+      {isExpanded && memory.audio_url && (
         <audio controls preload="metadata" src={resolveApiUrl(memory.audio_url)} style={{ width: "100%" }} />
       )}
-      <p>{memory.transcript}</p>
-      <div className="memoryActions">
+      {isExpanded && <p>{memory.transcript}</p>}
+      {isExpanded && <div className="memoryActions">
         <button className="secondary" type="button" onClick={() => onReanalyze(memory.id)} disabled={isBusy}>
           Reanalyze
         </button>
         <button className="ghost" type="button" onClick={() => onDelete(memory.id)} disabled={isBusy}>
           Delete
         </button>
-      </div>
+      </div>}
     </article>
   );
 }
