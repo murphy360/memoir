@@ -152,6 +152,13 @@ button:disabled {
   line-height: 1.35;
 }
 
+.metaList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.35rem 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
 .meta {
   color: var(--muted);
   font-size: 0.9rem;

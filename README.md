@@ -95,6 +95,7 @@ Current backend behavior:
 - Accepts audio uploads at `POST /api/memories`.
 - Converts uploaded recordings to MP3 and persists them under backend storage (`/data/audio` in Docker).
 - Runs transcription and analysis during memory processing via Gemini.
+- Uses Gemini function-calling to set structured memory metadata (best-effort date precision, recorder name, referenced people, and referenced locations).
 - Stores memories in SQLite and returns timeline entries from `GET /api/memories`.
 - Returns a playable audio endpoint per memory at `GET /api/memories/{id}/audio`.
 
@@ -122,5 +123,5 @@ docker compose down
 
 - `GET /api/health`: Health status.
 - `GET /api/memories`: Returns processed memories in timeline order.
-- `POST /api/memories`: Accepts multipart form-data with `audio` file and returns processed memory metadata.
+- `POST /api/memories`: Accepts multipart form-data with `audio` file and returns processed memory metadata including date labels and relationship/location tags when available.
 - `GET /api/memories/{id}/audio`: Streams the stored MP3 recording for playback.

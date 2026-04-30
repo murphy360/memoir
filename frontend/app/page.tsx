@@ -1,18 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
-type MemoryEntry = {
-  id: number;
-  transcript: string;
-  event_description: string;
-  estimated_date_text: string | null;
-  emotional_tone: string;
-  follow_up_question: string;
-  audio_size_bytes: number | null;
-  audio_url: string | null;
-  created_at: string;
-};
+import { MemoryCard } from "./components/MemoryCard";
+import { MemoryEntry, Question } from "./types";
 
 type PendingRecording = {
   id: string;
@@ -25,14 +15,6 @@ type PendingRecording = {
 type AudioInputDevice = {
   deviceId: string;
   label: string;
-};
-
-type Question = {
-  id: number;
-  text: string;
-  source_memory_id: number | null;
-  status: string;
-  created_at: string;
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
@@ -338,6 +320,7 @@ export default function HomePage() {
       <section className="hero">
         <h1>Memoir MVP</h1>
         <p>Record a memory, extract a timeline clue, and get one follow-up question.</p>
+        <p className="meta">Tip: start each recording with your name, where this memory happened, and when it happened (even if you only remember the year or decade).</p>
       </section>
 
       <section className="panel">
@@ -458,19 +441,7 @@ export default function HomePage() {
           </article>
         )}
         {timeline.map((memory) => (
-          <article key={memory.id} className="memory">
-            <h3>{memory.event_description}</h3>
-            <p className="meta">
-              Estimated time: {memory.estimated_date_text || "Unknown"} | Tone: <span className="badge">{memory.emotional_tone}</span>
-            </p>
-            {memory.audio_size_bytes !== null && (
-              <p className="meta">Stored audio size: {formatBytes(memory.audio_size_bytes)}</p>
-            )}
-            {memory.audio_url && (
-              <audio controls preload="metadata" src={resolveApiUrl(memory.audio_url)} style={{ width: "100%" }} />
-            )}
-            <p>{memory.transcript}</p>
-          </article>
+          <MemoryCard key={memory.id} memory={memory} formatBytes={formatBytes} resolveApiUrl={resolveApiUrl} />
         ))}
         {timeline.length === 0 && <p className="meta">No memories yet. Record your first one.</p>}
       </section>
