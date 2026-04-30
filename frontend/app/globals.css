@@ -394,6 +394,48 @@ button:disabled {
   color: var(--accent);
 }
 
+.suggestionBox {
+  margin: 0.75rem 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #f5c842;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #fffef0 0%, #fdf8e1 100%);
+}
+
+.suggestionLabel {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a6800;
+}
+
+.suggestionDate {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #4a3800;
+}
+
+.suggestionMeta {
+  margin: 0 0 0.25rem;
+  font-size: 0.82rem;
+  color: #6b5200;
+}
+
+.suggestionReasoning {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+  color: #5a4a00;
+  font-style: italic;
+}
+
+.suggestionActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 @media (max-width: 640px) {
   .memoryHeader {
     flex-direction: column;

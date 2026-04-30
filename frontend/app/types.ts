@@ -3,6 +3,16 @@ export type ResearchSource = {
   url: string;
 };
 
+export type ResearchDateSuggestion = {
+  estimated_date_text: string;
+  date_precision: string;
+  date_year: number | null;
+  date_month: number | null;
+  date_day: number | null;
+  date_decade: number | null;
+  reasoning: string;
+};
+
 export type MemoryEntry = {
   id: number;
   transcript: string;
@@ -20,6 +30,7 @@ export type MemoryEntry = {
   research_summary: string | null;
   research_queries: string[];
   research_sources: ResearchSource[];
+  research_suggested_metadata: ResearchDateSuggestion | null;
   audio_size_bytes: number | null;
   audio_url: string | null;
   date_recorded: string | null;

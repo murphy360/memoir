@@ -9,6 +9,8 @@ type MemoryCardProps = {
   formatBytes: (bytes: number) => string;
   resolveApiUrl: (path: string) => string;
   onResearch: (memoryId: number) => Promise<void>;
+  onAcceptSuggestion: (memoryId: number) => Promise<void>;
+  onDismissSuggestion: (memoryId: number) => Promise<void>;
   onReanalyze: (memoryId: number) => Promise<void>;
   onDelete: (memoryId: number) => Promise<void>;
   onAssignRecorder: (memoryId: number, personId: number) => Promise<void>;
@@ -28,6 +30,8 @@ export function MemoryCard({
   formatBytes,
   resolveApiUrl,
   onResearch,
+  onAcceptSuggestion,
+  onDismissSuggestion,
   onReanalyze,
   onDelete,
   onAssignRecorder,
@@ -135,6 +139,34 @@ export function MemoryCard({
         <section className="researchPanel">
           <p className="researchLabel">Research Notes</p>
           <pre className="researchSummary">{memory.research_summary}</pre>
+          {memory.research_suggested_metadata && (
+            <div className="suggestionBox">
+              <p className="suggestionLabel">Suggested date update</p>
+              <p className="suggestionDate">{memory.research_suggested_metadata.estimated_date_text}</p>
+              <p className="suggestionMeta">
+                Precision: <strong>{memory.research_suggested_metadata.date_precision}</strong>
+              </p>
+              <p className="suggestionReasoning">{memory.research_suggested_metadata.reasoning}</p>
+              <div className="suggestionActions">
+                <button
+                  className="primary"
+                  type="button"
+                  onClick={() => onAcceptSuggestion(memory.id)}
+                  disabled={isBusy}
+                >
+                  Accept
+                </button>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={() => onDismissSuggestion(memory.id)}
+                  disabled={isBusy}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
           {memory.research_queries.length > 0 && (
             <div className="researchQueries">
               <p className="researchSubhead">Search queries used</p>

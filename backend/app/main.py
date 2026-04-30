@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import logging
 import os
@@ -28,10 +29,12 @@ from app.services.audio_storage import save_audio_file
 from app.services.gemini_client import (
     extract_metadata_with_gemini_function_call,
     research_memory_details,
+    suggest_date_from_research,
     transcribe_audio,
 )
 from app.services.memory_analysis import (
     MemoryMetadata,
+    build_sort_date,
     detect_emotional_tone,
     fallback_metadata_from_transcript,
     generate_follow_up_question,
@@ -862,6 +865,55 @@ def research_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEntr
         [{"title": source.title, "url": source.url} for source in research.sources]
     )
 
+    suggestion = suggest_date_from_research(
+        research_summary=research.summary,
+        current_date_text=memory.estimated_date_text,
+        current_date_precision=memory.date_precision,
+    )
+    if suggestion:
+        memory.research_suggested_metadata_json = json.dumps(dataclasses.asdict(suggestion))
+    else:
+        memory.research_suggested_metadata_json = None
+
+    db.commit()
+    db.refresh(memory)
+    return memory
+
+
+@app.post("/api/memories/{memory_id}/apply-research-suggestion", response_model=MemoryResponse)
+def apply_research_suggestion(memory_id: int, db: Session = Depends(get_db)) -> MemoryEntry:
+    memory = db.get(MemoryEntry, memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    if not memory.research_suggested_metadata_json:
+        raise HTTPException(status_code=404, detail="No pending suggestion")
+
+    suggestion = json.loads(memory.research_suggested_metadata_json)
+    memory.estimated_date_text = suggestion.get("estimated_date_text") or memory.estimated_date_text
+    memory.date_precision = suggestion.get("date_precision") or memory.date_precision
+    memory.date_year = suggestion.get("date_year")
+    memory.date_month = suggestion.get("date_month")
+    memory.date_day = suggestion.get("date_day")
+    memory.date_decade = suggestion.get("date_decade")
+    memory.estimated_date_sort = build_sort_date(
+        memory.date_precision,
+        memory.date_year,
+        memory.date_month,
+        memory.date_day,
+        memory.date_decade,
+    )
+    memory.research_suggested_metadata_json = None
+    db.commit()
+    db.refresh(memory)
+    return memory
+
+
+@app.post("/api/memories/{memory_id}/dismiss-research-suggestion", response_model=MemoryResponse)
+def dismiss_research_suggestion(memory_id: int, db: Session = Depends(get_db)) -> MemoryEntry:
+    memory = db.get(MemoryEntry, memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    memory.research_suggested_metadata_json = None
     db.commit()
     db.refresh(memory)
     return memory

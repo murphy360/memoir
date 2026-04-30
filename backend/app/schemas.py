@@ -10,6 +10,16 @@ class ResearchSourceResponse(BaseModel):
     url: str
 
 
+class ResearchDateSuggestion(BaseModel):
+    estimated_date_text: str
+    date_precision: str
+    date_year: Optional[int]
+    date_month: Optional[int]
+    date_day: Optional[int]
+    date_decade: Optional[int]
+    reasoning: str
+
+
 class MemoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -29,6 +39,7 @@ class MemoryResponse(BaseModel):
     research_summary: Optional[str]
     research_queries: list[str] = Field(default_factory=list)
     research_sources: list[ResearchSourceResponse] = Field(default_factory=list)
+    research_suggested_metadata: Optional[ResearchDateSuggestion] = None
     audio_size_bytes: Optional[int]
     audio_url: Optional[str]
     date_recorded: Optional[date]

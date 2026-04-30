@@ -26,6 +26,137 @@ class ResearchResult:
     sources: list[ResearchSource] = field(default_factory=list)
 
 
+@dataclass
+class DateSuggestion:
+    estimated_date_text: str
+    date_precision: str
+    date_year: Optional[int]
+    date_month: Optional[int]
+    date_day: Optional[int]
+    date_decade: Optional[int]
+    reasoning: str
+
+
+def suggest_date_from_research(
+    research_summary: str,
+    current_date_text: Optional[str],
+    current_date_precision: Optional[str],
+) -> Optional[DateSuggestion]:
+    """Use Gemini function calling to extract date suggestion from research summary.
+
+    Returns None if no meaningful improvement over the current date is found,
+    or if the Gemini API key is unavailable.
+    """
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        return None
+
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": (
+                            "You are analyzing research results for a personal memory and extracting date refinements. "
+                            "Read the research summary and suggest an improved date if the evidence is clear. "
+                            "If no meaningful improvement is possible, call suggest_date_refinement with no arguments (or empty args). "
+                            "Current recorded date: {current_date_text or 'Unknown'}\n"
+                            "Current precision: {current_date_precision or 'unknown'}\n\n"
+                            f"Research summary:\n{research_summary}"
+                        )
+                    }
+                ]
+            }
+        ],
+        "tools": [
+            {
+                "functionDeclarations": [
+                    {
+                        "name": "suggest_date_refinement",
+                        "description": "Suggest a refined date for a memory based on research findings. Leave all fields null if no refinement is warranted.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "estimated_date_text": {"type": "string"},
+                                "date_precision": {
+                                    "type": "string",
+                                    "enum": ["exact", "approximate", "month", "year", "decade"],
+                                },
+                                "date_year": {"type": "integer"},
+                                "date_month": {"type": "integer"},
+                                "date_day": {"type": "integer"},
+                                "date_decade": {"type": "integer"},
+                                "reasoning": {"type": "string"},
+                            },
+                            "required": [],
+                        },
+                    }
+                ]
+            }
+        ],
+        "toolConfig": {
+            "functionCallingConfig": {
+                "mode": "ANY",
+                "allowedFunctionNames": ["suggest_date_refinement"],
+            }
+        },
+    }
+
+    try:
+        response = requests.post(endpoint, params={"key": gemini_key}, json=payload, timeout=30)
+        if not response.ok:
+            logger.warning("Date suggestion request failed: %s", response.text[:200])
+            return None
+        data = response.json()
+    except Exception as exc:
+        logger.warning("Date suggestion exception: %s", exc)
+        return None
+
+    parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+    for part in parts:
+        function_call = part.get("functionCall")
+        if not function_call or function_call.get("name") != "suggest_date_refinement":
+            continue
+
+        args = function_call.get("args", {})
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {}
+        if not isinstance(args, dict):
+            args = {}
+
+        # If no estimated_date_text, no suggestion to make
+        estimated_date_text = str(args.get("estimated_date_text") or "").strip()
+        if not estimated_date_text:
+            return None
+
+        return DateSuggestion(
+            estimated_date_text=estimated_date_text[:100],
+            date_precision=str(args.get("date_precision") or "approximate"),
+            date_year=_int_or_none(args.get("date_year")),
+            date_month=_int_or_none(args.get("date_month")),
+            date_day=_int_or_none(args.get("date_day")),
+            date_decade=_int_or_none(args.get("date_decade")),
+            reasoning=str(args.get("reasoning") or "")[:500],
+        )
+
+    return None
+
+
+def _int_or_none(value: object) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def research_memory_details(
     transcript: str,
     event_description: str,
