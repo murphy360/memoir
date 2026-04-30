@@ -8,6 +8,7 @@ type MemoryCardProps = {
   peopleOptions: DirectoryEntry[];
   formatBytes: (bytes: number) => string;
   resolveApiUrl: (path: string) => string;
+  onResearch: (memoryId: number) => Promise<void>;
   onReanalyze: (memoryId: number) => Promise<void>;
   onDelete: (memoryId: number) => Promise<void>;
   onAssignRecorder: (memoryId: number, personId: number) => Promise<void>;
@@ -26,6 +27,7 @@ export function MemoryCard({
   peopleOptions,
   formatBytes,
   resolveApiUrl,
+  onResearch,
   onReanalyze,
   onDelete,
   onAssignRecorder,
@@ -129,7 +131,40 @@ export function MemoryCard({
         <audio controls preload="metadata" src={resolveApiUrl(memory.audio_url)} style={{ width: "100%" }} />
       )}
       {isExpanded && <p>{memory.transcript}</p>}
+      {isExpanded && memory.research_summary && (
+        <section className="researchPanel">
+          <p className="researchLabel">Research Notes</p>
+          <pre className="researchSummary">{memory.research_summary}</pre>
+          {memory.research_queries.length > 0 && (
+            <div className="researchQueries">
+              <p className="researchSubhead">Search queries used</p>
+              <div className="researchQueryList">
+                {memory.research_queries.map((query) => (
+                  <span key={query} className="researchQueryChip">{query}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {memory.research_sources.length > 0 && (
+            <div className="researchSources">
+              <p className="researchSubhead">Sources</p>
+              <ul className="researchSourceList">
+                {memory.research_sources.map((source) => (
+                  <li key={source.url}>
+                    <a href={source.url} target="_blank" rel="noreferrer">
+                      {source.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
       {isExpanded && <div className="memoryActions">
+        <button className="secondary" type="button" onClick={() => onResearch(memory.id)} disabled={isBusy}>
+          {memory.research_summary ? "Refresh Research" : "Research"}
+        </button>
         <button className="secondary" type="button" onClick={() => onReanalyze(memory.id)} disabled={isBusy}>
           Reanalyze
         </button>

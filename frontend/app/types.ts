@@ -1,3 +1,8 @@
+export type ResearchSource = {
+  title: string;
+  url: string;
+};
+
 export type MemoryEntry = {
   id: number;
   transcript: string;
@@ -12,6 +17,9 @@ export type MemoryEntry = {
   referenced_locations: string[];
   emotional_tone: string;
   follow_up_question: string;
+  research_summary: string | null;
+  research_queries: string[];
+  research_sources: ResearchSource[];
   audio_size_bytes: number | null;
   audio_url: string | null;
   date_recorded: string | null;

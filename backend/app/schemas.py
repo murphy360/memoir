@@ -5,6 +5,11 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class ResearchSourceResponse(BaseModel):
+    title: str
+    url: str
+
+
 class MemoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,6 +26,9 @@ class MemoryResponse(BaseModel):
     referenced_locations: list[str] = Field(default_factory=list)
     emotional_tone: str
     follow_up_question: str
+    research_summary: Optional[str]
+    research_queries: list[str] = Field(default_factory=list)
+    research_sources: list[ResearchSourceResponse] = Field(default_factory=list)
     audio_size_bytes: Optional[int]
     audio_url: Optional[str]
     date_recorded: Optional[date]

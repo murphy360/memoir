@@ -1,6 +1,6 @@
 import json
 from datetime import date, datetime
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -90,6 +90,9 @@ class MemoryEntry(Base):
     locations_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     emotional_tone: Mapped[str] = mapped_column(String(50), default="neutral")
     follow_up_question: Mapped[str] = mapped_column(Text)
+    research_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    research_sources_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    research_queries_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     audio_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     audio_content_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     audio_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -118,6 +121,14 @@ class MemoryEntry(Base):
             return [link.place.name for link in self.place_links if link.place and link.place.name]
         return _deserialize_list(self.locations_json)
 
+    @property
+    def research_sources(self) -> list[dict[str, str]]:
+        return _deserialize_object_list(self.research_sources_json)
+
+    @property
+    def research_queries(self) -> list[str]:
+        return _deserialize_list(self.research_queries_json)
+
 
 class Question(Base):
     __tablename__ = "questions"
@@ -140,3 +151,26 @@ def _deserialize_list(raw: Optional[str]) -> list[str]:
     except json.JSONDecodeError:
         return []
     return []
+
+
+def _deserialize_object_list(raw: Optional[str]) -> list[dict[str, Any]]:
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+        if not isinstance(value, list):
+            return []
+    except json.JSONDecodeError:
+        return []
+
+    result: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        normalized: dict[str, Any] = {}
+        for key, candidate in item.items():
+            if isinstance(key, str) and isinstance(candidate, str):
+                normalized[key] = candidate
+        if normalized:
+            result.append(normalized)
+    return result

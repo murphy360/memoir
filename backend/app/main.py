@@ -27,6 +27,7 @@ from app.schemas import (
 from app.services.audio_storage import save_audio_file
 from app.services.gemini_client import (
     extract_metadata_with_gemini_function_call,
+    research_memory_details,
     transcribe_audio,
 )
 from app.services.memory_analysis import (
@@ -812,6 +813,9 @@ def reanalyze_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEnt
     memory.estimated_date_text = estimated_date_text
     memory.emotional_tone = emotional_tone
     memory.follow_up_question = follow_up_question
+    memory.research_summary = None
+    memory.research_sources_json = None
+    memory.research_queries_json = None
     memory.date_precision = metadata.date_precision
     memory.date_year = metadata.date_year
     memory.date_month = metadata.date_month
@@ -833,6 +837,30 @@ def reanalyze_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEnt
             generate_questions_from_memory(transcript, event_description, metadata),
             memory.id,
         )
+
+    db.commit()
+    db.refresh(memory)
+    return memory
+
+
+@app.post("/api/memories/{memory_id}/research", response_model=MemoryResponse)
+def research_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEntry:
+    memory = db.get(MemoryEntry, memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail="Memory not found")
+
+    research = research_memory_details(
+        transcript=memory.transcript,
+        event_description=memory.event_description,
+        estimated_date_text=memory.estimated_date_text,
+        referenced_locations=memory.referenced_locations,
+        referenced_people=memory.referenced_people,
+    )
+    memory.research_summary = research.summary
+    memory.research_queries_json = json.dumps(research.queries)
+    memory.research_sources_json = json.dumps(
+        [{"title": source.title, "url": source.url} for source in research.sources]
+    )
 
     db.commit()
     db.refresh(memory)

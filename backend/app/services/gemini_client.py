@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+from dataclasses import dataclass, field
 from typing import Optional
 
 import requests
@@ -10,6 +11,181 @@ from fastapi import HTTPException
 from app.services.memory_analysis import MemoryMetadata, build_sort_date, normalize_string_list
 
 logger = logging.getLogger("memoir.api")
+
+
+@dataclass
+class ResearchSource:
+    title: str
+    url: str
+
+
+@dataclass
+class ResearchResult:
+    summary: str
+    queries: list[str] = field(default_factory=list)
+    sources: list[ResearchSource] = field(default_factory=list)
+
+
+def research_memory_details(
+    transcript: str,
+    event_description: str,
+    estimated_date_text: Optional[str],
+    referenced_locations: list[str],
+    referenced_people: list[str],
+) -> ResearchResult:
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    gemini_model = os.getenv("GEMINI_RESEARCH_MODEL") or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+    location_text = ", ".join(referenced_locations) if referenced_locations else "Unknown"
+    people_text = ", ".join(referenced_people) if referenced_people else "Unknown"
+
+    if gemini_key:
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "text": (
+                                "Research this personal memory using live web results. "
+                                "Use Google Search grounding to verify likely historical context and local leads. "
+                                "Produce a concise plain-text note with exactly these sections: 'What likely fits', 'Historical context', and 'Unknowns to verify'. "
+                                "Only make claims that can be supported by grounded search results. "
+                                "If evidence is weak, say that explicitly. Avoid invented details and avoid mentioning source ids or raw URLs in the prose.\n\n"
+                                f"Event description: {event_description}\n"
+                                f"Estimated date: {estimated_date_text or 'Unknown'}\n"
+                                f"Referenced locations: {location_text}\n"
+                                f"Referenced people: {people_text}\n"
+                                f"Transcript: {transcript}"
+                            )
+                        }
+                    ]
+                }
+            ],
+            "tools": [
+                {
+                    "googleSearch": {
+                        "searchTypes": {
+                            "webSearch": {}
+                        }
+                    }
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 700,
+                "responseMimeType": "text/plain"
+            }
+        }
+
+        try:
+            response = requests.post(endpoint, params={"key": gemini_key}, json=payload, timeout=30)
+            if response.ok:
+                data = response.json()
+                candidate = data.get("candidates", [{}])[0]
+                text_parts = candidate.get("content", {}).get("parts", [])
+                text = "\n".join(part.get("text", "").strip() for part in text_parts if part.get("text")).strip()
+                if text:
+                    grounding = candidate.get("groundingMetadata", {})
+                    queries = _extract_grounding_queries(grounding)
+                    sources = _extract_grounding_sources(grounding)
+                    return ResearchResult(summary=text[:4000], queries=queries, sources=sources)
+            else:
+                logger.warning("Gemini research request failed: %s", response.text[:300])
+        except Exception as exc:
+            logger.warning("Gemini research request exception: %s", exc)
+
+    lead = event_description.strip() or "This memory"
+    bullets: list[str] = [
+        "What likely fits",
+        f"- {lead} is anchored to {estimated_date_text or 'an unknown date'}.",
+    ]
+    if referenced_locations:
+        bullets.append(
+            f"- Place clues to investigate: {', '.join(referenced_locations)}. Look for local newspapers, scouting councils, school yearbooks, and town historical societies."
+        )
+    if "scout" in transcript.lower() or "pack" in transcript.lower() or "troop" in transcript.lower():
+        bullets.append(
+            "- If this involved Scouting, likely verification sources include local council histories, church or school charter partners, pack or troop newsletters, and Eagle Scout court-of-honor programs from that era."
+        )
+    bullets.extend(
+        [
+            "",
+            "Historical context",
+            "- Memories tied to a decade often benefit from narrowing by school grade, address, church, employer, or recurring annual events.",
+            "- Local youth groups in the 1990s were commonly organized through schools, churches, volunteer fire halls, or civic clubs.",
+            "",
+            "Unknowns to verify",
+            "- Exact year, the formal organization name, and any specific troop or pack number still need confirmation.",
+            "- A follow-up detail that would help most is who led the group or where meetings were held.",
+        ]
+    )
+    fallback_sources: list[ResearchSource] = []
+    if referenced_locations:
+        fallback_sources.append(
+            ResearchSource(
+                title="Local history leads",
+                url="https://www.google.com/search?q=" + requests.utils.quote(f"{' '.join(referenced_locations)} local history"),
+            )
+        )
+    if "scout" in transcript.lower() or "pack" in transcript.lower() or "troop" in transcript.lower():
+        fallback_sources.append(
+            ResearchSource(
+                title="Scouting history leads",
+                url="https://www.google.com/search?q=" + requests.utils.quote("cub scouts pack troop history local council"),
+            )
+        )
+    return ResearchResult(summary="\n".join(bullets)[:4000], sources=fallback_sources)
+
+
+def _extract_grounding_queries(grounding: object) -> list[str]:
+    if not isinstance(grounding, dict):
+        return []
+    queries = grounding.get("webSearchQueries")
+    if not isinstance(queries, list):
+        return []
+    result: list[str] = []
+    seen: set[str] = set()
+    for query in queries:
+        if not isinstance(query, str):
+            continue
+        normalized = query.strip()
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(normalized)
+    return result[:8]
+
+
+def _extract_grounding_sources(grounding: object) -> list[ResearchSource]:
+    if not isinstance(grounding, dict):
+        return []
+    chunks = grounding.get("groundingChunks")
+    if not isinstance(chunks, list):
+        return []
+
+    sources: list[ResearchSource] = []
+    seen: set[str] = set()
+    for chunk in chunks:
+        if not isinstance(chunk, dict):
+            continue
+        web = chunk.get("web")
+        if not isinstance(web, dict):
+            continue
+        url = str(web.get("uri") or "").strip()
+        title = str(web.get("title") or url).strip()
+        if not url:
+            continue
+        key = url.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        sources.append(ResearchSource(title=title[:200], url=url[:1000]))
+    return sources[:8]
 
 
 def transcribe_audio(filename: str, audio_bytes: bytes) -> str:

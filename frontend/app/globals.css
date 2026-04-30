@@ -335,6 +335,65 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.researchPanel {
+  margin-top: 0.75rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #c9e7e2;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f4fffd 0%, #edf8f6 100%);
+}
+
+.researchLabel {
+  margin: 0 0 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.researchSummary {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  color: #274946;
+}
+
+.researchSubhead {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #305c58;
+}
+
+.researchQueryList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.researchQueryChip {
+  display: inline-flex;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #e7f4f1;
+  color: #24524f;
+  font-size: 0.76rem;
+}
+
+.researchSourceList {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.researchSourceList li {
+  margin: 0.2rem 0;
+}
+
+.researchSourceList a {
+  color: var(--accent);
+}
+
 @media (max-width: 640px) {
   .memoryHeader {
     flex-direction: column;

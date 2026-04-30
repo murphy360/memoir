@@ -40,6 +40,12 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE memories ADD COLUMN response_to_question_id INTEGER"))
         if "response_to_question_text" not in columns:
             connection.execute(text("ALTER TABLE memories ADD COLUMN response_to_question_text TEXT"))
+        if "research_summary" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN research_summary TEXT"))
+        if "research_sources_json" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN research_sources_json TEXT"))
+        if "research_queries_json" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN research_queries_json TEXT"))
         if "people_json" not in columns:
             connection.execute(text("ALTER TABLE memories ADD COLUMN people_json TEXT"))
         if "locations_json" not in columns:

@@ -58,6 +58,7 @@ Memoir follows a Client-Server-AI architecture:
 - Extract a best-effort event date from transcript text.
 - Show timeline entries sorted by extracted event date.
 - Generate a single follow-up question after each new memory.
+- Let a user trigger a research pass that adds fact-checking context and likely historical leads for a memory.
 
 ## Privacy and Data Ownership
 
@@ -96,6 +97,7 @@ Current backend behavior:
 - Converts uploaded recordings to MP3 and persists them under backend storage (`/data/audio` in Docker).
 - Runs transcription and analysis during memory processing via Gemini.
 - Uses Gemini function-calling to set structured memory metadata (best-effort date precision, recorder name, referenced people, and referenced locations).
+- Lets the user trigger Gemini-backed research notes for a saved memory to surface likely context and open questions to verify.
 - Stores memories in SQLite and returns timeline entries from `GET /api/memories`.
 - Returns a playable audio endpoint per memory at `GET /api/memories/{id}/audio`.
 
@@ -124,6 +126,7 @@ docker compose down
 - `GET /api/health`: Health status.
 - `GET /api/memories`: Returns processed memories in timeline order.
 - `POST /api/memories`: Accepts multipart form-data with `audio` file and returns processed memory metadata including date labels and relationship/location tags when available.
+- `POST /api/memories/{id}/research`: Generates or refreshes a stored research note for a memory using its transcript and extracted metadata.
 - `POST /api/memories/{id}/reanalyze`: Re-runs transcription and metadata extraction on stored audio for an existing memory.
 - `DELETE /api/memories/{id}`: Deletes a memory entry and its stored audio file.
 - `GET /api/memories/{id}/audio`: Streams the stored MP3 recording for playback.

@@ -140,6 +140,25 @@ export default function HomePage() {
     }
   }
 
+  async function researchMemory(memoryId: number) {
+    setMemoryActionId(memoryId);
+    setStatus("Researching memory...");
+    try {
+      const response = await fetch(`${API_BASE}/api/memories/${memoryId}/research`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        throw new Error("Research failed");
+      }
+      await loadTimeline();
+      setStatus("Memory research updated.");
+    } catch {
+      setStatus("Failed to research memory.");
+    } finally {
+      setMemoryActionId(null);
+    }
+  }
+
   async function deleteMemory(memoryId: number) {
     if (!window.confirm("Delete this memory permanently?")) {
       return;
@@ -714,6 +733,7 @@ export default function HomePage() {
             peopleOptions={peopleDirectory}
             formatBytes={formatBytes}
             resolveApiUrl={resolveApiUrl}
+            onResearch={researchMemory}
             onReanalyze={reanalyzeMemory}
             onDelete={deleteMemory}
             onAssignRecorder={assignRecorder}
