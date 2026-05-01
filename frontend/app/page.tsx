@@ -83,6 +83,7 @@ export default function HomePage() {
   const documentFileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const shouldDiscardRecordingRef = useRef(false);
   const currentPreviewAudioUrlRef = useRef<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const levelAnimationRef = useRef<number | null>(null);
@@ -513,6 +514,7 @@ export default function HomePage() {
 
   async function startRecording() {
     try {
+      shouldDiscardRecordingRef.current = false;
       const audioConstraint = selectedDeviceId
         ? { deviceId: { exact: selectedDeviceId } }
         : true;
@@ -533,6 +535,19 @@ export default function HomePage() {
       };
 
       recorder.onstop = async () => {
+        const shouldDiscard = shouldDiscardRecordingRef.current;
+        shouldDiscardRecordingRef.current = false;
+
+        if (shouldDiscard) {
+          chunksRef.current = [];
+          setStatus(
+            activeQuestion
+              ? "Recording canceled. Your question is still waiting for an answer."
+              : "Recording canceled.",
+          );
+          return;
+        }
+
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         const nextAudioUrl = URL.createObjectURL(blob);
         const nextPendingId = `${Date.now()}`;
@@ -563,6 +578,7 @@ export default function HomePage() {
   }
 
   function stopRecording() {
+    shouldDiscardRecordingRef.current = false;
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== "inactive") {
       recorder.stop();
@@ -572,6 +588,19 @@ export default function HomePage() {
     stopAudioLevelMonitoring();
     setIsRecording(false);
     setStatus("Finalizing audio clip...");
+  }
+
+  function cancelRecording() {
+    shouldDiscardRecordingRef.current = true;
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    stopAudioLevelMonitoring();
+    setIsRecording(false);
+    setStatus("Canceling recording...");
   }
 
   async function uploadRecording(blob: Blob, pendingId: string) {
@@ -746,6 +775,14 @@ export default function HomePage() {
             type="button"
           >
             Stop & Process
+          </button>
+          <button
+            className="ghost"
+            onClick={cancelRecording}
+            disabled={!isRecording || isLoading}
+            type="button"
+          >
+            Cancel Recording
           </button>
         </div>
         <p className="status">{status}</p>
