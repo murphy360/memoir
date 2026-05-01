@@ -40,6 +40,7 @@ from app.schemas import (
     SettingsResponse,
     SplitPersonRequest,
     UpdateDirectoryEntryRequest,
+    UpdateMemoryRequest,
     UpdateMemoryRecorderRequest,
     UpdateSettingRequest,
 )
@@ -1405,6 +1406,23 @@ def dismiss_research_suggestion(memory_id: int, db: Session = Depends(get_db)) -
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
     memory.research_suggested_metadata_json = None
+    db.commit()
+    db.refresh(memory)
+    return memory
+
+
+@app.patch("/api/memories/{memory_id}", response_model=MemoryResponse)
+def update_memory(memory_id: int, body: UpdateMemoryRequest, db: Session = Depends(get_db)) -> MemoryEntry:
+    memory = db.get(MemoryEntry, memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail="Memory not found")
+
+    if "event_description" in body.model_fields_set:
+        next_value = (body.event_description or "").strip()
+        if not next_value:
+            raise HTTPException(status_code=400, detail="Memory title cannot be empty")
+        memory.event_description = next_value[:240]
+
     db.commit()
     db.refresh(memory)
     return memory

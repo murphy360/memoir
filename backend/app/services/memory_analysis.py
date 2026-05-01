@@ -123,6 +123,15 @@ def summarize_event(transcript: str) -> str:
     return sentence[:180]
 
 
+def build_default_narration_title(recorder_name: Optional[str]) -> str:
+    name = (recorder_name or "").strip()
+    if not name:
+        return "Narration of this memory"
+    if name.endswith(("s", "S")):
+        return f"{name}' Narration of this memory"
+    return f"{name}'s Narration of this memory"
+
+
 def generate_follow_up_question(transcript: str, event_description: str, metadata: MemoryMetadata) -> str:
     if not metadata.recorder_name:
         return "What name would you like attached to this memory card as the recorder?"

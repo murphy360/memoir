@@ -37,6 +37,7 @@ import {
   saveMainCharacterName as saveMainCharacterNameRequest,
   splitPersonEntry as splitPersonEntryRequest,
   addPersonAlias as addPersonAliasRequest,
+  updateMemoryTitle as updateMemoryTitleById,
   updateAssetNotes as updateAssetNotesById,
   updateAssetTitle as updateAssetTitleById,
   uploadAsset,
@@ -115,6 +116,19 @@ function renderImageMetadataBadges(asset: AssetEntry): JSX.Element | null {
   );
 }
 
+function collectEventMemoryIds(event: LifeEvent, assets: AssetEntry[]): number[] {
+  const ids = new Set<number>();
+  if (event.legacy_memory_id !== null) {
+    ids.add(event.legacy_memory_id);
+  }
+  for (const asset of assets) {
+    if (asset.legacy_memory_id !== null) {
+      ids.add(asset.legacy_memory_id);
+    }
+  }
+  return Array.from(ids);
+}
+
 export default function HomePage() {
   const [isDirectoryDrawerOpen, setIsDirectoryDrawerOpen] = useState(false);
   const [isCaptureDrawerOpen, setIsCaptureDrawerOpen] = useState(false);
@@ -169,7 +183,10 @@ export default function HomePage() {
   const [editingPeriodTitleValue, setEditingPeriodTitleValue] = useState("");
   const [editingEventTitleId, setEditingEventTitleId] = useState<number | null>(null);
   const [editingEventTitleValue, setEditingEventTitleValue] = useState("");
-  const [collapsedMemoryEventIds, setCollapsedMemoryEventIds] = useState<Set<number>>(new Set());
+  const [editingMemoryTitleId, setEditingMemoryTitleId] = useState<number | null>(null);
+  const [editingMemoryTitleValue, setEditingMemoryTitleValue] = useState("");
+  const [memoryTitleSavingId, setMemoryTitleSavingId] = useState<number | null>(null);
+  const [expandedMemoryRowIds, setExpandedMemoryRowIds] = useState<Set<number>>(new Set());
   const [expandedAssetRowIds, setExpandedAssetRowIds] = useState<Set<number>>(new Set());
   const [eventCapturePanelOpenIds, setEventCapturePanelOpenIds] = useState<Set<number>>(new Set());
   const [eventDocumentUploadingId, setEventDocumentUploadingId] = useState<number | null>(null);
@@ -714,6 +731,31 @@ export default function HomePage() {
       setStatus("Failed to update asset notes.");
     } finally {
       setAssetNotesSavingId(null);
+    }
+  }
+
+  async function saveMemoryTitle(memoryId: number, eventId?: number) {
+    const nextTitle = editingMemoryTitleValue.trim();
+    if (!nextTitle) {
+      setStatus("Memory title cannot be empty.");
+      return;
+    }
+    setMemoryTitleSavingId(memoryId);
+    setStatus("Saving memory title...");
+    try {
+      await updateMemoryTitleById(memoryId, nextTitle);
+      setEditingMemoryTitleId(null);
+      setEditingMemoryTitleValue("");
+      const data = await loadTimeline();
+      focusMemoryInTimeline(memoryId, data);
+      if (eventId !== undefined) {
+        await loadAssetsForEvent(eventId);
+      }
+      setStatus("Memory title updated.");
+    } catch {
+      setStatus("Failed to update memory title.");
+    } finally {
+      setMemoryTitleSavingId(null);
     }
   }
 
@@ -1899,51 +1941,108 @@ export default function HomePage() {
                                         </button>
                                       </div>
                                     )}
-                                    {event.legacy_memory_id && (() => {
-                                      const linkedMemory = timeline.find((memory) => memory.id === event.legacy_memory_id);
-                                      if (!linkedMemory) {
+                                    {(() => {
+                                      const memoryIds = collectEventMemoryIds(
+                                        event,
+                                        activeEventId === event.id ? activeEventAssets : [],
+                                      );
+                                      const linkedMemories = memoryIds
+                                        .map((memoryId) => timeline.find((memory) => memory.id === memoryId))
+                                        .filter((memory): memory is MemoryEntry => memory !== undefined);
+                                      if (linkedMemories.length === 0) {
                                         return null;
                                       }
                                       return (
-                                        <>
-                                          <div className="entitySectionLabel" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                            <div>
-                                              <span className="entityPill entityPillMemory">Memory</span>
-                                              Narrative, transcript, and extracted context
-                                            </div>
-                                            <button
-                                              className="secondary"
-                                              type="button"
-                                              style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
-                                              onClick={() => setCollapsedMemoryEventIds((prev) => {
-                                                const next = new Set(prev);
-                                                if (next.has(event.id)) next.delete(event.id); else next.add(event.id);
-                                                return next;
-                                              })}
-                                            >
-                                              {collapsedMemoryEventIds.has(event.id) ? "Show Memory" : "Hide"}
-                                            </button>
+                                        <div className="lifeAssetList">
+                                          <div className="entitySectionLabel">
+                                            <span className="entityPill entityPillMemory">Memory</span>
+                                            Narrative, transcript, and extracted context
                                           </div>
-                                          {!collapsedMemoryEventIds.has(event.id) && <MemoryCard
-                                          key={`event-memory-${linkedMemory.id}`}
-                                          containerId={`memory-card-${linkedMemory.id}`}
-                                          isHighlighted={highlightedElementId === `memory-card-${linkedMemory.id}`}
-                                          memory={linkedMemory}
-                                          linkedQuestions={questions.filter((q) => q.source_memory_id === linkedMemory.id)}
-                                          peopleOptions={peopleDirectory}
-                                          formatBytes={formatBytes}
-                                          resolveApiUrl={resolveApiUrl}
-                                          onResearch={researchMemory}
-                                          onAcceptSuggestion={acceptResearchSuggestion}
-                                          onDismissSuggestion={dismissResearchSuggestion}
-                                          onReanalyze={reanalyzeMemory}
-                                          onDelete={deleteMemory}
-                                          onAssignRecorder={assignRecorder}
-                                          isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
-                                          hideHeader
-                                        />
-                                          }
-                                      </>
+                                          {linkedMemories.map((linkedMemory) => (
+                                            <div
+                                              key={`event-memory-${event.id}-${linkedMemory.id}`}
+                                              id={`memory-row-${linkedMemory.id}`}
+                                              className={`lifeAssetRow${highlightedElementId === `memory-card-${linkedMemory.id}` ? " focusPulse" : ""}`}
+                                            >
+                                              <div className="assetRowHeader">
+                                                <span style={{ flex: 1, minWidth: 0 }}>
+                                                  <strong>{linkedMemory.event_description || `Memory ${linkedMemory.id}`}</strong>
+                                                  <span className="meta">
+                                                    {linkedMemory.estimated_date_text ? ` · ${linkedMemory.estimated_date_text}` : ""}
+                                                  </span>
+                                                </span>
+                                                <div className="controls" style={{ gap: "0.4rem", justifyContent: "flex-end" }}>
+                                                  {editingMemoryTitleId === linkedMemory.id ? (
+                                                    <>
+                                                      <input
+                                                        className="directoryInput"
+                                                        type="text"
+                                                        value={editingMemoryTitleValue}
+                                                        autoFocus
+                                                        onChange={(e) => setEditingMemoryTitleValue(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                          if (e.key === "Enter") {
+                                                            void saveMemoryTitle(linkedMemory.id, event.id);
+                                                          }
+                                                          if (e.key === "Escape") {
+                                                            setEditingMemoryTitleId(null);
+                                                            setEditingMemoryTitleValue("");
+                                                          }
+                                                        }}
+                                                        style={{ minWidth: "14rem", maxWidth: "18rem" }}
+                                                      />
+                                                      <button className="primary" type="button" onClick={() => void saveMemoryTitle(linkedMemory.id, event.id)} disabled={memoryTitleSavingId === linkedMemory.id}>Save</button>
+                                                      <button className="secondary" type="button" onClick={() => { setEditingMemoryTitleId(null); setEditingMemoryTitleValue(""); }}>Cancel</button>
+                                                    </>
+                                                  ) : (
+                                                    <button
+                                                      className="secondary"
+                                                      type="button"
+                                                      style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
+                                                      onClick={() => {
+                                                        setEditingMemoryTitleId(linkedMemory.id);
+                                                        setEditingMemoryTitleValue(linkedMemory.event_description || "");
+                                                      }}
+                                                    >
+                                                      Edit Title
+                                                    </button>
+                                                  )}
+                                                  <button
+                                                    className="secondary"
+                                                    type="button"
+                                                    style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
+                                                    onClick={() => setExpandedMemoryRowIds((prev) => {
+                                                      const next = new Set(prev);
+                                                      if (next.has(linkedMemory.id)) next.delete(linkedMemory.id); else next.add(linkedMemory.id);
+                                                      return next;
+                                                    })}
+                                                  >
+                                                    {expandedMemoryRowIds.has(linkedMemory.id) ? "Collapse" : "Expand"}
+                                                  </button>
+                                                </div>
+                                              </div>
+                                              {expandedMemoryRowIds.has(linkedMemory.id) && (
+                                                <MemoryCard
+                                                  containerId={`memory-card-${linkedMemory.id}`}
+                                                  isHighlighted={highlightedElementId === `memory-card-${linkedMemory.id}`}
+                                                  memory={linkedMemory}
+                                                  linkedQuestions={questions.filter((q) => q.source_memory_id === linkedMemory.id)}
+                                                  peopleOptions={peopleDirectory}
+                                                  formatBytes={formatBytes}
+                                                  resolveApiUrl={resolveApiUrl}
+                                                  onResearch={researchMemory}
+                                                  onAcceptSuggestion={acceptResearchSuggestion}
+                                                  onDismissSuggestion={dismissResearchSuggestion}
+                                                  onReanalyze={reanalyzeMemory}
+                                                  onDelete={deleteMemory}
+                                                  onAssignRecorder={assignRecorder}
+                                                  isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
+                                                  hideHeader
+                                                />
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
                                       );
                                     })()}
                                     {(questionsByEventId.get(event.id)?.length ?? 0) > 0 && (
@@ -2137,7 +2236,7 @@ export default function HomePage() {
                                                 </div>
                                               ) : (
                                                 <div className="assetNotesRow" style={{ marginTop: 0 }}>
-                                                  <p><strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                                                  <span className="meta">Title</span>
                                                   <button
                                                     className="secondary"
                                                     type="button"
@@ -2358,51 +2457,108 @@ export default function HomePage() {
                               </button>
                             </div>
                           )}
-                          {event.legacy_memory_id && (() => {
-                            const linkedMemory = timeline.find((memory) => memory.id === event.legacy_memory_id);
-                            if (!linkedMemory) {
+                          {(() => {
+                            const memoryIds = collectEventMemoryIds(
+                              event,
+                              activeEventId === event.id ? activeEventAssets : [],
+                            );
+                            const linkedMemories = memoryIds
+                              .map((memoryId) => timeline.find((memory) => memory.id === memoryId))
+                              .filter((memory): memory is MemoryEntry => memory !== undefined);
+                            if (linkedMemories.length === 0) {
                               return null;
                             }
                             return (
-                              <>
-                                <div className="entitySectionLabel" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                  <div>
-                                    <span className="entityPill entityPillMemory">Memory</span>
-                                    Narrative, transcript, and extracted context
-                                  </div>
-                                  <button
-                                    className="secondary"
-                                    type="button"
-                                    style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
-                                    onClick={() => setCollapsedMemoryEventIds((prev) => {
-                                      const next = new Set(prev);
-                                      if (next.has(event.id)) next.delete(event.id); else next.add(event.id);
-                                      return next;
-                                    })}
-                                  >
-                                    {collapsedMemoryEventIds.has(event.id) ? "Show Memory" : "Hide"}
-                                  </button>
+                              <div className="lifeAssetList">
+                                <div className="entitySectionLabel">
+                                  <span className="entityPill entityPillMemory">Memory</span>
+                                  Narrative, transcript, and extracted context
                                 </div>
-                                {!collapsedMemoryEventIds.has(event.id) && <MemoryCard
-                                  key={`event-memory-${linkedMemory.id}`}
-                                  containerId={`memory-card-${linkedMemory.id}`}
-                                  isHighlighted={highlightedElementId === `memory-card-${linkedMemory.id}`}
-                                  memory={linkedMemory}
-                                  linkedQuestions={questions.filter((q) => q.source_memory_id === linkedMemory.id)}
-                                  peopleOptions={peopleDirectory}
-                                  formatBytes={formatBytes}
-                                  resolveApiUrl={resolveApiUrl}
-                                  onResearch={researchMemory}
-                                  onAcceptSuggestion={acceptResearchSuggestion}
-                                  onDismissSuggestion={dismissResearchSuggestion}
-                                  onReanalyze={reanalyzeMemory}
-                                  onDelete={deleteMemory}
-                                  onAssignRecorder={assignRecorder}
-                                  isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
-                                  hideHeader
-                                />
-                                }
-                              </>
+                                {linkedMemories.map((linkedMemory) => (
+                                  <div
+                                    key={`event-memory-${event.id}-${linkedMemory.id}`}
+                                    id={`memory-row-${linkedMemory.id}`}
+                                    className={`lifeAssetRow${highlightedElementId === `memory-card-${linkedMemory.id}` ? " focusPulse" : ""}`}
+                                  >
+                                    <div className="assetRowHeader">
+                                      <span style={{ flex: 1, minWidth: 0 }}>
+                                        <strong>{linkedMemory.event_description || `Memory ${linkedMemory.id}`}</strong>
+                                        <span className="meta">
+                                          {linkedMemory.estimated_date_text ? ` · ${linkedMemory.estimated_date_text}` : ""}
+                                        </span>
+                                      </span>
+                                      <div className="controls" style={{ gap: "0.4rem", justifyContent: "flex-end" }}>
+                                        {editingMemoryTitleId === linkedMemory.id ? (
+                                          <>
+                                            <input
+                                              className="directoryInput"
+                                              type="text"
+                                              value={editingMemoryTitleValue}
+                                              autoFocus
+                                              onChange={(e) => setEditingMemoryTitleValue(e.target.value)}
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                  void saveMemoryTitle(linkedMemory.id, event.id);
+                                                }
+                                                if (e.key === "Escape") {
+                                                  setEditingMemoryTitleId(null);
+                                                  setEditingMemoryTitleValue("");
+                                                }
+                                              }}
+                                              style={{ minWidth: "14rem", maxWidth: "18rem" }}
+                                            />
+                                            <button className="primary" type="button" onClick={() => void saveMemoryTitle(linkedMemory.id, event.id)} disabled={memoryTitleSavingId === linkedMemory.id}>Save</button>
+                                            <button className="secondary" type="button" onClick={() => { setEditingMemoryTitleId(null); setEditingMemoryTitleValue(""); }}>Cancel</button>
+                                          </>
+                                        ) : (
+                                          <button
+                                            className="secondary"
+                                            type="button"
+                                            style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
+                                            onClick={() => {
+                                              setEditingMemoryTitleId(linkedMemory.id);
+                                              setEditingMemoryTitleValue(linkedMemory.event_description || "");
+                                            }}
+                                          >
+                                            Edit Title
+                                          </button>
+                                        )}
+                                        <button
+                                          className="secondary"
+                                          type="button"
+                                          style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
+                                          onClick={() => setExpandedMemoryRowIds((prev) => {
+                                            const next = new Set(prev);
+                                            if (next.has(linkedMemory.id)) next.delete(linkedMemory.id); else next.add(linkedMemory.id);
+                                            return next;
+                                          })}
+                                        >
+                                          {expandedMemoryRowIds.has(linkedMemory.id) ? "Collapse" : "Expand"}
+                                        </button>
+                                      </div>
+                                    </div>
+                                    {expandedMemoryRowIds.has(linkedMemory.id) && (
+                                      <MemoryCard
+                                        containerId={`memory-card-${linkedMemory.id}`}
+                                        isHighlighted={highlightedElementId === `memory-card-${linkedMemory.id}`}
+                                        memory={linkedMemory}
+                                        linkedQuestions={questions.filter((q) => q.source_memory_id === linkedMemory.id)}
+                                        peopleOptions={peopleDirectory}
+                                        formatBytes={formatBytes}
+                                        resolveApiUrl={resolveApiUrl}
+                                        onResearch={researchMemory}
+                                        onAcceptSuggestion={acceptResearchSuggestion}
+                                        onDismissSuggestion={dismissResearchSuggestion}
+                                        onReanalyze={reanalyzeMemory}
+                                        onDelete={deleteMemory}
+                                        onAssignRecorder={assignRecorder}
+                                        isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
+                                        hideHeader
+                                      />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             );
                           })()}
                           {(questionsByEventId.get(event.id)?.length ?? 0) > 0 && (
@@ -2596,7 +2752,7 @@ export default function HomePage() {
                                       </div>
                                     ) : (
                                       <div className="assetNotesRow" style={{ marginTop: 0 }}>
-                                        <p><strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                                        <span className="meta">Title</span>
                                         <button
                                           className="secondary"
                                           type="button"
@@ -2763,7 +2919,7 @@ export default function HomePage() {
                             </div>
                           ) : (
                             <div className="assetNotesRow" style={{ marginTop: 0 }}>
-                              <p><strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                              <span className="meta">Title</span>
                               <button
                                 className="secondary"
                                 type="button"

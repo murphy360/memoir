@@ -153,6 +153,7 @@ class AssetResponse(BaseModel):
     period_id: Optional[int]
     kind: str
     title: Optional[str]
+    legacy_memory_id: Optional[int]
     original_filename: Optional[str]
     content_type: Optional[str]
     size_bytes: Optional[int]
@@ -224,6 +225,10 @@ class AddAliasRequest(BaseModel):
 class UpdateMemoryRecorderRequest(BaseModel):
     person_id: Optional[int] = None
     recorder_name: Optional[str] = None
+
+
+class UpdateMemoryRequest(BaseModel):
+    event_description: Optional[str] = None
 
 
 class AnswerQuestionRequest(BaseModel):

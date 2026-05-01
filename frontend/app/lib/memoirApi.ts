@@ -382,6 +382,15 @@ export async function answerQuestionWithMemory(questionId: number, answerMemoryI
   });
 }
 
+export async function updateMemoryTitle(memoryId: number, eventDescription: string): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/memories/${memoryId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event_description: eventDescription }),
+  });
+  await expectOk(response, "Failed to update memory title");
+}
+
 export async function createMemoryFromDocument(formData: FormData, eventId?: number): Promise<MemoryEntry> {
   if (eventId !== undefined) {
     formData.append("event_id", String(eventId));

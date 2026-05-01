@@ -113,6 +113,7 @@ export type AssetEntry = {
   period_id: number | null;
   kind: string;
   title: string | null;
+  legacy_memory_id: number | null;
   original_filename: string | null;
   content_type: string | null;
   size_bytes: number | null;

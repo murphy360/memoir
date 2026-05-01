@@ -6,11 +6,11 @@ from fastapi import HTTPException
 
 from app.services.gemini_client import extract_metadata_with_gemini_function_call, transcribe_audio
 from app.services.memory_analysis import (
+    build_default_narration_title,
     MemoryMetadata,
     detect_emotional_tone,
     fallback_metadata_from_transcript,
     generate_follow_up_question,
-    summarize_event,
 )
 
 logger = logging.getLogger("memoir.api")
@@ -31,7 +31,7 @@ def analyze_memory_audio(
             estimated_date_text = metadata.date_text
             estimated_date_sort = metadata.sort_date
             emotional_tone = detect_emotional_tone(transcript)
-            event_description = summarize_event(transcript)
+            event_description = build_default_narration_title(metadata.recorder_name)
             follow_up_question = generate_follow_up_question(transcript, event_description, metadata)
             return (
                 transcript,
@@ -46,7 +46,7 @@ def analyze_memory_audio(
             logger.warning("Transcription failed for %s: %s", filename, exc.detail)
             return (
                 "Transcription failed.",
-                "Recorded memory (audio only)",
+                build_default_narration_title(None),
                 None,
                 "unknown",
                 "unknown",
@@ -57,7 +57,7 @@ def analyze_memory_audio(
     now = datetime.utcnow()
     return (
         "Transcription disabled.",
-        "Recorded memory (audio only)",
+        build_default_narration_title(None),
         now.date(),
         "recorded now",
         "unknown",
