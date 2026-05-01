@@ -151,6 +151,86 @@ class MemoryEntry(Base):
             return None
 
 
+class LifePeriod(Base):
+    __tablename__ = "life_periods"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    slug: Mapped[Optional[str]] = mapped_column(String(180), nullable=True, unique=True, index=True)
+    start_date_text: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    end_date_text: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    start_sort: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    end_sort: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    events: Mapped[list["LifeEvent"]] = relationship(back_populates="period", cascade="all, delete-orphan")
+    assets: Mapped[list["Asset"]] = relationship(back_populates="period", cascade="all, delete-orphan")
+
+
+class LifeEvent(Base):
+    __tablename__ = "life_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    period_id: Mapped[Optional[int]] = mapped_column(ForeignKey("life_periods.id", ondelete="SET NULL"), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    event_date_text: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    event_date_sort: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
+    date_precision: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    date_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    date_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    date_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    date_decade: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    legacy_memory_id: Mapped[Optional[int]] = mapped_column(ForeignKey("memories.id", ondelete="SET NULL"), nullable=True, unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    period: Mapped[Optional["LifePeriod"]] = relationship(back_populates="events")
+    linked_assets: Mapped[list["EventAsset"]] = relationship(back_populates="event", cascade="all, delete-orphan")
+    legacy_memory: Mapped[Optional["MemoryEntry"]] = relationship(foreign_keys=[legacy_memory_id])
+
+
+class EventAsset(Base):
+    __tablename__ = "event_assets"
+    __table_args__ = (UniqueConstraint("event_id", "asset_id", name="uq_event_asset"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("life_events.id", ondelete="CASCADE"), nullable=False, index=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True)
+    relation_type: Mapped[str] = mapped_column(String(30), default="evidence")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    event: Mapped["LifeEvent"] = relationship(back_populates="linked_assets")
+    asset: Mapped["Asset"] = relationship(back_populates="event_links")
+
+
+class Asset(Base):
+    __tablename__ = "assets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    period_id: Mapped[Optional[int]] = mapped_column(ForeignKey("life_periods.id", ondelete="SET NULL"), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="document", index=True)
+    storage_filename: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    original_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    content_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    fingerprint_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    text_excerpt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    legacy_memory_id: Mapped[Optional[int]] = mapped_column(ForeignKey("memories.id", ondelete="SET NULL"), nullable=True, unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    period: Mapped[Optional["LifePeriod"]] = relationship(back_populates="assets")
+    event_links: Mapped[list["EventAsset"]] = relationship(back_populates="asset", cascade="all, delete-orphan")
+    legacy_memory: Mapped[Optional["MemoryEntry"]] = relationship(foreign_keys=[legacy_memory_id])
+
+    @property
+    def download_url(self) -> str:
+        return f"/api/assets/{self.id}/download"
+
+
 class Question(Base):
     __tablename__ = "questions"
 

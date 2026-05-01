@@ -120,6 +120,84 @@ def ensure_schema_migrations() -> None:
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_person_aliases_person_id ON person_aliases (person_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_person_aliases_alias ON person_aliases (alias)"))
 
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS life_periods (
+                id INTEGER PRIMARY KEY,
+                title VARCHAR(160) NOT NULL,
+                slug VARCHAR(180) UNIQUE,
+                start_date_text VARCHAR(100),
+                end_date_text VARCHAR(100),
+                start_sort DATE,
+                end_sort DATE,
+                summary TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_periods_title ON life_periods (title)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_periods_slug ON life_periods (slug)"))
+
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS life_events (
+                id INTEGER PRIMARY KEY,
+                period_id INTEGER,
+                title VARCHAR(180) NOT NULL,
+                description TEXT,
+                event_date_text VARCHAR(100),
+                event_date_sort DATE,
+                date_precision VARCHAR(20),
+                date_year INTEGER,
+                date_month INTEGER,
+                date_day INTEGER,
+                date_decade INTEGER,
+                legacy_memory_id INTEGER UNIQUE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (period_id) REFERENCES life_periods(id) ON DELETE SET NULL,
+                FOREIGN KEY (legacy_memory_id) REFERENCES memories(id) ON DELETE SET NULL
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_period_id ON life_events (period_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_title ON life_events (title)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_event_date_sort ON life_events (event_date_sort)"))
+
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS assets (
+                id INTEGER PRIMARY KEY,
+                period_id INTEGER,
+                kind VARCHAR(20) NOT NULL DEFAULT 'document',
+                storage_filename VARCHAR(255) NOT NULL UNIQUE,
+                original_filename VARCHAR(255),
+                content_type VARCHAR(100),
+                size_bytes INTEGER,
+                fingerprint_sha256 VARCHAR(64),
+                text_excerpt TEXT,
+                notes TEXT,
+                legacy_memory_id INTEGER UNIQUE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (period_id) REFERENCES life_periods(id) ON DELETE SET NULL,
+                FOREIGN KEY (legacy_memory_id) REFERENCES memories(id) ON DELETE SET NULL
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_assets_period_id ON assets (period_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_assets_kind ON assets (kind)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_assets_fingerprint_sha256 ON assets (fingerprint_sha256)"))
+
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS event_assets (
+                id INTEGER PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                asset_id INTEGER NOT NULL,
+                relation_type VARCHAR(30) DEFAULT 'evidence',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(event_id, asset_id),
+                FOREIGN KEY (event_id) REFERENCES life_events(id) ON DELETE CASCADE,
+                FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_event_assets_event_id ON event_assets (event_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_event_assets_asset_id ON event_assets (asset_id)"))
+
         # Ensure questions table has source_memory_id and answer_memory_id columns
         q_columns = {
             row[1]

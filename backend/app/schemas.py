@@ -49,6 +49,85 @@ class MemoryResponse(BaseModel):
     created_at: datetime
 
 
+class LifePeriodResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    slug: Optional[str]
+    start_date_text: Optional[str]
+    end_date_text: Optional[str]
+    summary: Optional[str]
+    event_count: int = 0
+    asset_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class CreateLifePeriodRequest(BaseModel):
+    title: str
+    start_date_text: Optional[str] = None
+    end_date_text: Optional[str] = None
+    summary: Optional[str] = None
+
+
+class LifeEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    period_id: Optional[int]
+    title: str
+    description: Optional[str]
+    event_date_text: Optional[str]
+    date_precision: Optional[str]
+    date_year: Optional[int]
+    date_month: Optional[int]
+    date_day: Optional[int]
+    date_decade: Optional[int]
+    legacy_audio_url: Optional[str]
+    legacy_audio_size_bytes: Optional[int]
+    linked_asset_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class CreateLifeEventRequest(BaseModel):
+    title: str
+    period_id: Optional[int] = None
+    description: Optional[str] = None
+    event_date_text: Optional[str] = None
+    date_precision: Optional[str] = None
+    date_year: Optional[int] = None
+    date_month: Optional[int] = None
+    date_day: Optional[int] = None
+    date_decade: Optional[int] = None
+
+
+class MergeLifeEventRequest(BaseModel):
+    into_event_id: int
+
+
+class AssetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    period_id: Optional[int]
+    kind: str
+    original_filename: Optional[str]
+    content_type: Optional[str]
+    size_bytes: Optional[int]
+    playback_url: Optional[str]
+    text_excerpt: Optional[str]
+    notes: Optional[str]
+    download_url: str
+    linked_event_ids: list[int] = Field(default_factory=list)
+    created_at: datetime
+
+
+class LinkAssetToEventRequest(BaseModel):
+    relation_type: Optional[str] = "evidence"
+
+
 class QuestionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

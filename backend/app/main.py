@@ -1,23 +1,32 @@
 import dataclasses
+import hashlib
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import Body, Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine, ensure_schema_migrations, get_db
-from app.models import Base, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place, Question, Setting
+from app.models import Asset, Base, EventAsset, LifeEvent, LifePeriod, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place, Question, Setting
 from app.schemas import (
+    AssetResponse,
     AddAliasRequest,
     AnswerQuestionRequest,
+    CreateLifeEventRequest,
+    CreateLifePeriodRequest,
     CreateDirectoryEntryRequest,
     DirectoryEntryResponse,
+    LifeEventResponse,
+    LifePeriodResponse,
+    MergeLifeEventRequest,
+    LinkAssetToEventRequest,
     MemoryResponse,
     MergePersonRequest,
     QuestionResponse,
@@ -79,6 +88,7 @@ def on_startup() -> None:
     db = SessionLocal()
     try:
         backfill_normalized_directory(db)
+        backfill_life_hierarchy(db)
         seed_initial_questions(db)
     finally:
         db.close()
@@ -127,6 +137,180 @@ def normalize_directory_name(value: Optional[str]) -> Optional[str]:
     if len(candidate) > 120:
         candidate = candidate[:120].rstrip()
     return candidate
+
+
+def normalize_period_title(value: Optional[str]) -> Optional[str]:
+    title = normalize_directory_name(value)
+    if not title:
+        return None
+    if len(title) > 160:
+        title = title[:160].rstrip()
+    return title
+
+
+def slugify_period_title(value: str) -> str:
+    compact = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower()).strip("-")
+    return compact[:180] or "period"
+
+
+def unique_period_slug(db: Session, title: str, existing_id: Optional[int] = None) -> str:
+    base = slugify_period_title(title)
+    candidate = base
+    suffix = 2
+    while True:
+        match = db.query(LifePeriod).filter(LifePeriod.slug == candidate).first()
+        if not match or (existing_id is not None and match.id == existing_id):
+            return candidate
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+
+
+def build_period_response(period: LifePeriod) -> LifePeriodResponse:
+    return LifePeriodResponse(
+        id=period.id,
+        title=period.title,
+        slug=period.slug,
+        start_date_text=period.start_date_text,
+        end_date_text=period.end_date_text,
+        summary=period.summary,
+        event_count=len(period.events),
+        asset_count=len(period.assets),
+        created_at=period.created_at,
+        updated_at=period.updated_at,
+    )
+
+
+def build_event_response(event: LifeEvent) -> LifeEventResponse:
+    legacy_memory = event.legacy_memory
+
+    return LifeEventResponse(
+        id=event.id,
+        period_id=event.period_id,
+        title=event.title,
+        description=event.description,
+        event_date_text=event.event_date_text,
+        date_precision=event.date_precision,
+        date_year=event.date_year,
+        date_month=event.date_month,
+        date_day=event.date_day,
+        date_decade=event.date_decade,
+        legacy_audio_url=(legacy_memory.audio_url if legacy_memory else None),
+        legacy_audio_size_bytes=(legacy_memory.audio_size_bytes if legacy_memory else None),
+        linked_asset_count=len(event.linked_assets),
+        created_at=event.created_at,
+        updated_at=event.updated_at,
+    )
+
+
+def build_asset_response(asset: Asset) -> AssetResponse:
+    return AssetResponse(
+        id=asset.id,
+        period_id=asset.period_id,
+        kind=asset.kind,
+        original_filename=asset.original_filename,
+        content_type=asset.content_type,
+        size_bytes=asset.size_bytes,
+        playback_url=(asset.download_url if (asset.content_type or "").startswith("audio/") else None),
+        text_excerpt=asset.text_excerpt,
+        notes=asset.notes,
+        download_url=asset.download_url,
+        linked_event_ids=[link.event_id for link in asset.event_links],
+        created_at=asset.created_at,
+    )
+
+
+def ensure_event_asset_link(db: Session, event: LifeEvent, asset: Asset, relation_type: str = "evidence") -> None:
+    exists = any(link.asset_id == asset.id for link in event.linked_assets)
+    if not exists:
+        db.add(EventAsset(event_id=event.id, asset_id=asset.id, relation_type=relation_type[:30]))
+
+
+def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
+    period = get_or_create_period_for_memory(db, memory)
+
+    event = (
+        db.query(LifeEvent)
+        .filter(LifeEvent.legacy_memory_id == memory.id)
+        .first()
+    )
+    if not event:
+        event_title = (memory.event_description or "").strip() or f"Memory {memory.id}"
+        if len(event_title) > 180:
+            event_title = event_title[:180].rstrip()
+
+        event = LifeEvent(
+            period_id=period.id,
+            title=event_title,
+            description=memory.transcript,
+            event_date_text=memory.estimated_date_text,
+            event_date_sort=memory.estimated_date_sort,
+            date_precision=memory.date_precision,
+            date_year=memory.date_year,
+            date_month=memory.date_month,
+            date_day=memory.date_day,
+            date_decade=memory.date_decade,
+            legacy_memory_id=memory.id,
+        )
+        db.add(event)
+        db.flush()
+    else:
+        if event.period_id is None:
+            event.period_id = period.id
+
+    if memory.audio_filename:
+        audio_asset = (
+            db.query(Asset)
+            .filter(Asset.legacy_memory_id == memory.id, Asset.kind == "audio")
+            .first()
+        )
+        if not audio_asset:
+            audio_asset = Asset(
+                period_id=period.id,
+                kind="audio",
+                storage_filename=memory.audio_filename,
+                original_filename=memory.audio_filename,
+                content_type=memory.audio_content_type,
+                size_bytes=memory.audio_size_bytes,
+                text_excerpt=(memory.transcript or "").strip()[:1200] or None,
+                notes=f"Audio recording with transcript from legacy memory {memory.id}.",
+                legacy_memory_id=memory.id,
+            )
+            db.add(audio_asset)
+            db.flush()
+        else:
+            if audio_asset.period_id is None:
+                audio_asset.period_id = period.id
+            if not audio_asset.text_excerpt and memory.transcript:
+                audio_asset.text_excerpt = memory.transcript[:1200]
+
+        ensure_event_asset_link(db, event, audio_asset, relation_type="recording")
+
+    if memory.document_filename:
+        asset_kind = "photo" if (memory.document_content_type or "").startswith("image/") else "document"
+        document_asset = (
+            db.query(Asset)
+            .filter(Asset.legacy_memory_id == memory.id, Asset.kind == asset_kind)
+            .first()
+        )
+        if not document_asset:
+            document_asset = Asset(
+                period_id=period.id,
+                kind=asset_kind,
+                storage_filename=memory.document_filename,
+                original_filename=memory.document_original_filename,
+                content_type=memory.document_content_type,
+                size_bytes=memory.document_size_bytes,
+                text_excerpt=(memory.transcript or "").strip()[:1200] or None,
+                notes=f"Backfilled from legacy memory {memory.id}.",
+                legacy_memory_id=memory.id,
+            )
+            db.add(document_asset)
+            db.flush()
+        else:
+            if document_asset.period_id is None:
+                document_asset.period_id = period.id
+
+        ensure_event_asset_link(db, event, document_asset)
 
 
 def get_or_create_person(db: Session, raw_name: Optional[str]) -> Optional[Person]:
@@ -289,6 +473,66 @@ def backfill_normalized_directory(db: Session) -> None:
     db.commit()
 
 
+def get_or_create_period_for_memory(db: Session, memory: MemoryEntry) -> LifePeriod:
+    if memory.date_year:
+        title = f"{memory.date_year}"
+        slug = f"year-{memory.date_year}"
+        start_sort = date(memory.date_year, 1, 1)
+        end_sort = date(memory.date_year, 12, 31)
+        start_text = str(memory.date_year)
+        end_text = str(memory.date_year)
+    elif memory.date_decade:
+        decade_start = memory.date_decade
+        decade_end = memory.date_decade + 9
+        title = f"{decade_start}s"
+        slug = f"decade-{decade_start}"
+        start_sort = date(decade_start, 1, 1)
+        end_sort = date(decade_end, 12, 31)
+        start_text = str(decade_start)
+        end_text = str(decade_end)
+    elif memory.estimated_date_sort:
+        inferred_year = memory.estimated_date_sort.year
+        title = f"{inferred_year}"
+        slug = f"year-{inferred_year}"
+        start_sort = date(inferred_year, 1, 1)
+        end_sort = date(inferred_year, 12, 31)
+        start_text = str(inferred_year)
+        end_text = str(inferred_year)
+    else:
+        title = "Undated"
+        slug = "undated"
+        start_sort = None
+        end_sort = None
+        start_text = "unknown"
+        end_text = "unknown"
+
+    period = db.query(LifePeriod).filter(LifePeriod.slug == slug).first()
+    if period:
+        return period
+
+    period = LifePeriod(
+        title=title,
+        slug=unique_period_slug(db, slug),
+        start_date_text=start_text,
+        end_date_text=end_text,
+        start_sort=start_sort,
+        end_sort=end_sort,
+        summary="Auto-created from existing memories.",
+    )
+    db.add(period)
+    db.flush()
+    return period
+
+
+def backfill_life_hierarchy(db: Session) -> None:
+    memories = db.query(MemoryEntry).order_by(MemoryEntry.created_at.asc()).all()
+
+    for memory in memories:
+        sync_life_hierarchy_for_memory(db, memory)
+
+    db.commit()
+
+
 def build_directory_response(
     name: str,
     item_id: int,
@@ -352,6 +596,266 @@ def health() -> dict:
 @app.get("/")
 def root() -> dict:
     return {"service": "memoir-api", "health": "/api/health"}
+
+
+@app.get("/api/periods", response_model=list[LifePeriodResponse])
+def list_periods(db: Session = Depends(get_db)) -> list[LifePeriodResponse]:
+    periods = db.query(LifePeriod).order_by(LifePeriod.start_sort.asc().nulls_last(), LifePeriod.created_at.asc()).all()
+    return [build_period_response(period) for period in periods]
+
+
+@app.post("/api/periods", response_model=LifePeriodResponse)
+def create_period(body: CreateLifePeriodRequest, db: Session = Depends(get_db)) -> LifePeriodResponse:
+    title = normalize_period_title(body.title)
+    if not title:
+        raise HTTPException(status_code=400, detail="Period title is required")
+
+    period = LifePeriod(
+        title=title,
+        slug=unique_period_slug(db, title),
+        start_date_text=body.start_date_text,
+        end_date_text=body.end_date_text,
+        summary=body.summary,
+    )
+    db.add(period)
+    db.commit()
+    db.refresh(period)
+    return build_period_response(period)
+
+
+@app.get("/api/periods/{period_id}/events", response_model=list[LifeEventResponse])
+def list_period_events(period_id: int, db: Session = Depends(get_db)) -> list[LifeEventResponse]:
+    period = db.get(LifePeriod, period_id)
+    if not period:
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    events = (
+        db.query(LifeEvent)
+        .filter(LifeEvent.period_id == period_id)
+        .order_by(LifeEvent.event_date_sort.is_(None), LifeEvent.event_date_sort.asc(), LifeEvent.created_at.asc())
+        .all()
+    )
+    return [build_event_response(event) for event in events]
+
+
+@app.post("/api/events", response_model=LifeEventResponse)
+def create_event(body: CreateLifeEventRequest, db: Session = Depends(get_db)) -> LifeEventResponse:
+    title = normalize_directory_name(body.title)
+    if not title:
+        raise HTTPException(status_code=400, detail="Event title is required")
+
+    if body.period_id is not None and not db.get(LifePeriod, body.period_id):
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    event = LifeEvent(
+        period_id=body.period_id,
+        title=title,
+        description=body.description,
+        event_date_text=body.event_date_text,
+        date_precision=body.date_precision,
+        date_year=body.date_year,
+        date_month=body.date_month,
+        date_day=body.date_day,
+        date_decade=body.date_decade,
+        event_date_sort=build_sort_date(
+            body.date_precision,
+            body.date_year,
+            body.date_month,
+            body.date_day,
+            body.date_decade,
+        ),
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return build_event_response(event)
+
+
+@app.get("/api/events", response_model=list[LifeEventResponse])
+def list_events(period_id: Optional[int] = None, db: Session = Depends(get_db)) -> list[LifeEventResponse]:
+    query = db.query(LifeEvent)
+    if period_id is not None:
+        query = query.filter(LifeEvent.period_id == period_id)
+    events = query.order_by(LifeEvent.event_date_sort.is_(None), LifeEvent.event_date_sort.asc(), LifeEvent.created_at.asc()).all()
+    return [build_event_response(event) for event in events]
+
+
+@app.post("/api/events/{event_id}/merge", response_model=LifeEventResponse)
+def merge_event(
+    event_id: int,
+    body: MergeLifeEventRequest,
+    db: Session = Depends(get_db),
+) -> LifeEventResponse:
+    source = db.get(LifeEvent, event_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source event not found")
+
+    target = db.get(LifeEvent, body.into_event_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Target event not found")
+
+    if source.id == target.id:
+        raise HTTPException(status_code=400, detail="Cannot merge an event into itself")
+
+    for link in list(source.linked_assets):
+        exists = any(existing.asset_id == link.asset_id for existing in target.linked_assets)
+        if not exists:
+            db.add(EventAsset(event_id=target.id, asset_id=link.asset_id, relation_type=link.relation_type))
+
+    if not target.description and source.description:
+        target.description = source.description
+    if not target.event_date_text and source.event_date_text:
+        target.event_date_text = source.event_date_text
+        target.event_date_sort = source.event_date_sort
+        target.date_precision = source.date_precision
+        target.date_year = source.date_year
+        target.date_month = source.date_month
+        target.date_day = source.date_day
+        target.date_decade = source.date_decade
+    if target.period_id is None and source.period_id is not None:
+        target.period_id = source.period_id
+    if target.legacy_memory_id is None and source.legacy_memory_id is not None:
+        target.legacy_memory_id = source.legacy_memory_id
+
+    db.delete(source)
+    db.commit()
+    db.refresh(target)
+    return build_event_response(target)
+
+
+@app.delete("/api/events/{event_id}")
+def delete_event(event_id: int, db: Session = Depends(get_db)) -> dict:
+    event = db.get(LifeEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    db.delete(event)
+    db.commit()
+    return {"status": "deleted", "event_id": event_id}
+
+
+@app.get("/api/events/{event_id}/assets", response_model=list[AssetResponse])
+def list_event_assets(event_id: int, db: Session = Depends(get_db)) -> list[AssetResponse]:
+    event = db.get(LifeEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    assets = [link.asset for link in event.linked_assets if link.asset]
+    return [build_asset_response(asset) for asset in assets]
+
+
+@app.get("/api/assets/unlinked", response_model=list[AssetResponse])
+def list_unlinked_assets(db: Session = Depends(get_db)) -> list[AssetResponse]:
+    assets = db.query(Asset).order_by(Asset.created_at.desc()).all()
+    unlinked = [asset for asset in assets if not asset.event_links]
+    return [build_asset_response(asset) for asset in unlinked]
+
+
+@app.post("/api/assets", response_model=AssetResponse)
+async def upload_asset(
+    file: UploadFile = File(...),
+    kind: str = Form("document"),
+    period_id: Optional[int] = Form(None),
+    event_id: Optional[int] = Form(None),
+    notes: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+) -> AssetResponse:
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Asset file is empty")
+
+    if period_id is not None and not db.get(LifePeriod, period_id):
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    event: Optional[LifeEvent] = None
+    if event_id is not None:
+        event = db.get(LifeEvent, event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+
+    normalized_kind = (kind or "document").strip().lower()[:20]
+    if normalized_kind == "audio" or (file.content_type or "").startswith("audio/"):
+        storage_filename, content_type, size_bytes, stored_bytes = save_audio_file(file, file_bytes, AUDIO_STORAGE_DIR)
+        original_filename = file.filename
+        fingerprint = hashlib.sha256(stored_bytes).hexdigest()
+        normalized_kind = "audio"
+    else:
+        (
+            storage_filename,
+            content_type,
+            size_bytes,
+            original_filename,
+        ) = save_document_file(file, file_bytes, DOCUMENT_STORAGE_DIR)
+        fingerprint = hashlib.sha256(file_bytes).hexdigest()
+
+    asset = Asset(
+        period_id=period_id,
+        kind=normalized_kind,
+        storage_filename=storage_filename,
+        original_filename=original_filename,
+        content_type=content_type,
+        size_bytes=size_bytes,
+        fingerprint_sha256=fingerprint,
+        notes=notes,
+    )
+    db.add(asset)
+    db.flush()
+
+    if event:
+        db.add(EventAsset(event_id=event.id, asset_id=asset.id, relation_type="evidence"))
+
+    db.commit()
+    db.refresh(asset)
+    return build_asset_response(asset)
+
+
+@app.post("/api/assets/{asset_id}/link-event/{event_id}", response_model=AssetResponse)
+def link_asset_to_event(
+    asset_id: int,
+    event_id: int,
+    body: LinkAssetToEventRequest,
+    db: Session = Depends(get_db),
+) -> AssetResponse:
+    asset = db.get(Asset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    event = db.get(LifeEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    existing = (
+        db.query(EventAsset)
+        .filter(EventAsset.asset_id == asset_id, EventAsset.event_id == event_id)
+        .first()
+    )
+    if not existing:
+        db.add(EventAsset(event_id=event_id, asset_id=asset_id, relation_type=(body.relation_type or "evidence")[:30]))
+        db.commit()
+        db.refresh(asset)
+
+    return build_asset_response(asset)
+
+
+@app.get("/api/assets/{asset_id}/download")
+def download_asset(asset_id: int, download: bool = True, db: Session = Depends(get_db)) -> FileResponse:
+    asset = db.get(Asset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    storage_dir = AUDIO_STORAGE_DIR if asset.kind == "audio" else DOCUMENT_STORAGE_DIR
+    file_path = storage_dir / asset.storage_filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Asset file missing from storage")
+
+    filename = asset.original_filename or asset.storage_filename
+    disposition = "attachment" if download else "inline"
+    return FileResponse(
+        path=file_path,
+        media_type=(asset.content_type or "application/octet-stream"),
+        filename=filename,
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+    )
 
 
 @app.get("/api/memories", response_model=list[MemoryResponse])
@@ -799,6 +1303,7 @@ async def create_memory(
     assign_recorder_person(db, entry, metadata.recorder_name)
     sync_memory_people(db, entry, metadata.people)
     sync_memory_places(db, entry, metadata.locations)
+    sync_life_hierarchy_for_memory(db, entry)
     db.commit()
     db.refresh(entry)
 
@@ -906,6 +1411,7 @@ async def create_memory_from_document(
     assign_recorder_person(db, entry, metadata.recorder_name)
     sync_memory_people(db, entry, metadata.people)
     sync_memory_places(db, entry, metadata.locations)
+    sync_life_hierarchy_for_memory(db, entry)
     db.commit()
     db.refresh(entry)
 

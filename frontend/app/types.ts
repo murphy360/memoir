@@ -58,3 +58,49 @@ export type Question = {
 export type AppSettings = {
   main_character_name: string | null;
 };
+
+export type LifePeriod = {
+  id: number;
+  title: string;
+  slug: string | null;
+  start_date_text: string | null;
+  end_date_text: string | null;
+  summary: string | null;
+  event_count: number;
+  asset_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LifeEvent = {
+  id: number;
+  period_id: number | null;
+  title: string;
+  description: string | null;
+  event_date_text: string | null;
+  date_precision: string | null;
+  date_year: number | null;
+  date_month: number | null;
+  date_day: number | null;
+  date_decade: number | null;
+  legacy_audio_url: string | null;
+  legacy_audio_size_bytes: number | null;
+  linked_asset_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AssetEntry = {
+  id: number;
+  period_id: number | null;
+  kind: string;
+  original_filename: string | null;
+  content_type: string | null;
+  size_bytes: number | null;
+  playback_url: string | null;
+  text_excerpt: string | null;
+  notes: string | null;
+  download_url: string;
+  linked_event_ids: number[];
+  created_at: string;
+};

@@ -3,7 +3,7 @@
 import { ClipboardEventHandler, DragEventHandler, useEffect, useRef, useState } from "react";
 import { DirectoryManager } from "./components/DirectoryManager";
 import { MemoryCard } from "./components/MemoryCard";
-import { DirectoryEntry, MemoryEntry, Question, AppSettings } from "./types";
+import { AssetEntry, DirectoryEntry, LifeEvent, MemoryEntry, Question, AppSettings, LifePeriod } from "./types";
 
 type PendingRecording = {
   id: string;
@@ -65,6 +65,24 @@ export default function HomePage() {
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState("Ready to record a memory.");
   const [timeline, setTimeline] = useState<MemoryEntry[]>([]);
+  const [lifePeriods, setLifePeriods] = useState<LifePeriod[]>([]);
+  const [lifeEvents, setLifeEvents] = useState<LifeEvent[]>([]);
+  const [unlinkedAssets, setUnlinkedAssets] = useState<AssetEntry[]>([]);
+  const [activeEventId, setActiveEventId] = useState<number | null>(null);
+  const [activeEventAssets, setActiveEventAssets] = useState<AssetEntry[]>([]);
+  const [isSavingLifeStructure, setIsSavingLifeStructure] = useState(false);
+  const [isUploadingAsset, setIsUploadingAsset] = useState(false);
+  const [assetLinkTargets, setAssetLinkTargets] = useState<Record<number, string>>({});
+  const [eventMergeTargets, setEventMergeTargets] = useState<Record<number, string>>({});
+  const [newPeriodTitle, setNewPeriodTitle] = useState("");
+  const [newPeriodStart, setNewPeriodStart] = useState("");
+  const [newPeriodEnd, setNewPeriodEnd] = useState("");
+  const [newPeriodSummary, setNewPeriodSummary] = useState("");
+  const [newEventTitle, setNewEventTitle] = useState("");
+  const [newEventDateText, setNewEventDateText] = useState("");
+  const [newEventDescription, setNewEventDescription] = useState("");
+  const [newEventPeriodId, setNewEventPeriodId] = useState("");
+  const [assetUploadNotes, setAssetUploadNotes] = useState("");
   const [peopleDirectory, setPeopleDirectory] = useState<DirectoryEntry[]>([]);
   const [placesDirectory, setPlacesDirectory] = useState<DirectoryEntry[]>([]);
   const [pendingRecording, setPendingRecording] = useState<PendingRecording | null>(null);
@@ -90,6 +108,7 @@ export default function HomePage() {
   const [isDragOverDocumentTarget, setIsDragOverDocumentTarget] = useState(false);
   const [documentUploadError, setDocumentUploadError] = useState<string | null>(null);
   const documentFileInputRef = useRef<HTMLInputElement | null>(null);
+  const eventAssetInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const shouldDiscardRecordingRef = useRef(false);
@@ -100,12 +119,24 @@ export default function HomePage() {
 
   async function loadTimeline() {
     try {
-      const [memoriesRes, questionsRes, peopleRes, placesRes, settingsRes] = await Promise.all([
+      const [
+        memoriesRes,
+        questionsRes,
+        peopleRes,
+        placesRes,
+        settingsRes,
+        periodsRes,
+        eventsRes,
+        unlinkedAssetsRes,
+      ] = await Promise.all([
         fetch(`${API_BASE}/api/memories`, { cache: "no-store" }),
         fetch(`${API_BASE}/api/questions`, { cache: "no-store" }),
         fetch(`${API_BASE}/api/people`, { cache: "no-store" }),
         fetch(`${API_BASE}/api/places`, { cache: "no-store" }),
         fetch(`${API_BASE}/api/settings`, { cache: "no-store" }),
+        fetch(`${API_BASE}/api/periods`, { cache: "no-store" }),
+        fetch(`${API_BASE}/api/events`, { cache: "no-store" }),
+        fetch(`${API_BASE}/api/assets/unlinked`, { cache: "no-store" }),
       ]);
       if (!memoriesRes.ok) {
         throw new Error("Failed to load timeline");
@@ -128,8 +159,234 @@ export default function HomePage() {
         const settingsData: AppSettings = await settingsRes.json();
         setMainCharacterName(settingsData.main_character_name);
       }
+      if (periodsRes.ok) {
+        const periodData: LifePeriod[] = await periodsRes.json();
+        setLifePeriods(periodData);
+      }
+      if (eventsRes.ok) {
+        const eventData: LifeEvent[] = await eventsRes.json();
+        setLifeEvents(eventData);
+      }
+      if (unlinkedAssetsRes.ok) {
+        const assetData: AssetEntry[] = await unlinkedAssetsRes.json();
+        setUnlinkedAssets(assetData);
+      }
     } catch (error) {
       setStatus("Could not load timeline from API.");
+    }
+  }
+
+  async function loadAssetsForEvent(eventId: number) {
+    try {
+      const response = await fetch(`${API_BASE}/api/events/${eventId}/assets`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Failed to load event assets");
+      }
+      const assets: AssetEntry[] = await response.json();
+      setActiveEventAssets(assets);
+    } catch {
+      setStatus("Could not load assets for the selected event.");
+      setActiveEventAssets([]);
+    }
+  }
+
+  async function createLifePeriod() {
+    if (!newPeriodTitle.trim()) {
+      return;
+    }
+    setIsSavingLifeStructure(true);
+    setStatus("Creating period...");
+    try {
+      const response = await fetch(`${API_BASE}/api/periods`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newPeriodTitle.trim(),
+          start_date_text: newPeriodStart.trim() || null,
+          end_date_text: newPeriodEnd.trim() || null,
+          summary: newPeriodSummary.trim() || null,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Create period failed");
+      }
+      setNewPeriodTitle("");
+      setNewPeriodStart("");
+      setNewPeriodEnd("");
+      setNewPeriodSummary("");
+      await loadTimeline();
+      setStatus("Period created.");
+    } catch {
+      setStatus("Failed to create period.");
+    } finally {
+      setIsSavingLifeStructure(false);
+    }
+  }
+
+  async function createLifeEvent() {
+    if (!newEventTitle.trim()) {
+      return;
+    }
+    setIsSavingLifeStructure(true);
+    setStatus("Creating event...");
+    try {
+      const response = await fetch(`${API_BASE}/api/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newEventTitle.trim(),
+          period_id: newEventPeriodId ? Number(newEventPeriodId) : null,
+          description: newEventDescription.trim() || null,
+          event_date_text: newEventDateText.trim() || null,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Create event failed");
+      }
+      setNewEventTitle("");
+      setNewEventDateText("");
+      setNewEventDescription("");
+      await loadTimeline();
+      setStatus("Event created.");
+    } catch {
+      setStatus("Failed to create event.");
+    } finally {
+      setIsSavingLifeStructure(false);
+    }
+  }
+
+  async function uploadAssetToActiveEvent(file: File) {
+    if (!activeEventId) {
+      return;
+    }
+    setIsUploadingAsset(true);
+    setStatus("Uploading asset to event...");
+    try {
+      const formData = new FormData();
+      const kind = file.type.startsWith("audio/") ? "audio" : file.type.startsWith("image/") ? "photo" : "document";
+      formData.append("file", file, file.name);
+      formData.append("kind", kind);
+      formData.append("event_id", `${activeEventId}`);
+      if (assetUploadNotes.trim()) {
+        formData.append("notes", assetUploadNotes.trim());
+      }
+
+      const response = await fetch(`${API_BASE}/api/assets`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Upload asset failed");
+      }
+
+      setAssetUploadNotes("");
+      if (eventAssetInputRef.current) {
+        eventAssetInputRef.current.value = "";
+      }
+      await Promise.all([loadTimeline(), loadAssetsForEvent(activeEventId)]);
+      setStatus("Asset uploaded and linked to event.");
+    } catch {
+      setStatus("Failed to upload asset to event.");
+    } finally {
+      setIsUploadingAsset(false);
+    }
+  }
+
+  async function linkUnlinkedAssetToEvent(assetId: number) {
+    const target = assetLinkTargets[assetId];
+    if (!target) {
+      return;
+    }
+
+    setIsSavingLifeStructure(true);
+    setStatus("Linking asset to event...");
+    try {
+      const response = await fetch(`${API_BASE}/api/assets/${assetId}/link-event/${target}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relation_type: "evidence" }),
+      });
+      if (!response.ok) {
+        throw new Error("Link asset failed");
+      }
+
+      setAssetLinkTargets((current) => {
+        const next = { ...current };
+        delete next[assetId];
+        return next;
+      });
+      await loadTimeline();
+      if (activeEventId) {
+        await loadAssetsForEvent(activeEventId);
+      }
+      setStatus("Asset linked to event.");
+    } catch {
+      setStatus("Failed to link asset to event.");
+    } finally {
+      setIsSavingLifeStructure(false);
+    }
+  }
+
+  async function deleteLifeEvent(eventId: number) {
+    if (!window.confirm("Delete this event from the life timeline?")) {
+      return;
+    }
+
+    setIsSavingLifeStructure(true);
+    setStatus("Deleting event...");
+    try {
+      const response = await fetch(`${API_BASE}/api/events/${eventId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error("Delete event failed");
+      }
+
+      if (activeEventId === eventId) {
+        setActiveEventId(null);
+        setActiveEventAssets([]);
+      }
+      await loadTimeline();
+      setStatus("Event deleted.");
+    } catch {
+      setStatus("Failed to delete event.");
+    } finally {
+      setIsSavingLifeStructure(false);
+    }
+  }
+
+  async function mergeLifeEvent(sourceId: number) {
+    const targetId = eventMergeTargets[sourceId];
+    if (!targetId) {
+      return;
+    }
+
+    setIsSavingLifeStructure(true);
+    setStatus("Merging event...");
+    try {
+      const response = await fetch(`${API_BASE}/api/events/${sourceId}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ into_event_id: Number(targetId) }),
+      });
+      if (!response.ok) {
+        throw new Error("Merge event failed");
+      }
+
+      const merged: LifeEvent = await response.json();
+      setEventMergeTargets((current) => {
+        const next = { ...current };
+        delete next[sourceId];
+        return next;
+      });
+      setActiveEventId(merged.id);
+      await Promise.all([loadTimeline(), loadAssetsForEvent(merged.id)]);
+      setStatus("Event merged.");
+    } catch {
+      setStatus("Failed to merge event.");
+    } finally {
+      setIsSavingLifeStructure(false);
     }
   }
 
@@ -1003,6 +1260,301 @@ export default function HomePage() {
           onRename={(itemId, name) => renameDirectoryEntry("places", itemId, name)}
           onDelete={(itemId) => deleteDirectoryEntry("places", itemId)}
         />
+      </section>
+
+      <section className="panel" style={{ marginTop: "1rem" }}>
+        <h2>Life Periods (beta)</h2>
+        <p className="meta">Create periods and events, then attach files directly to an event or link unlinked assets from the inbox.</p>
+
+        <div className="lifeFormGrid">
+          <article className="memory">
+            <h3>Create Period</h3>
+            <div className="lifeFormFields">
+              <input
+                className="directoryInput"
+                type="text"
+                placeholder="Period title (e.g. Bahrain Deployment)"
+                value={newPeriodTitle}
+                onChange={(e) => setNewPeriodTitle(e.target.value)}
+                disabled={isSavingLifeStructure || isRecording || isLoading}
+              />
+              <input
+                className="directoryInput"
+                type="text"
+                placeholder="Start text (e.g. 2021)"
+                value={newPeriodStart}
+                onChange={(e) => setNewPeriodStart(e.target.value)}
+                disabled={isSavingLifeStructure || isRecording || isLoading}
+              />
+              <input
+                className="directoryInput"
+                type="text"
+                placeholder="End text (e.g. 2022)"
+                value={newPeriodEnd}
+                onChange={(e) => setNewPeriodEnd(e.target.value)}
+                disabled={isSavingLifeStructure || isRecording || isLoading}
+              />
+              <textarea
+                className="directoryInput"
+                placeholder="Summary"
+                value={newPeriodSummary}
+                onChange={(e) => setNewPeriodSummary(e.target.value)}
+                disabled={isSavingLifeStructure || isRecording || isLoading}
+                rows={3}
+              />
+            </div>
+            <div className="controls">
+              <button
+                className="primary"
+                type="button"
+                onClick={createLifePeriod}
+                disabled={!newPeriodTitle.trim() || isSavingLifeStructure || isRecording || isLoading}
+              >
+                Create Period
+              </button>
+            </div>
+          </article>
+
+          <article className="memory">
+            <h3>Create Event</h3>
+            <div className="lifeFormFields">
+              <input
+                className="directoryInput"
+                type="text"
+                placeholder="Event title (e.g. Earned FMS pin)"
+                value={newEventTitle}
+                onChange={(e) => setNewEventTitle(e.target.value)}
+                disabled={isSavingLifeStructure || isRecording || isLoading}
+              />
+              <select
+                className="directoryInput"
+                value={newEventPeriodId}
+                onChange={(e) => setNewEventPeriodId(e.target.value)}
+                disabled={isSavingLifeStructure || isRecording || isLoading}
+              >
+                <option value="">No period</option>
+                {lifePeriods.map((period) => (
+                  <option key={period.id} value={period.id}>{period.title}</option>
+                ))}
+              </select>
+              <input
+                className="directoryInput"
+                type="text"
+                placeholder="Event date text (e.g. 2022)"
+                value={newEventDateText}
+                onChange={(e) => setNewEventDateText(e.target.value)}
+                disabled={isSavingLifeStructure || isRecording || isLoading}
+              />
+              <textarea
+                className="directoryInput"
+                placeholder="Event description"
+                value={newEventDescription}
+                onChange={(e) => setNewEventDescription(e.target.value)}
+                disabled={isSavingLifeStructure || isRecording || isLoading}
+                rows={3}
+              />
+            </div>
+            <div className="controls">
+              <button
+                className="primary"
+                type="button"
+                onClick={createLifeEvent}
+                disabled={!newEventTitle.trim() || isSavingLifeStructure || isRecording || isLoading}
+              >
+                Create Event
+              </button>
+            </div>
+          </article>
+        </div>
+
+        <div className="lifePeriodList">
+          {lifePeriods.length === 0 && <p className="meta">No periods created yet.</p>}
+          {lifePeriods.map((period) => {
+            const eventsForPeriod = lifeEvents.filter((event) => event.period_id === period.id);
+            return (
+              <article key={period.id} className="memory">
+                <h3>{period.title}</h3>
+                <p className="meta">
+                  Range: <span className="badge">{period.start_date_text || "unknown"}</span> to{" "}
+                  <span className="badge">{period.end_date_text || "unknown"}</span>
+                </p>
+                <p className="meta">
+                  Events: <span className="badge">{eventsForPeriod.length}</span> Assets: <span className="badge">{period.asset_count}</span>
+                </p>
+                {period.summary && <p>{period.summary}</p>}
+                <div className="lifeEventList">
+                  {eventsForPeriod.length === 0 && <p className="meta">No events in this period yet.</p>}
+                  {eventsForPeriod.map((event) => (
+                    <div key={event.id} className="lifeEventCard">
+                      <div
+                        className={`lifeEventRow ${activeEventId === event.id ? "isActive" : ""}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={async () => {
+                          if (activeEventId === event.id) {
+                            setActiveEventId(null);
+                            setActiveEventAssets([]);
+                            return;
+                          }
+                          setActiveEventId(event.id);
+                          await loadAssetsForEvent(event.id);
+                        }}
+                        onKeyDown={async (e) => {
+                          if (e.key !== "Enter" && e.key !== " ") {
+                            return;
+                          }
+                          e.preventDefault();
+                          if (activeEventId === event.id) {
+                            setActiveEventId(null);
+                            setActiveEventAssets([]);
+                            return;
+                          }
+                          setActiveEventId(event.id);
+                          await loadAssetsForEvent(event.id);
+                        }}
+                      >
+                        <div>
+                          <p><strong>{event.title}</strong></p>
+                          <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}</p>
+                        </div>
+                        <span className="badge">{activeEventId === event.id ? "Hide details" : "View details"}</span>
+                      </div>
+
+                      {activeEventId === event.id && (
+                        <div className="activeEventPanel inlineEventDetails">
+                          <p className="meta">
+                            Managing event: <span className="badge">{event.title}</span>
+                          </p>
+                          <div className="lifeFormFields">
+                            <input
+                              ref={eventAssetInputRef}
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt,.mp3,.wav,.m4a,.ogg,.webm,audio/*"
+                              disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  uploadAssetToActiveEvent(file);
+                                }
+                              }}
+                            />
+                            <input
+                              className="directoryInput"
+                              type="text"
+                              placeholder="Optional notes for this asset"
+                              value={assetUploadNotes}
+                              onChange={(e) => setAssetUploadNotes(e.target.value)}
+                              disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
+                            />
+                          </div>
+                          <div className="lifeEventManagementRow">
+                            <select
+                              className="directoryInput"
+                              value={eventMergeTargets[event.id] || ""}
+                              onChange={(e) => setEventMergeTargets((current) => ({ ...current, [event.id]: e.target.value }))}
+                              disabled={isSavingLifeStructure}
+                            >
+                              <option value="">Merge into another event</option>
+                              {eventsForPeriod.filter((candidate) => candidate.id !== event.id).map((candidate) => (
+                                <option key={candidate.id} value={candidate.id}>{candidate.title}</option>
+                              ))}
+                            </select>
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => mergeLifeEvent(event.id)}
+                              disabled={!eventMergeTargets[event.id] || isSavingLifeStructure}
+                            >
+                              Merge Event
+                            </button>
+                            <button
+                              className="ghost"
+                              type="button"
+                              onClick={() => deleteLifeEvent(event.id)}
+                              disabled={isSavingLifeStructure}
+                            >
+                              Delete Event
+                            </button>
+                          </div>
+                          {activeEventAssets.length === 0 ? (
+                            <p className="meta">No assets linked to this event yet.</p>
+                          ) : (
+                            <div className="lifeAssetList">
+                              {activeEventAssets.map((asset) => (
+                                <div key={asset.id} className="lifeAssetRow">
+                                  <div>
+                                    <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                                    <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
+                                    {asset.playback_url && (
+                                      <audio
+                                        controls
+                                        preload="metadata"
+                                        src={resolveApiUrl(asset.playback_url)}
+                                        style={{ width: "100%", marginTop: "0.45rem" }}
+                                      />
+                                    )}
+                                    {asset.text_excerpt && (
+                                      <p className="meta assetTranscript">Transcript: {asset.text_excerpt}</p>
+                                    )}
+                                  </div>
+                                  <a className="secondary linkButton" href={resolveApiUrl(asset.download_url)} target="_blank" rel="noreferrer">
+                                    Open
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <article className="memory" style={{ marginTop: "0.75rem" }}>
+          <h3>Unlinked Assets Inbox</h3>
+          {unlinkedAssets.length === 0 ? (
+            <p className="meta">No unlinked assets. Great job keeping context connected.</p>
+          ) : (
+            <div className="lifeAssetList">
+              {unlinkedAssets.map((asset) => (
+                <div key={asset.id} className="lifeAssetRow">
+                  <div>
+                    <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                    <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
+                  </div>
+                  <div className="lifeAssetLinkControls">
+                    <select
+                      className="directoryInput"
+                      value={assetLinkTargets[asset.id] || ""}
+                      onChange={(e) => setAssetLinkTargets((current) => ({ ...current, [asset.id]: e.target.value }))}
+                      disabled={isSavingLifeStructure || lifeEvents.length === 0}
+                    >
+                      <option value="">Select event</option>
+                      {lifeEvents.map((event) => (
+                        <option key={event.id} value={event.id}>{event.title}</option>
+                      ))}
+                    </select>
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() => linkUnlinkedAssetToEvent(asset.id)}
+                      disabled={!assetLinkTargets[asset.id] || isSavingLifeStructure}
+                    >
+                      Link
+                    </button>
+                    <a className="ghost linkButton" href={resolveApiUrl(asset.download_url)} target="_blank" rel="noreferrer">
+                      View
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
       </section>
 
       <section className="timeline">

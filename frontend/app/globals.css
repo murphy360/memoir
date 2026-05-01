@@ -319,6 +319,20 @@ button:disabled {
   align-items: center;
   justify-content: center;
   text-decoration: none;
+  border-radius: 999px;
+  padding: 0.5rem 0.9rem;
+  font-weight: 700;
+}
+
+.linkButton.secondary {
+  background: var(--accent-soft);
+  color: #0f4f49;
+}
+
+.linkButton.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
 }
 
 .memoryToggle {
@@ -649,4 +663,113 @@ button.ghost:hover:not(:disabled) {
   border-color: #0f766e;
   background: linear-gradient(135deg, #e7fbf7 0%, #dcf5f0 100%);
   box-shadow: inset 0 0 0 2px rgba(15, 118, 110, 0.15);
+}
+
+.lifeFormGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.lifeFormFields {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.lifePeriodList {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.lifeEventList {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+}
+
+.lifeEventRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  flex-wrap: wrap;
+  cursor: pointer;
+}
+
+.lifeEventRow:hover {
+  border-color: #c9e7e2;
+  background: #fcfffe;
+}
+
+.lifeEventRow.isActive {
+  border-color: var(--accent);
+  background: #f8fffd;
+}
+
+.lifeEventRow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.lifeAssetList {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.lifeAssetRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.assetTranscript {
+  margin-top: 0.45rem;
+  max-width: 60ch;
+}
+
+.lifeAssetLinkControls {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.lifeAssetLinkControls .directoryInput {
+  min-width: 190px;
+}
+
+.activeEventPanel {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
+}
+
+.legacyAudioPanel {
+  margin-bottom: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f7fcfb;
+}
+
+.lifeEventManagementRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.55rem;
+}
+
+.inlineEventDetails {
+  margin-top: 0.5rem;
 }
