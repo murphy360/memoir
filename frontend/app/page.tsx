@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { ClipboardEventHandler, DragEventHandler, useEffect, useRef, useState } from "react";
 import { DirectoryManager } from "./components/DirectoryManager";
 import { MemoryCard } from "./components/MemoryCard";
 import { DirectoryEntry, MemoryEntry, Question, AppSettings } from "./types";
@@ -20,6 +20,13 @@ type AudioInputDevice = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
 const AUDIO_DEVICE_STORAGE_KEY = "memoir:last-audio-device-id";
+const CLIPBOARD_IMAGE_EXTENSIONS: Record<string, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/jpg": ".jpg",
+  "image/gif": ".gif",
+  "image/webp": ".webp",
+};
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
@@ -79,6 +86,8 @@ export default function HomePage() {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+  const [isReadingClipboard, setIsReadingClipboard] = useState(false);
+  const [isDragOverDocumentTarget, setIsDragOverDocumentTarget] = useState(false);
   const [documentUploadError, setDocumentUploadError] = useState<string | null>(null);
   const documentFileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -87,6 +96,7 @@ export default function HomePage() {
   const currentPreviewAudioUrlRef = useRef<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const levelAnimationRef = useRef<number | null>(null);
+  const documentDragDepthRef = useRef(0);
 
   async function loadTimeline() {
     try {
@@ -700,6 +710,142 @@ export default function HomePage() {
     }
   }
 
+  function asClipboardImageFile(blob: Blob, fallbackNamePrefix: string): File {
+    const mimeType = (blob.type || "").toLowerCase();
+    const extension = CLIPBOARD_IMAGE_EXTENSIONS[mimeType] || ".png";
+    const timestamp = Date.now();
+    const fileName = `${fallbackNamePrefix}-${timestamp}${extension}`;
+    return new File([blob], fileName, { type: mimeType || "image/png" });
+  }
+
+  function extractImageFromClipboardData(data: DataTransfer | null): File | null {
+    if (!data) {
+      return null;
+    }
+
+    for (const item of Array.from(data.items)) {
+      if (item.kind !== "file" || !item.type.startsWith("image/")) {
+        continue;
+      }
+      const file = item.getAsFile();
+      if (file) {
+        return asClipboardImageFile(file, "screen-clipping");
+      }
+    }
+
+    return null;
+  }
+
+  const onDocumentPasteZonePaste: ClipboardEventHandler<HTMLDivElement> = (event) => {
+    if (isUploadingDocument || isRecording || isLoading) {
+      return;
+    }
+
+    const imageFile = extractImageFromClipboardData(event.clipboardData);
+    if (!imageFile) {
+      return;
+    }
+
+    event.preventDefault();
+    uploadDocument(imageFile);
+  };
+
+  function dataTransferHasFiles(dataTransfer: DataTransfer | null): boolean {
+    if (!dataTransfer) {
+      return false;
+    }
+    if (dataTransfer.files && dataTransfer.files.length > 0) {
+      return true;
+    }
+    return Array.from(dataTransfer.items || []).some((item) => item.kind === "file");
+  }
+
+  const onDocumentDragEnter: DragEventHandler<HTMLDivElement> = (event) => {
+    event.preventDefault();
+    if (isUploadingDocument || isReadingClipboard || isRecording || isLoading) {
+      return;
+    }
+
+    documentDragDepthRef.current += 1;
+    if (dataTransferHasFiles(event.dataTransfer)) {
+      setIsDragOverDocumentTarget(true);
+    }
+  };
+
+  const onDocumentDragOver: DragEventHandler<HTMLDivElement> = (event) => {
+    event.preventDefault();
+    if (isUploadingDocument || isReadingClipboard || isRecording || isLoading) {
+      return;
+    }
+
+    if (dataTransferHasFiles(event.dataTransfer)) {
+      event.dataTransfer.dropEffect = "copy";
+      setIsDragOverDocumentTarget(true);
+    }
+  };
+
+  const onDocumentDragLeave: DragEventHandler<HTMLDivElement> = (event) => {
+    event.preventDefault();
+    documentDragDepthRef.current = Math.max(0, documentDragDepthRef.current - 1);
+    if (documentDragDepthRef.current === 0) {
+      setIsDragOverDocumentTarget(false);
+    }
+  };
+
+  const onDocumentDrop: DragEventHandler<HTMLDivElement> = (event) => {
+    event.preventDefault();
+    documentDragDepthRef.current = 0;
+    setIsDragOverDocumentTarget(false);
+
+    if (isUploadingDocument || isReadingClipboard || isRecording || isLoading) {
+      return;
+    }
+
+    const droppedFile = event.dataTransfer.files?.[0] || null;
+    if (!droppedFile) {
+      setDocumentUploadError("No file detected. Drop a PDF, image, or text file.");
+      return;
+    }
+
+    uploadDocument(droppedFile);
+  };
+
+  async function pasteImageFromClipboard() {
+    if (!navigator.clipboard?.read) {
+      setDocumentUploadError("Clipboard image reading is not available in this browser. Click the paste box and press Ctrl+V instead.");
+      return;
+    }
+
+    setIsReadingClipboard(true);
+    setDocumentUploadError(null);
+
+    try {
+      const items = await navigator.clipboard.read();
+      let matchedBlob: Blob | null = null;
+
+      for (const item of items) {
+        const imageType = item.types.find((type) => type.startsWith("image/"));
+        if (!imageType) {
+          continue;
+        }
+        matchedBlob = await item.getType(imageType);
+        break;
+      }
+
+      if (!matchedBlob) {
+        setDocumentUploadError("No image found in clipboard. Copy a screen clipping, then try again.");
+        return;
+      }
+
+      await uploadDocument(asClipboardImageFile(matchedBlob, "screen-clipping"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not read from clipboard.";
+      setDocumentUploadError(message);
+    } finally {
+      setIsReadingClipboard(false);
+    }
+  }
+
   return (
     <main>
       <section className="hero">
@@ -790,13 +936,13 @@ export default function HomePage() {
 
       <section className="panel">
         <h2>Upload a Document</h2>
-        <p className="meta">Upload a PDF, image, or text file — Gemini will produce a factual document analysis and save it as a memory entry.</p>
+        <p className="meta">Upload a PDF, image, or text file, or paste a screen clipping — Gemini will analyze it and save it as a memory entry.</p>
         <div className="controls">
           <input
             ref={documentFileInputRef}
             type="file"
             accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt"
-            disabled={isUploadingDocument || isRecording || isLoading}
+            disabled={isUploadingDocument || isReadingClipboard || isRecording || isLoading}
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
@@ -805,8 +951,30 @@ export default function HomePage() {
             }}
             style={{ flex: 1 }}
           />
+          <button
+            className="secondary"
+            type="button"
+            onClick={pasteImageFromClipboard}
+            disabled={isUploadingDocument || isReadingClipboard || isRecording || isLoading}
+          >
+            Paste from Clipboard
+          </button>
         </div>
-        {isUploadingDocument && <p className="status">Analyzing document with Gemini...</p>}
+        <div
+          className={`pasteTarget ${isDragOverDocumentTarget ? "dragOver" : ""}`}
+          role="button"
+          tabIndex={0}
+          onPaste={onDocumentPasteZonePaste}
+          onDragEnter={onDocumentDragEnter}
+          onDragOver={onDocumentDragOver}
+          onDragLeave={onDocumentDragLeave}
+          onDrop={onDocumentDrop}
+          aria-label="Paste image from clipboard"
+        >
+          <p className="pasteTargetTitle">Paste or Drop a File</p>
+          <p className="meta">Click this area and press Ctrl+V (or Cmd+V on Mac), or drag and drop a PDF, image, or text file here.</p>
+        </div>
+        {(isUploadingDocument || isReadingClipboard) && <p className="status">Analyzing document with Gemini...</p>}
         {documentUploadError && <p className="status" style={{ color: "var(--error, #c00)" }}>{documentUploadError}</p>}
       </section>
 
