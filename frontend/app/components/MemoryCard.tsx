@@ -17,6 +17,7 @@ type MemoryCardProps = {
   onAssignRecorder: (memoryId: number, personId: number) => Promise<void>;
   isBusy: boolean;
   defaultExpanded?: boolean;
+  hideHeader?: boolean;
 };
 
 function asLabelList(items: string[]): string {
@@ -40,13 +41,14 @@ export function MemoryCard({
   onAssignRecorder,
   isBusy,
   defaultExpanded = false,
+  hideHeader = false,
 }: MemoryCardProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded || hideHeader);
   const [selectedRecorder, setSelectedRecorder] = useState("");
 
   useEffect(() => {
-    setIsExpanded(defaultExpanded);
-  }, [memory.id, defaultExpanded]);
+    setIsExpanded(defaultExpanded || hideHeader);
+  }, [memory.id, defaultExpanded, hideHeader]);
 
   useEffect(() => {
     setSelectedRecorder(memory.recorder_person_id ? `${memory.recorder_person_id}` : "");
@@ -56,27 +58,29 @@ export function MemoryCard({
 
   return (
     <article className="memory">
-      <div className="memoryHeader">
-        <div className="memoryHeaderText">
-          <h3>{memory.event_description}</h3>
-          <div className="memoryDateSummary">
-            <p className="meta">
-              Date: <span className="badge">{memory.estimated_date_text || "Unknown"}</span>
-            </p>
-            <p className="meta">
-              Recorded: <span className="badge">{memory.date_recorded || "Unknown"}</span>
-            </p>
+      {!hideHeader && (
+        <div className="memoryHeader">
+          <div className="memoryHeaderText">
+            <h3>{memory.event_description}</h3>
+            <div className="memoryDateSummary">
+              <p className="meta">
+                Date: <span className="badge">{memory.estimated_date_text || "Unknown"}</span>
+              </p>
+              <p className="meta">
+                Recorded: <span className="badge">{memory.date_recorded || "Unknown"}</span>
+              </p>
+            </div>
           </div>
+          <button
+            className="secondary memoryToggle"
+            type="button"
+            onClick={() => setIsExpanded((current) => !current)}
+            aria-expanded={isExpanded}
+          >
+            {isExpanded ? "Collapse" : "Expand"}
+          </button>
         </div>
-        <button
-          className="secondary memoryToggle"
-          type="button"
-          onClick={() => setIsExpanded((current) => !current)}
-          aria-expanded={isExpanded}
-        >
-          {isExpanded ? "Collapse" : "Expand"}
-        </button>
-      </div>
+      )}
 
       {isExpanded && memory.response_to_question_text && (
         <p className="memoryResponseLink">

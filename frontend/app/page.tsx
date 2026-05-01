@@ -1724,44 +1724,31 @@ export default function HomePage() {
                           <div className="lifeEventList">
                             {eventsForPeriod.length === 0 && <p className="meta">No events in this period yet.</p>}
                             {eventsForPeriod.map((event) => (
-                              <div key={event.id} className="lifeEventCard">
-                                {/** Existing event row controls period/event management while legacy memory tools live below when expanded. */}
-                                <div
-                                  className={`lifeEventRow ${activeEventId === event.id ? "isActive" : ""}`}
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={async () => {
-                                    if (activeEventId === event.id) {
-                                      setActiveEventId(null);
-                                      setActiveEventAssets([]);
-                                      return;
-                                    }
-                                    setActiveEventId(event.id);
-                                    await loadAssetsForEvent(event.id);
-                                  }}
-                                  onKeyDown={async (e) => {
-                                    if (e.key !== "Enter" && e.key !== " ") {
-                                      return;
-                                    }
-                                    e.preventDefault();
-                                    if (activeEventId === event.id) {
-                                      setActiveEventId(null);
-                                      setActiveEventAssets([]);
-                                      return;
-                                    }
-                                    setActiveEventId(event.id);
-                                    await loadAssetsForEvent(event.id);
-                                  }}
-                                >
+                              <article key={event.id} className="memory">
+                                <div className="periodSummaryRow">
                                   <div>
-                                    <p><strong>{event.title}</strong></p>
+                                    <p style={{ margin: 0, fontWeight: 700 }}>{event.title}</p>
                                     <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}</p>
                                   </div>
-                                  <span className="badge">{activeEventId === event.id ? "Hide details" : "View details"}</span>
+                                  <button
+                                    className="secondary"
+                                    type="button"
+                                    onClick={async () => {
+                                      if (activeEventId === event.id) {
+                                        setActiveEventId(null);
+                                        setActiveEventAssets([]);
+                                        return;
+                                      }
+                                      setActiveEventId(event.id);
+                                      await loadAssetsForEvent(event.id);
+                                    }}
+                                  >
+                                    {activeEventId === event.id ? "Hide" : "Open"}
+                                  </button>
                                 </div>
 
                                 {activeEventId === event.id && (
-                                  <div className="activeEventPanel inlineEventDetails">
+                                  <>
                                     {event.legacy_memory_id && (() => {
                                       const linkedMemory = timeline.find((memory) => memory.id === event.legacy_memory_id);
                                       if (!linkedMemory) {
@@ -1782,7 +1769,7 @@ export default function HomePage() {
                                           onDelete={deleteMemory}
                                           onAssignRecorder={assignRecorder}
                                           isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
-                                          defaultExpanded
+                                          hideHeader
                                         />
                                       );
                                     })()}
@@ -1899,9 +1886,9 @@ export default function HomePage() {
                                         ))}
                                       </div>
                                     )}
-                                  </div>
+                                  </>
                                 )}
-                              </div>
+                              </article>
                             ))}
                           </div>
                         </>
@@ -1917,43 +1904,31 @@ export default function HomePage() {
                 <div className="lifeEventList">
                   {unassignedEvents.length === 0 && <p className="meta">No unassigned events.</p>}
                   {unassignedEvents.map((event) => (
-                    <div key={event.id} className="lifeEventCard">
-                      <div
-                        className={`lifeEventRow ${activeEventId === event.id ? "isActive" : ""}`}
-                        role="button"
-                        tabIndex={0}
-                        onClick={async () => {
-                          if (activeEventId === event.id) {
-                            setActiveEventId(null);
-                            setActiveEventAssets([]);
-                            return;
-                          }
-                          setActiveEventId(event.id);
-                          await loadAssetsForEvent(event.id);
-                        }}
-                        onKeyDown={async (e) => {
-                          if (e.key !== "Enter" && e.key !== " ") {
-                            return;
-                          }
-                          e.preventDefault();
-                          if (activeEventId === event.id) {
-                            setActiveEventId(null);
-                            setActiveEventAssets([]);
-                            return;
-                          }
-                          setActiveEventId(event.id);
-                          await loadAssetsForEvent(event.id);
-                        }}
-                      >
+                    <article key={event.id} className="memory">
+                      <div className="periodSummaryRow">
                         <div>
-                          <p><strong>{event.title}</strong></p>
+                          <p style={{ margin: 0, fontWeight: 700 }}>{event.title}</p>
                           <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}</p>
                         </div>
-                        <span className="badge">{activeEventId === event.id ? "Hide details" : "View details"}</span>
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={async () => {
+                            if (activeEventId === event.id) {
+                              setActiveEventId(null);
+                              setActiveEventAssets([]);
+                              return;
+                            }
+                            setActiveEventId(event.id);
+                            await loadAssetsForEvent(event.id);
+                          }}
+                        >
+                          {activeEventId === event.id ? "Hide" : "Open"}
+                        </button>
                       </div>
 
                       {activeEventId === event.id && (
-                        <div className="activeEventPanel inlineEventDetails">
+                        <>
                           {event.legacy_memory_id && (() => {
                             const linkedMemory = timeline.find((memory) => memory.id === event.legacy_memory_id);
                             if (!linkedMemory) {
@@ -1974,7 +1949,7 @@ export default function HomePage() {
                                 onDelete={deleteMemory}
                                 onAssignRecorder={assignRecorder}
                                 isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
-                                defaultExpanded
+                                hideHeader
                               />
                             );
                           })()}
@@ -2091,9 +2066,9 @@ export default function HomePage() {
                               ))}
                             </div>
                           )}
-                        </div>
+                        </>
                       )}
-                    </div>
+                    </article>
                   ))}
                 </div>
               </article>
