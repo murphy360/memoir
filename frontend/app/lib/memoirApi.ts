@@ -171,6 +171,19 @@ export async function renamePeriodTitle(periodId: number, title: string): Promis
   await expectOk(response, "Failed to rename period");
 }
 
+export async function updatePeriodDates(
+  periodId: number,
+  startDateText: string | null,
+  endDateText: string | null,
+): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/periods/${periodId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ start_date_text: startDateText, end_date_text: endDateText }),
+  });
+  await expectOk(response, "Failed to update period dates");
+}
+
 export async function deletePeriodById(periodId: number): Promise<void> {
   const response = await fetch(toAbsoluteApiUrl(`/api/periods/${periodId}`), { method: "DELETE" });
   await expectOk(response, "Failed to delete period");

@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardEventHandler, DragEventHandler, useEffect, useRef, useState } from "react";
+import { ClipboardEventHandler, DragEventHandler, useEffect, useMemo, useRef, useState } from "react";
 import { DirectoryManager } from "./components/DirectoryManager";
 import { MemoryCard } from "./components/MemoryCard";
 import { AssetEntry, DirectoryEntry, LifeEvent, MemoryEntry, Question, LifePeriod, LifePeriodAnalysis } from "./types";
@@ -33,6 +33,7 @@ import {
   removePersonAlias as removePersonAliasRequest,
   renameDirectoryEntry as renameDirectoryEntryRequest,
   renamePeriodTitle,
+  updatePeriodDates,
   renameEventTitle,
   researchEventById,
   resolveApiUrl,
@@ -133,6 +134,46 @@ function collectEventMemoryIds(event: LifeEvent, assets: AssetEntry[]): number[]
   return Array.from(ids);
 }
 
+type PeriodSortMode =
+  | "timeline-asc"
+  | "timeline-desc"
+  | "updated-desc"
+  | "events-desc"
+  | "title-asc";
+
+function parsePeriodYearHint(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const directYear = value.match(/\b(19\d{2}|20\d{2})\b/);
+  if (directYear) {
+    return Number.parseInt(directYear[1], 10);
+  }
+
+  const decadeYear = value.match(/\b(19\d0|20\d0)s\b/i);
+  if (decadeYear) {
+    return Number.parseInt(decadeYear[1], 10);
+  }
+
+  return null;
+}
+
+function compareDateStringsDesc(left: string, right: string): number {
+  const leftTime = new Date(left).getTime();
+  const rightTime = new Date(right).getTime();
+  if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
+    return 0;
+  }
+  if (Number.isNaN(leftTime)) {
+    return 1;
+  }
+  if (Number.isNaN(rightTime)) {
+    return -1;
+  }
+  return rightTime - leftTime;
+}
+
 export default function HomePage() {
   const [isDirectoryDrawerOpen, setIsDirectoryDrawerOpen] = useState(false);
   const [isCaptureDrawerOpen, setIsCaptureDrawerOpen] = useState(false);
@@ -186,6 +227,9 @@ export default function HomePage() {
   const [periodAnalysisBusyId, setPeriodAnalysisBusyId] = useState<number | null>(null);
   const [editingPeriodTitleId, setEditingPeriodTitleId] = useState<number | null>(null);
   const [editingPeriodTitleValue, setEditingPeriodTitleValue] = useState("");
+  const [editingPeriodDatesId, setEditingPeriodDatesId] = useState<number | null>(null);
+  const [editingPeriodStartValue, setEditingPeriodStartValue] = useState("");
+  const [editingPeriodEndValue, setEditingPeriodEndValue] = useState("");
   const [editingEventTitleId, setEditingEventTitleId] = useState<number | null>(null);
   const [editingEventTitleValue, setEditingEventTitleValue] = useState("");
   const [editingEventDateId, setEditingEventDateId] = useState<number | null>(null);
@@ -199,6 +243,7 @@ export default function HomePage() {
   const [eventDocumentUploadingId, setEventDocumentUploadingId] = useState<number | null>(null);
   const [eventDocumentErrors, setEventDocumentErrors] = useState<Record<number, string | null>>({});
   const [mergingPeriodId, setMergingPeriodId] = useState<number | null>(null);
+  const [periodSortMode, setPeriodSortMode] = useState<PeriodSortMode>("timeline-asc");
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
@@ -224,6 +269,81 @@ export default function HomePage() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const levelAnimationRef = useRef<number | null>(null);
   const documentDragDepthRef = useRef(0);
+
+  const eventCountByPeriod = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (const event of lifeEvents) {
+      if (event.period_id === null) {
+        continue;
+      }
+      counts[event.period_id] = (counts[event.period_id] ?? 0) + 1;
+    }
+    return counts;
+  }, [lifeEvents]);
+
+  const sortedLifePeriods = useMemo(() => {
+    const periods = [...lifePeriods];
+    periods.sort((left, right) => {
+      const leftStartYear = parsePeriodYearHint(left.start_date_text);
+      const rightStartYear = parsePeriodYearHint(right.start_date_text);
+      const leftEndYear = parsePeriodYearHint(left.end_date_text);
+      const rightEndYear = parsePeriodYearHint(right.end_date_text);
+      const leftEventCount = eventCountByPeriod[left.id] ?? left.event_count ?? 0;
+      const rightEventCount = eventCountByPeriod[right.id] ?? right.event_count ?? 0;
+
+      if (periodSortMode === "timeline-asc" || periodSortMode === "timeline-desc") {
+        if (leftStartYear === null && rightStartYear !== null) {
+          return 1;
+        }
+        if (leftStartYear !== null && rightStartYear === null) {
+          return -1;
+        }
+        if (leftStartYear !== null && rightStartYear !== null && leftStartYear !== rightStartYear) {
+          return periodSortMode === "timeline-asc"
+            ? leftStartYear - rightStartYear
+            : rightStartYear - leftStartYear;
+        }
+        if (leftEndYear === null && rightEndYear !== null) {
+          return 1;
+        }
+        if (leftEndYear !== null && rightEndYear === null) {
+          return -1;
+        }
+        if (leftEndYear !== null && rightEndYear !== null && leftEndYear !== rightEndYear) {
+          return periodSortMode === "timeline-asc"
+            ? leftEndYear - rightEndYear
+            : rightEndYear - leftEndYear;
+        }
+      }
+
+      if (periodSortMode === "events-desc") {
+        if (leftEventCount !== rightEventCount) {
+          return rightEventCount - leftEventCount;
+        }
+      }
+
+      if (periodSortMode === "updated-desc") {
+        const updatedCompare = compareDateStringsDesc(left.updated_at, right.updated_at);
+        if (updatedCompare !== 0) {
+          return updatedCompare;
+        }
+      }
+
+      if (periodSortMode === "title-asc") {
+        const titleCompare = left.title.localeCompare(right.title, undefined, { sensitivity: "base" });
+        if (titleCompare !== 0) {
+          return titleCompare;
+        }
+      }
+
+      const createdCompare = compareDateStringsDesc(left.created_at, right.created_at);
+      if (createdCompare !== 0) {
+        return createdCompare;
+      }
+      return left.title.localeCompare(right.title, undefined, { sensitivity: "base" });
+    });
+    return periods;
+  }, [eventCountByPeriod, lifePeriods, periodSortMode]);
 
   async function loadTimeline(): Promise<TimelineBundle | null> {
     try {
@@ -424,6 +544,22 @@ export default function HomePage() {
         ...patch,
       },
     }));
+  }
+
+  async function savePeriodDates(periodId: number) {
+    setStatus("Saving period dates...");
+    try {
+      await updatePeriodDates(
+        periodId,
+        editingPeriodStartValue.trim() || null,
+        editingPeriodEndValue.trim() || null,
+      );
+      setEditingPeriodDatesId(null);
+      await loadTimeline();
+      setStatus("Period dates updated.");
+    } catch {
+      setStatus("Failed to update period dates.");
+    }
   }
 
   async function renamePeriod(periodId: number, newTitle: string) {
@@ -1582,13 +1718,32 @@ export default function HomePage() {
                   <h2>Life Periods</h2>
                   <p className="meta">Start with periods, expand only the one you want, and add events inside that period.</p>
                 </div>
-                <button
-                  className="secondary"
-                  type="button"
-                  onClick={() => setIsPeriodComposerOpen((current) => !current)}
-                >
-                  {isPeriodComposerOpen ? "Hide period form" : "New period"}
-                </button>
+                <div className="controls" style={{ justifyContent: "flex-end", marginBottom: 0 }}>
+                  <label className="meta" htmlFor="period-sort-mode" style={{ alignSelf: "center" }}>
+                    Sort
+                  </label>
+                  <select
+                    id="period-sort-mode"
+                    className="directoryInput"
+                    value={periodSortMode}
+                    onChange={(e) => setPeriodSortMode(e.target.value as PeriodSortMode)}
+                    disabled={isSavingLifeStructure || isRecording || isLoading}
+                    style={{ width: "min(18rem, 44vw)" }}
+                  >
+                    <option value="timeline-asc">Timeline: oldest first</option>
+                    <option value="timeline-desc">Timeline: newest first</option>
+                    <option value="events-desc">Most active first</option>
+                    <option value="updated-desc">Recently updated</option>
+                    <option value="title-asc">Title: A to Z</option>
+                  </select>
+                  <button
+                    className="secondary"
+                    type="button"
+                    onClick={() => setIsPeriodComposerOpen((current) => !current)}
+                  >
+                    {isPeriodComposerOpen ? "Hide period form" : "New period"}
+                  </button>
+                </div>
               </div>
 
               {isPeriodComposerOpen && (
@@ -1646,7 +1801,7 @@ export default function HomePage() {
 
               <div className="lifePeriodList">
                 {lifePeriods.length === 0 && <p className="meta">No periods created yet.</p>}
-                {lifePeriods.map((period) => {
+                {sortedLifePeriods.map((period) => {
                   const eventsForPeriod = lifeEvents.filter((event) => event.period_id === period.id);
                   const eventsForPeriodIds = new Set(eventsForPeriod.map((e) => e.id));
                   const periodQuestionCount =
@@ -1702,10 +1857,56 @@ export default function HomePage() {
                               </button>
                             </div>
                           )}
-                          <p className="meta">
-                            Range: <span className="badge">{period.start_date_text || "unknown"}</span> to{" "}
-                            <span className="badge">{period.end_date_text || "unknown"}</span>
-                          </p>
+                          {editingPeriodDatesId === period.id ? (
+                            <div className="controls" style={{ marginBottom: "0.35rem", flexWrap: "wrap" }}>
+                              <input
+                                className="directoryInput"
+                                type="text"
+                                placeholder="Start (e.g. 1948)"
+                                value={editingPeriodStartValue}
+                                autoFocus
+                                onChange={(e) => setEditingPeriodStartValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") savePeriodDates(period.id);
+                                  if (e.key === "Escape") setEditingPeriodDatesId(null);
+                                }}
+                                style={{ width: "9rem" }}
+                              />
+                              <span className="meta" style={{ alignSelf: "center" }}>to</span>
+                              <input
+                                className="directoryInput"
+                                type="text"
+                                placeholder="End (e.g. 1960)"
+                                value={editingPeriodEndValue}
+                                onChange={(e) => setEditingPeriodEndValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") savePeriodDates(period.id);
+                                  if (e.key === "Escape") setEditingPeriodDatesId(null);
+                                }}
+                                style={{ width: "9rem" }}
+                              />
+                              <button className="primary" type="button" onClick={() => savePeriodDates(period.id)}>Save</button>
+                              <button className="secondary" type="button" onClick={() => setEditingPeriodDatesId(null)}>Cancel</button>
+                            </div>
+                          ) : (
+                            <p className="meta">
+                              Range: <span className="badge">{period.start_date_text || "unknown"}</span> to{" "}
+                              <span className="badge">{period.end_date_text || "unknown"}</span>
+                              <button
+                                className="secondary"
+                                type="button"
+                                title="Edit dates"
+                                style={{ marginLeft: "0.4rem", padding: "0.1rem 0.45rem", fontSize: "0.8rem" }}
+                                onClick={() => {
+                                  setEditingPeriodDatesId(period.id);
+                                  setEditingPeriodStartValue(period.start_date_text ?? "");
+                                  setEditingPeriodEndValue(period.end_date_text ?? "");
+                                }}
+                              >
+                                ✏️
+                              </button>
+                            </p>
+                          )}
                           <p className="meta">
                             Events: <span className="badge">{eventsForPeriod.length}</span> Assets: <span className="badge">{period.asset_count}</span>{periodQuestionCount > 0 && <> Questions: <span className="badge">{periodQuestionCount}</span></>}
                           </p>
@@ -1772,7 +1973,7 @@ export default function HomePage() {
                           {mergingPeriodId === period.id && (
                             <div className="controls" style={{ marginTop: "0.35rem", flexWrap: "wrap" }}>
                               <span className="meta" style={{ alignSelf: "center" }}>Move all events &amp; assets into:</span>
-                              {lifePeriods
+                              {sortedLifePeriods
                                 .filter((p) => p.id !== period.id)
                                 .map((p) => (
                                   <button
