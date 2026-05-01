@@ -172,6 +172,17 @@ def ensure_schema_migrations() -> None:
                 size_bytes INTEGER,
                 fingerprint_sha256 VARCHAR(64),
                 text_excerpt TEXT,
+                captured_at DATETIME,
+                captured_at_text VARCHAR(100),
+                gps_latitude REAL,
+                gps_longitude REAL,
+                camera_make VARCHAR(80),
+                camera_model VARCHAR(120),
+                lens_model VARCHAR(120),
+                orientation INTEGER,
+                image_width INTEGER,
+                image_height INTEGER,
+                exif_json TEXT,
                 notes TEXT,
                 legacy_memory_id INTEGER UNIQUE,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -182,6 +193,34 @@ def ensure_schema_migrations() -> None:
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_assets_period_id ON assets (period_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_assets_kind ON assets (kind)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_assets_fingerprint_sha256 ON assets (fingerprint_sha256)"))
+
+        asset_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(assets)")).fetchall()
+        }
+        if "captured_at" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN captured_at DATETIME"))
+        if "captured_at_text" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN captured_at_text VARCHAR(100)"))
+        if "gps_latitude" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN gps_latitude REAL"))
+        if "gps_longitude" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN gps_longitude REAL"))
+        if "camera_make" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN camera_make VARCHAR(80)"))
+        if "camera_model" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN camera_model VARCHAR(120)"))
+        if "lens_model" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN lens_model VARCHAR(120)"))
+        if "orientation" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN orientation INTEGER"))
+        if "image_width" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN image_width INTEGER"))
+        if "image_height" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN image_height INTEGER"))
+        if "exif_json" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN exif_json TEXT"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_assets_captured_at ON assets (captured_at)"))
 
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS event_assets (

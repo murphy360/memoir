@@ -2,7 +2,7 @@ import json
 from datetime import date, datetime
 from typing import Any, Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -218,6 +218,17 @@ class Asset(Base):
     size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     fingerprint_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     text_excerpt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    captured_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    captured_at_text: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    gps_latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gps_longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    camera_make: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    camera_model: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    lens_model: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    orientation: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    image_width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    image_height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    exif_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     legacy_memory_id: Mapped[Optional[int]] = mapped_column(ForeignKey("memories.id", ondelete="SET NULL"), nullable=True, unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

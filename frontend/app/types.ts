@@ -115,6 +115,16 @@ export type AssetEntry = {
   original_filename: string | null;
   content_type: string | null;
   size_bytes: number | null;
+  captured_at: string | null;
+  captured_at_text: string | null;
+  gps_latitude: number | null;
+  gps_longitude: number | null;
+  camera_make: string | null;
+  camera_model: string | null;
+  lens_model: string | null;
+  orientation: number | null;
+  image_width: number | null;
+  image_height: number | null;
   playback_url: string | null;
   text_excerpt: string | null;
   notes: string | null;

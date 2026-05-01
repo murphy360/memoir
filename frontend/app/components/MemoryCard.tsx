@@ -18,6 +18,8 @@ type MemoryCardProps = {
   isBusy: boolean;
   defaultExpanded?: boolean;
   hideHeader?: boolean;
+  containerId?: string;
+  isHighlighted?: boolean;
 };
 
 function asLabelList(items: string[]): string {
@@ -42,6 +44,8 @@ export function MemoryCard({
   isBusy,
   defaultExpanded = false,
   hideHeader = false,
+  containerId,
+  isHighlighted = false,
 }: MemoryCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded || hideHeader);
   const [selectedRecorder, setSelectedRecorder] = useState("");
@@ -57,7 +61,7 @@ export function MemoryCard({
   const canAssignRecorder = !memory.recorder_name && selectedRecorder;
 
   return (
-    <article className="memory">
+    <article id={containerId} className={`memory${isHighlighted ? " focusPulse" : ""}`}>
       {!hideHeader && (
         <div className="memoryHeader">
           <div className="memoryHeaderText">
@@ -244,7 +248,7 @@ export function MemoryCard({
           Reanalyze
         </button>
         <button className="ghost" type="button" onClick={() => onDelete(memory.id)} disabled={isBusy}>
-          Delete
+          Delete Memory
         </button>
       </div>}
     </article>

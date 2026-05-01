@@ -49,6 +49,7 @@ from app.services.gemini_client import (
     suggest_date_from_research,
 )
 from app.services.gemini_client import extract_text_from_document
+from app.services.image_metadata import extract_and_apply_image_metadata
 from app.services.directory import (
     assign_recorder_person,
     build_directory_response,
@@ -71,6 +72,7 @@ from app.services.periods import (
     build_asset_response,
     build_event_response,
     build_period_response,
+    ensure_event_asset_link,
     normalize_directory_name,
     normalize_period_title,
     refresh_period_summary,
@@ -463,6 +465,9 @@ async def upload_asset(
         fingerprint_sha256=fingerprint,
         notes=notes,
     )
+    if normalized_kind != "audio":
+        extract_and_apply_image_metadata(asset, file_bytes, content_type)
+
     db.add(asset)
     db.flush()
 
@@ -876,6 +881,7 @@ def get_memory_document(memory_id: int, download: bool = False, db: Session = De
 @app.post("/api/memories", response_model=MemoryResponse)
 async def create_memory(
     audio: UploadFile = File(...),
+    event_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
 ) -> MemoryEntry:
     audio_bytes = await audio.read()
@@ -922,6 +928,19 @@ async def create_memory(
     sync_memory_people(db, entry, metadata.people)
     sync_memory_places(db, entry, metadata.locations)
     sync_life_hierarchy_for_memory(db, entry)
+
+    # If the caller specified a target event, explicitly link the audio asset to it.
+    if event_id is not None:
+        target_event = db.query(LifeEvent).filter(LifeEvent.id == event_id).first()
+        if target_event:
+            audio_asset = (
+                db.query(Asset)
+                .filter(Asset.legacy_memory_id == entry.id, Asset.kind == "audio")
+                .first()
+            )
+            if audio_asset:
+                ensure_event_asset_link(db, target_event, audio_asset, relation_type="recording")
+
     db.commit()
     db.refresh(entry)
 
@@ -1041,8 +1060,54 @@ def reanalyze_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEnt
     memory = db.get(MemoryEntry, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
+
+    # --- Document memory reanalysis ---
+    if memory.document_filename and not memory.audio_filename:
+        file_path = DOCUMENT_STORAGE_DIR / memory.document_filename
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Document file missing from storage")
+
+        file_bytes = file_path.read_bytes()
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="Stored document is empty")
+
+        content_type = memory.document_content_type or "application/octet-stream"
+        transcript = extract_text_from_document(
+            memory.document_original_filename or memory.document_filename,
+            file_bytes,
+            content_type,
+        )
+
+        metadata = extract_metadata_with_gemini_function_call(transcript)
+        if metadata is None:
+            metadata = fallback_metadata_from_transcript(transcript)
+
+        memory.transcript = transcript
+        memory.estimated_date_sort = metadata.sort_date
+        memory.estimated_date_text = metadata.date_text
+        memory.date_precision = metadata.date_precision
+        memory.date_year = metadata.date_year
+        memory.date_month = metadata.date_month
+        memory.date_day = metadata.date_day
+        memory.date_decade = metadata.date_decade
+        memory.people_json = json.dumps(metadata.people)
+        memory.locations_json = json.dumps(metadata.locations)
+        memory.research_summary = None
+        memory.research_sources_json = None
+        memory.research_queries_json = None
+        if not memory.recorder_person_id and not memory.recorder_name:
+            assign_recorder_person(db, memory, metadata.recorder_name)
+        sync_memory_people(db, memory, metadata.people)
+        sync_memory_places(db, memory, metadata.locations)
+        sync_life_hierarchy_for_memory(db, memory)
+
+        db.commit()
+        db.refresh(memory)
+        return memory
+
+    # --- Audio memory reanalysis ---
     if not memory.audio_filename:
-        raise HTTPException(status_code=400, detail="Memory has no stored audio to reanalyze")
+        raise HTTPException(status_code=400, detail="Memory has no stored audio or document to reanalyze")
 
     file_path = AUDIO_STORAGE_DIR / memory.audio_filename
     if not file_path.exists():

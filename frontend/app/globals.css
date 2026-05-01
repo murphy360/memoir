@@ -443,6 +443,25 @@ button:disabled {
   background: #fffdf9;
 }
 
+@keyframes focusPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.35);
+    border-color: #0f766e;
+  }
+  55% {
+    box-shadow: 0 0 0 10px rgba(15, 118, 110, 0);
+    border-color: #0f766e;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0);
+  }
+}
+
+.focusPulse {
+  border-color: #0f766e !important;
+  animation: focusPulse 1.8s ease-out 1;
+}
+
 .memoryHeader {
   display: flex;
   justify-content: space-between;
@@ -691,6 +710,59 @@ button:disabled {
   font-weight: 700;
 }
 
+.entitySectionLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin: 0.25rem 0 0.45rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.entityFlowArrow {
+  font-size: 0.78rem;
+  color: #7a7066;
+  text-transform: lowercase;
+}
+
+.entityPill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.14rem 0.52rem;
+  border: 1px solid transparent;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.entityPillPeriod {
+  color: #2f4a7b;
+  background: #e8efff;
+  border-color: #cbd9ff;
+}
+
+.entityPillEvent {
+  color: #0f5a54;
+  background: #e7f8f4;
+  border-color: #bce8de;
+}
+
+.entityPillMemory {
+  color: #6a4a16;
+  background: #fff6df;
+  border-color: #f2d793;
+}
+
+.entityPillAsset {
+  color: #6a3f4c;
+  background: #f8eaf0;
+  border-color: #e8c5d2;
+}
+
 @media (max-width: 640px) {
   main {
     padding: 0.9rem;
@@ -907,6 +979,13 @@ button.ghost:hover:not(:disabled) {
   gap: 0.5rem;
 }
 
+.pendingRecordingInline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
 .lifePeriodList {
   display: grid;
   gap: 0.75rem;
@@ -966,6 +1045,41 @@ button.ghost:hover:not(:disabled) {
 .assetTranscript {
   margin-top: 0.45rem;
   max-width: 60ch;
+}
+
+.assetMetaBadgeRow {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 0.25rem 0 0.35rem;
+}
+
+.assetMetaBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.14rem 0.5rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.assetMetaBadge.isPresent {
+  background: #e7f8f4;
+  color: #0f5a54;
+  border-color: #b8e7de;
+}
+
+.assetMetaBadge.isPartial {
+  background: #fff6df;
+  color: #805a00;
+  border-color: #f2d793;
+}
+
+.assetMetaBadge.isMissing {
+  background: #f7ece7;
+  color: #7f4e3b;
+  border-color: #e5c9bc;
 }
 
 .lifeAssetLinkControls {

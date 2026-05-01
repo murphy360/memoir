@@ -102,13 +102,14 @@ export async function createPeriod(payload: {
   start_date_text: string | null;
   end_date_text: string | null;
   summary: string | null;
-}): Promise<void> {
+}): Promise<LifePeriod> {
   const response = await fetch(toAbsoluteApiUrl("/api/periods"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   await expectOk(response, "Create period failed");
+  return response.json();
 }
 
 export async function createEvent(payload: {
@@ -116,13 +117,14 @@ export async function createEvent(payload: {
   period_id: number | null;
   description: string | null;
   event_date_text: string | null;
-}): Promise<void> {
+}): Promise<LifeEvent> {
   const response = await fetch(toAbsoluteApiUrl("/api/events"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   await expectOk(response, "Create event failed");
+  return response.json();
 }
 
 export async function analyzeLifePeriod(
@@ -161,12 +163,13 @@ export async function mergePeriodInto(fromPeriodId: number, intoPeriodId: number
   await expectOk(response, "Failed to merge period");
 }
 
-export async function uploadAsset(formData: FormData): Promise<void> {
+export async function uploadAsset(formData: FormData): Promise<AssetEntry> {
   const response = await fetch(toAbsoluteApiUrl("/api/assets"), {
     method: "POST",
     body: formData,
   });
   await expectOk(response, "Upload asset failed");
+  return response.json();
 }
 
 export async function linkAssetToEvent(
@@ -322,9 +325,12 @@ export async function deleteDirectoryEntry(kind: "people" | "places", itemId: nu
   await expectOk(response, "Delete failed");
 }
 
-export async function createMemoryFromAudioBlob(blob: Blob): Promise<MemoryEntry> {
+export async function createMemoryFromAudioBlob(blob: Blob, eventId?: number): Promise<MemoryEntry> {
   const formData = new FormData();
   formData.append("audio", blob, `memory-${Date.now()}.webm`);
+  if (eventId !== undefined) {
+    formData.append("event_id", String(eventId));
+  }
 
   const response = await fetch(toAbsoluteApiUrl("/api/memories"), {
     method: "POST",
@@ -342,7 +348,7 @@ export async function answerQuestionWithMemory(questionId: number, answerMemoryI
   });
 }
 
-export async function createMemoryFromDocument(formData: FormData): Promise<void> {
+export async function createMemoryFromDocument(formData: FormData): Promise<MemoryEntry> {
   const response = await fetch(toAbsoluteApiUrl("/api/memories/document"), {
     method: "POST",
     body: formData,
@@ -352,4 +358,6 @@ export async function createMemoryFromDocument(formData: FormData): Promise<void
     const errorData = await response.json().catch(() => ({ detail: "Upload failed" }));
     throw new Error(errorData.detail || "Upload failed");
   }
+
+  return response.json();
 }

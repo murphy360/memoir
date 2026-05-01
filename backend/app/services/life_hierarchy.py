@@ -1,8 +1,56 @@
+import logging
+import os
+from pathlib import Path
+
 from sqlalchemy.orm import Session
 
 from app.models import Asset, LifeEvent, LifePeriod, MemoryEntry
 from app.services.directory import assign_recorder_person, sync_memory_people, sync_memory_places
+from app.services.image_metadata import extract_and_apply_image_metadata
 from app.services.periods import ensure_event_asset_link, get_or_create_period_for_memory
+
+
+logger = logging.getLogger("memoir.life_hierarchy")
+DOCUMENT_STORAGE_DIR = Path(os.getenv("DOCUMENT_STORAGE_DIR", "/data/documents"))
+
+
+def _sync_document_asset_image_metadata(memory: MemoryEntry, asset: Asset) -> None:
+    if asset.kind != "photo" or not memory.document_filename:
+        return
+
+    document_path = DOCUMENT_STORAGE_DIR / memory.document_filename
+    if not document_path.exists():
+        return
+
+    try:
+        file_bytes = document_path.read_bytes()
+    except OSError as exc:
+        logger.warning("Could not read image asset bytes for memory %s: %s", memory.id, exc)
+        return
+
+    if not file_bytes:
+        return
+
+    extract_and_apply_image_metadata(asset, file_bytes, memory.document_content_type)
+
+
+def _has_reliable_memory_date(memory: MemoryEntry) -> bool:
+    if memory.date_year or memory.date_decade or memory.estimated_date_sort:
+        return True
+    precision = (memory.date_precision or "").strip().lower()
+    return precision in {"day", "month", "year", "decade", "approximate"}
+
+
+def _should_auto_create_event_for_memory(memory: MemoryEntry, existing_event: LifeEvent | None) -> bool:
+    if existing_event is not None:
+        return True
+
+    # For new document/photo memories with unknown timing, keep the asset unlinked
+    # so it lands in the Unlinked Asset Inbox for manual event assignment.
+    if memory.document_filename and not memory.audio_filename and not _has_reliable_memory_date(memory):
+        return False
+
+    return True
 
 
 def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
@@ -12,8 +60,9 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
         .first()
     )
     period = None
+    should_create_event = _should_auto_create_event_for_memory(memory, event)
 
-    if not event:
+    if not event and should_create_event:
         period = get_or_create_period_for_memory(db, memory)
         event_title = (memory.event_description or "").strip() or f"Memory {memory.id}"
         if len(event_title) > 180:
@@ -34,9 +83,9 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
         )
         db.add(event)
         db.flush()
-    elif event.period_id is not None:
+    elif event and event.period_id is not None:
         period = event.period
-    else:
+    elif event:
         # Recovery path: if all periods were removed, repopulate inferred structure
         # so legacy events remain visible in the timeline after restart.
         has_any_period = db.query(LifePeriod.id).first() is not None
@@ -73,7 +122,8 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
             if not audio_asset.text_excerpt and memory.transcript:
                 audio_asset.text_excerpt = memory.transcript[:1200]
 
-        ensure_event_asset_link(db, event, audio_asset, relation_type="recording")
+        if event is not None:
+            ensure_event_asset_link(db, event, audio_asset, relation_type="recording")
 
     if memory.document_filename:
         asset_kind = "photo" if (memory.document_content_type or "").startswith("image/") else "document"
@@ -99,7 +149,10 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
         elif document_asset.period_id is None and period is not None:
             document_asset.period_id = period.id
 
-        ensure_event_asset_link(db, event, document_asset)
+        _sync_document_asset_image_metadata(memory, document_asset)
+
+        if event is not None:
+            ensure_event_asset_link(db, event, document_asset)
 
 
 def backfill_normalized_directory(db: Session) -> None:

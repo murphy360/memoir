@@ -5,6 +5,7 @@ import { DirectoryManager } from "./components/DirectoryManager";
 import { MemoryCard } from "./components/MemoryCard";
 import { AssetEntry, DirectoryEntry, LifeEvent, MemoryEntry, Question, LifePeriod, LifePeriodAnalysis } from "./types";
 import {
+  type TimelineBundle,
   analyzeLifePeriod,
   applyResearchSuggestionById,
   answerQuestionWithMemory,
@@ -58,6 +59,59 @@ type AudioInputDevice = {
   label: string;
 };
 
+function formatAssetCaptureDate(asset: AssetEntry): string | null {
+  if (asset.captured_at_text) {
+    return asset.captured_at_text;
+  }
+  if (asset.captured_at) {
+    const parsed = new Date(asset.captured_at);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleString();
+    }
+    return asset.captured_at;
+  }
+  return null;
+}
+
+function formatAssetGps(asset: AssetEntry): string | null {
+  if (asset.gps_latitude === null || asset.gps_longitude === null) {
+    return null;
+  }
+  return `${asset.gps_latitude.toFixed(5)}, ${asset.gps_longitude.toFixed(5)}`;
+}
+
+function renderImageMetadataBadges(asset: AssetEntry): JSX.Element | null {
+  const isImage = asset.kind === "photo" || (asset.content_type || "").startsWith("image/");
+  if (!isImage) {
+    return null;
+  }
+
+  const hasLocation = asset.gps_latitude !== null && asset.gps_longitude !== null;
+  const hasCapture = Boolean(asset.captured_at_text || asset.captured_at);
+  const hasCamera = Boolean(asset.camera_make || asset.camera_model || asset.lens_model);
+  const hasDimensions = asset.image_width !== null || asset.image_height !== null;
+  const hasNonLocationMetadata = hasCapture || hasCamera || hasDimensions;
+
+  let metadataLabel = "Metadata: none";
+  let metadataClass = "assetMetaBadge isMissing";
+  if (hasLocation && hasNonLocationMetadata) {
+    metadataLabel = "Metadata: rich";
+    metadataClass = "assetMetaBadge isPresent";
+  } else if (hasLocation || hasNonLocationMetadata) {
+    metadataLabel = "Metadata: partial";
+    metadataClass = "assetMetaBadge isPartial";
+  }
+
+  return (
+    <div className="assetMetaBadgeRow">
+      <span className={metadataClass}>{metadataLabel}</span>
+      <span className={`assetMetaBadge ${hasLocation ? "isPresent" : "isMissing"}`}>
+        Location: {hasLocation ? "present" : "missing"}
+      </span>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const [isDirectoryDrawerOpen, setIsDirectoryDrawerOpen] = useState(false);
   const [isCaptureDrawerOpen, setIsCaptureDrawerOpen] = useState(false);
@@ -87,10 +141,13 @@ export default function HomePage() {
   const [peopleDirectory, setPeopleDirectory] = useState<DirectoryEntry[]>([]);
   const [placesDirectory, setPlacesDirectory] = useState<DirectoryEntry[]>([]);
   const [pendingRecording, setPendingRecording] = useState<PendingRecording | null>(null);
+  const [recordingForEventId, setRecordingForEventId] = useState<number | null>(null);
+  const [eventRecordingPending, setEventRecordingPending] = useState<Record<number, PendingRecording>>({});
   const [audioDevices, setAudioDevices] = useState<AudioInputDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [audioLevel, setAudioLevel] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [highlightedElementId, setHighlightedElementId] = useState<string | null>(null);
   const [memoryActionId, setMemoryActionId] = useState<number | null>(null);
   const [directoryBusyKey, setDirectoryBusyKey] = useState<string | null>(null);
   const [isPeriodComposerOpen, setIsPeriodComposerOpen] = useState(false);
@@ -120,6 +177,7 @@ export default function HomePage() {
   const [documentUploadError, setDocumentUploadError] = useState<string | null>(null);
   const documentFileInputRef = useRef<HTMLInputElement | null>(null);
   const eventAssetInputRef = useRef<HTMLInputElement | null>(null);
+  const focusClearTimerRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const shouldDiscardRecordingRef = useRef(false);
@@ -128,7 +186,7 @@ export default function HomePage() {
   const levelAnimationRef = useRef<number | null>(null);
   const documentDragDepthRef = useRef(0);
 
-  async function loadTimeline() {
+  async function loadTimeline(): Promise<TimelineBundle | null> {
     try {
       const data = await fetchTimelineBundle();
       setTimeline(data.memories);
@@ -153,9 +211,50 @@ export default function HomePage() {
       if (data.unlinkedAssets) {
         setUnlinkedAssets(data.unlinkedAssets);
       }
+      return data;
     } catch (error) {
       setStatus("Could not load timeline from API.");
+      return null;
     }
+  }
+
+  function markAndScrollTo(elementId: string, delayMs = 120) {
+    window.setTimeout(() => {
+      const element = document.getElementById(elementId);
+      if (!element) {
+        return;
+      }
+
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedElementId(elementId);
+
+      if (focusClearTimerRef.current !== null) {
+        window.clearTimeout(focusClearTimerRef.current);
+      }
+      focusClearTimerRef.current = window.setTimeout(() => {
+        setHighlightedElementId((current) => (current === elementId ? null : current));
+      }, 3200);
+    }, delayMs);
+  }
+
+  function focusEventInTimeline(eventId: number, periodId: number | null) {
+    if (periodId !== null) {
+      setExpandedPeriods((current) => ({ ...current, [periodId]: true }));
+    }
+    setActiveEventId(eventId);
+    void loadAssetsForEvent(eventId);
+    markAndScrollTo(`event-card-${eventId}`, periodId !== null ? 220 : 120);
+  }
+
+  function focusMemoryInTimeline(memoryId: number, data: TimelineBundle | null) {
+    const linkedEvent = data?.events?.find((event) => event.legacy_memory_id === memoryId) || null;
+    if (linkedEvent) {
+      focusEventInTimeline(linkedEvent.id, linkedEvent.period_id);
+      markAndScrollTo(`memory-card-${memoryId}`, 320);
+      return;
+    }
+
+    markAndScrollTo(`memory-card-${memoryId}`, 160);
   }
 
   async function loadAssetsForEvent(eventId: number) {
@@ -174,7 +273,7 @@ export default function HomePage() {
     setIsSavingLifeStructure(true);
     setStatus("Creating period...");
     try {
-      await createPeriod({
+      const created = await createPeriod({
         title: newPeriodTitle.trim(),
         start_date_text: newPeriodStart.trim() || null,
         end_date_text: newPeriodEnd.trim() || null,
@@ -185,6 +284,8 @@ export default function HomePage() {
       setNewPeriodEnd("");
       setNewPeriodSummary("");
       await loadTimeline();
+      setExpandedPeriods((current) => ({ ...current, [created.id]: true }));
+      markAndScrollTo(`period-card-${created.id}`, 220);
       setStatus("Period created.");
     } catch {
       setStatus("Failed to create period.");
@@ -211,7 +312,7 @@ export default function HomePage() {
     setIsSavingLifeStructure(true);
     setStatus("Creating event...");
     try {
-      await createEvent({
+      const created = await createEvent({
         title: title.trim(),
         period_id: periodId,
         description: description.trim() || null,
@@ -231,6 +332,7 @@ export default function HomePage() {
         }));
       }
       await loadTimeline();
+      focusEventInTimeline(created.id, created.period_id);
       setStatus("Event created.");
     } catch {
       setStatus("Failed to create event.");
@@ -341,13 +443,14 @@ export default function HomePage() {
       if (assetUploadNotes.trim()) {
         formData.append("notes", assetUploadNotes.trim());
       }
-      await uploadAsset(formData);
+      const uploaded = await uploadAsset(formData);
 
       setAssetUploadNotes("");
       if (eventAssetInputRef.current) {
         eventAssetInputRef.current.value = "";
       }
       await Promise.all([loadTimeline(), loadAssetsForEvent(activeEventId)]);
+      markAndScrollTo(`asset-row-${uploaded.id}`, 220);
       setStatus("Asset uploaded and linked to event.");
     } catch {
       setStatus("Failed to upload asset to event.");
@@ -385,12 +488,12 @@ export default function HomePage() {
   }
 
   async function deleteLifeEvent(eventId: number) {
-    if (!window.confirm("Delete this event from the life timeline?")) {
+    if (!window.confirm("Remove this event from the timeline? Linked memories and assets will be kept and moved to inbox/unlinked state.")) {
       return;
     }
 
     setIsSavingLifeStructure(true);
-    setStatus("Deleting event...");
+    setStatus("Removing event...");
     try {
       await deleteEventById(eventId);
 
@@ -399,9 +502,9 @@ export default function HomePage() {
         setActiveEventAssets([]);
       }
       await loadTimeline();
-      setStatus("Event deleted.");
+      setStatus("Event removed. Memories and assets were kept.");
     } catch {
-      setStatus("Failed to delete event.");
+      setStatus("Failed to remove event.");
     } finally {
       setIsSavingLifeStructure(false);
     }
@@ -519,11 +622,11 @@ export default function HomePage() {
     }
 
     setMemoryActionId(memoryId);
-    setStatus("Deleting memory...");
+    setStatus("Deleting memory permanently...");
     try {
       await deleteMemoryById(memoryId);
       await loadTimeline();
-      setStatus("Memory deleted.");
+      setStatus("Memory permanently deleted.");
     } catch {
       setStatus("Failed to delete memory.");
     } finally {
@@ -735,6 +838,9 @@ export default function HomePage() {
 
   useEffect(() => {
     return () => {
+      if (focusClearTimerRef.current !== null) {
+        window.clearTimeout(focusClearTimerRef.current);
+      }
       if (currentPreviewAudioUrlRef.current) {
         URL.revokeObjectURL(currentPreviewAudioUrlRef.current);
       }
@@ -742,7 +848,7 @@ export default function HomePage() {
     };
   }, []);
 
-  async function startRecording() {
+  async function startRecording(forEventId?: number) {
     try {
       shouldDiscardRecordingRef.current = false;
       const audioConstraint = selectedDeviceId
@@ -754,6 +860,9 @@ export default function HomePage() {
       startAudioLevelMonitoring(stream);
 
       await refreshAudioDevices();
+
+      const targetEventId = forEventId ?? null;
+      setRecordingForEventId(targetEventId);
 
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
@@ -770,6 +879,7 @@ export default function HomePage() {
 
         if (shouldDiscard) {
           chunksRef.current = [];
+          setRecordingForEventId(null);
           setStatus(
             activeQuestion
               ? "Recording canceled. Your question is still waiting for an answer."
@@ -782,21 +892,33 @@ export default function HomePage() {
         const nextAudioUrl = URL.createObjectURL(blob);
         const nextPendingId = `${Date.now()}`;
 
-        setPendingRecording((current) => {
-          if (current?.audioUrl) {
-            URL.revokeObjectURL(current.audioUrl);
-          }
-          currentPreviewAudioUrlRef.current = nextAudioUrl;
-          return {
-            id: nextPendingId,
-            audioUrl: nextAudioUrl,
-            sizeBytes: blob.size,
-            status: "recorded",
-          };
-        });
+        if (targetEventId !== null) {
+          setEventRecordingPending((prev) => ({
+            ...prev,
+            [targetEventId]: {
+              id: nextPendingId,
+              audioUrl: nextAudioUrl,
+              sizeBytes: blob.size,
+              status: "recorded",
+            },
+          }));
+        } else {
+          setPendingRecording((current) => {
+            if (current?.audioUrl) {
+              URL.revokeObjectURL(current.audioUrl);
+            }
+            currentPreviewAudioUrlRef.current = nextAudioUrl;
+            return {
+              id: nextPendingId,
+              audioUrl: nextAudioUrl,
+              sizeBytes: blob.size,
+              status: "recorded",
+            };
+          });
+        }
 
         setStatus("Audio recorded. You can play it now while we process it.");
-        await uploadRecording(blob, nextPendingId);
+        await uploadRecording(blob, nextPendingId, targetEventId ?? undefined);
       };
 
       recorder.start();
@@ -830,23 +952,31 @@ export default function HomePage() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     stopAudioLevelMonitoring();
     setIsRecording(false);
+    setRecordingForEventId(null);
     setStatus("Canceling recording...");
   }
 
-  async function uploadRecording(blob: Blob, pendingId: string) {
+  async function uploadRecording(blob: Blob, pendingId: string, eventId?: number) {
     setIsLoading(true);
-    setPendingRecording((current) =>
-      current && current.id === pendingId
-        ? {
-            ...current,
-            status: "processing",
-            error: undefined,
-          }
-        : current,
-    );
+
+    const updatePending = (updater: (prev: PendingRecording) => PendingRecording) => {
+      if (eventId !== undefined) {
+        setEventRecordingPending((prev) => {
+          const current = prev[eventId];
+          if (!current || current.id !== pendingId) return prev;
+          return { ...prev, [eventId]: updater(current) };
+        });
+      } else {
+        setPendingRecording((current) =>
+          current && current.id === pendingId ? updater(current) : current,
+        );
+      }
+    };
+
+    updatePending((p) => ({ ...p, status: "processing", error: undefined }));
 
     try {
-      const created: MemoryEntry = await createMemoryFromAudioBlob(blob);
+      const created: MemoryEntry = await createMemoryFromAudioBlob(blob, eventId);
       if (activeQuestion) {
         try {
           await answerQuestionWithMemory(activeQuestion.id, created.id);
@@ -855,28 +985,21 @@ export default function HomePage() {
         }
         setActiveQuestion(null);
       }
-      await loadTimeline();
+      const data = await loadTimeline();
+      focusMemoryInTimeline(created.id, data);
+      if (eventId !== undefined) {
+        await loadAssetsForEvent(eventId);
+      }
       setStatus("Memory saved and analyzed.");
-      setPendingRecording((current) =>
-        current && current.id === pendingId
-          ? {
-              ...current,
-              status: "saved",
-              error: undefined,
-            }
-          : current,
-      );
+      setRecordingForEventId(null);
+      updatePending((p) => ({ ...p, status: "saved", error: undefined }));
     } catch (error) {
       setStatus("Failed to process recording. Check API connection.");
-      setPendingRecording((current) =>
-        current && current.id === pendingId
-          ? {
-              ...current,
-              status: "failed",
-              error: "Processing failed. You can still play this audio and try again.",
-            }
-          : current,
-      );
+      updatePending((p) => ({
+        ...p,
+        status: "failed",
+        error: "Processing failed. You can still play this audio and try again.",
+      }));
     } finally {
       setIsLoading(false);
     }
@@ -889,9 +1012,10 @@ export default function HomePage() {
     try {
       const formData = new FormData();
       formData.append("file", file, file.name);
-      await createMemoryFromDocument(formData);
+      const created = await createMemoryFromDocument(formData);
 
-      await loadTimeline();
+      const data = await loadTimeline();
+      focusMemoryInTimeline(created.id, data);
       setStatus("Document analyzed and saved as a memory.");
       if (documentFileInputRef.current) {
         documentFileInputRef.current.value = "";
@@ -1316,7 +1440,11 @@ export default function HomePage() {
                   const periodAnalysis = periodAnalysisById[period.id] || null;
 
                   return (
-                    <article key={period.id} className="memory">
+                    <article
+                      key={period.id}
+                      id={`period-card-${period.id}`}
+                      className={`memory${highlightedElementId === `period-card-${period.id}` ? " focusPulse" : ""}`}
+                    >
                       <div className="periodSummaryRow">
                         <div style={{ flex: 1 }}>
                           {editingPeriodTitleId === period.id ? (
@@ -1338,6 +1466,7 @@ export default function HomePage() {
                             </div>
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              <span className="entityPill entityPillPeriod">Period</span>
                               <h3 style={{ margin: 0 }}>{period.title}</h3>
                               <button
                                 className="secondary"
@@ -1563,9 +1692,20 @@ export default function HomePage() {
                           <div className="lifeEventList">
                             {eventsForPeriod.length === 0 && <p className="meta">No events in this period yet.</p>}
                             {eventsForPeriod.map((event) => (
-                              <article key={event.id} className="memory">
+                              <article
+                                key={event.id}
+                                id={`event-card-${event.id}`}
+                                className={`memory${highlightedElementId === `event-card-${event.id}` ? " focusPulse" : ""}`}
+                              >
                                 <div className="periodSummaryRow">
                                   <div>
+                                    <p className="entitySectionLabel" style={{ marginBottom: "0.2rem" }}>
+                                      <span className="entityPill entityPillEvent">Event</span>
+                                      <span className="entityFlowArrow">contains</span>
+                                      <span className="entityPill entityPillMemory">Memory</span>
+                                      <span className="entityFlowArrow">+</span>
+                                      <span className="entityPill entityPillAsset">Assets</span>
+                                    </p>
                                     <p style={{ margin: 0, fontWeight: 700 }}>{event.title}</p>
                                     <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}</p>
                                   </div>
@@ -1594,8 +1734,15 @@ export default function HomePage() {
                                         return null;
                                       }
                                       return (
-                                        <MemoryCard
+                                        <>
+                                          <p className="entitySectionLabel">
+                                            <span className="entityPill entityPillMemory">Memory</span>
+                                            Narrative, transcript, and extracted context
+                                          </p>
+                                          <MemoryCard
                                           key={`event-memory-${linkedMemory.id}`}
+                                          containerId={`memory-card-${linkedMemory.id}`}
+                                          isHighlighted={highlightedElementId === `memory-card-${linkedMemory.id}`}
                                           memory={linkedMemory}
                                           linkedQuestions={questions.filter((q) => q.source_memory_id === linkedMemory.id)}
                                           peopleOptions={peopleDirectory}
@@ -1610,6 +1757,7 @@ export default function HomePage() {
                                           isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
                                           hideHeader
                                         />
+                                      </>
                                       );
                                     })()}
                                     {(questionsByEventId.get(event.id)?.length ?? 0) > 0 && (
@@ -1668,6 +1816,56 @@ export default function HomePage() {
                                         disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
                                       />
                                     </div>
+                                    <div className="lifeFormFields">
+                                      {recordingForEventId === event.id ? (
+                                        <>
+                                          <p className="meta">Recording for this event… <span className="badge">live</span></p>
+                                          <div className="controls">
+                                            <button
+                                              className="secondary"
+                                              type="button"
+                                              onClick={stopRecording}
+                                              disabled={!isRecording || isLoading}
+                                            >
+                                              Stop &amp; Process
+                                            </button>
+                                            <button
+                                              className="ghost"
+                                              type="button"
+                                              onClick={cancelRecording}
+                                              disabled={!isRecording || isLoading}
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <button
+                                          className="secondary"
+                                          type="button"
+                                          onClick={() => startRecording(event.id)}
+                                          disabled={isRecording || isLoading || isUploadingAsset}
+                                          title="Record a new audio narration linked to this event"
+                                        >
+                                          &#9679; Record Narration
+                                        </button>
+                                      )}
+                                      {eventRecordingPending[event.id] && (
+                                        <div className="pendingRecordingInline">
+                                          <audio
+                                            controls
+                                            preload="metadata"
+                                            src={eventRecordingPending[event.id].audioUrl}
+                                            style={{ flex: 1 }}
+                                          />
+                                          <span className="meta">
+                                            {eventRecordingPending[event.id].status === "processing" && "Processing…"}
+                                            {eventRecordingPending[event.id].status === "saved" && "Saved ✓"}
+                                            {eventRecordingPending[event.id].status === "failed" && (eventRecordingPending[event.id].error ?? "Failed")}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
                                     <div className="lifeEventManagementRow">
                                       <select
                                         className="directoryInput"
@@ -1691,21 +1889,43 @@ export default function HomePage() {
                                       <button
                                         className="ghost"
                                         type="button"
+                                        title="Remove event wrapper only (keeps linked memory and assets)."
                                         onClick={() => deleteLifeEvent(event.id)}
                                         disabled={isSavingLifeStructure}
                                       >
-                                        Delete Event
+                                        Remove Event
                                       </button>
                                     </div>
                                     {activeEventAssets.length === 0 ? (
                                       <p className="meta">No assets linked to this event yet.</p>
                                     ) : (
                                       <div className="lifeAssetList">
+                                        <p className="entitySectionLabel">
+                                          <span className="entityPill entityPillAsset">Assets</span>
+                                          Supporting files linked to this event
+                                        </p>
                                         {activeEventAssets.map((asset) => (
-                                          <div key={asset.id} className="lifeAssetRow">
+                                          <div
+                                            key={asset.id}
+                                            id={`asset-row-${asset.id}`}
+                                            className={`lifeAssetRow${highlightedElementId === `asset-row-${asset.id}` ? " focusPulse" : ""}`}
+                                          >
                                             <div>
                                               <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
                                               <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
+                                              {renderImageMetadataBadges(asset)}
+                                              {(asset.image_width !== null || asset.image_height !== null) && (
+                                                <p className="meta">Dimensions: {asset.image_width || "?"} x {asset.image_height || "?"}</p>
+                                              )}
+                                              {formatAssetCaptureDate(asset) && (
+                                                <p className="meta">Captured: {formatAssetCaptureDate(asset)}</p>
+                                              )}
+                                              {formatAssetGps(asset) && (
+                                                <p className="meta">Location: {formatAssetGps(asset)}</p>
+                                              )}
+                                              {(asset.camera_make || asset.camera_model) && (
+                                                <p className="meta">Camera: {[asset.camera_make, asset.camera_model].filter(Boolean).join(" ")}</p>
+                                              )}
                                               {asset.playback_url && (
                                                 <audio
                                                   controls
@@ -1743,9 +1963,20 @@ export default function HomePage() {
                 <div className="lifeEventList">
                   {unassignedEvents.length === 0 && <p className="meta">No unassigned events.</p>}
                   {unassignedEvents.map((event) => (
-                    <article key={event.id} className="memory">
+                    <article
+                      key={event.id}
+                      id={`event-card-${event.id}`}
+                      className={`memory${highlightedElementId === `event-card-${event.id}` ? " focusPulse" : ""}`}
+                    >
                       <div className="periodSummaryRow">
                         <div>
+                          <p className="entitySectionLabel" style={{ marginBottom: "0.2rem" }}>
+                            <span className="entityPill entityPillEvent">Event</span>
+                            <span className="entityFlowArrow">contains</span>
+                            <span className="entityPill entityPillMemory">Memory</span>
+                            <span className="entityFlowArrow">+</span>
+                            <span className="entityPill entityPillAsset">Assets</span>
+                          </p>
                           <p style={{ margin: 0, fontWeight: 700 }}>{event.title}</p>
                           <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}</p>
                         </div>
@@ -1774,22 +2005,30 @@ export default function HomePage() {
                               return null;
                             }
                             return (
-                              <MemoryCard
-                                key={`event-memory-${linkedMemory.id}`}
-                                memory={linkedMemory}
-                                linkedQuestions={questions.filter((q) => q.source_memory_id === linkedMemory.id)}
-                                peopleOptions={peopleDirectory}
-                                formatBytes={formatBytes}
-                                resolveApiUrl={resolveApiUrl}
-                                onResearch={researchMemory}
-                                onAcceptSuggestion={acceptResearchSuggestion}
-                                onDismissSuggestion={dismissResearchSuggestion}
-                                onReanalyze={reanalyzeMemory}
-                                onDelete={deleteMemory}
-                                onAssignRecorder={assignRecorder}
-                                isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
-                                hideHeader
-                              />
+                              <>
+                                <p className="entitySectionLabel">
+                                  <span className="entityPill entityPillMemory">Memory</span>
+                                  Narrative, transcript, and extracted context
+                                </p>
+                                <MemoryCard
+                                  key={`event-memory-${linkedMemory.id}`}
+                                  containerId={`memory-card-${linkedMemory.id}`}
+                                  isHighlighted={highlightedElementId === `memory-card-${linkedMemory.id}`}
+                                  memory={linkedMemory}
+                                  linkedQuestions={questions.filter((q) => q.source_memory_id === linkedMemory.id)}
+                                  peopleOptions={peopleDirectory}
+                                  formatBytes={formatBytes}
+                                  resolveApiUrl={resolveApiUrl}
+                                  onResearch={researchMemory}
+                                  onAcceptSuggestion={acceptResearchSuggestion}
+                                  onDismissSuggestion={dismissResearchSuggestion}
+                                  onReanalyze={reanalyzeMemory}
+                                  onDelete={deleteMemory}
+                                  onAssignRecorder={assignRecorder}
+                                  isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
+                                  hideHeader
+                                />
+                              </>
                             );
                           })()}
                           {(questionsByEventId.get(event.id)?.length ?? 0) > 0 && (
@@ -1848,6 +2087,56 @@ export default function HomePage() {
                               disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
                             />
                           </div>
+                          <div className="lifeFormFields">
+                            {recordingForEventId === event.id ? (
+                              <>
+                                <p className="meta">Recording for this event… <span className="badge">live</span></p>
+                                <div className="controls">
+                                  <button
+                                    className="secondary"
+                                    type="button"
+                                    onClick={stopRecording}
+                                    disabled={!isRecording || isLoading}
+                                  >
+                                    Stop &amp; Process
+                                  </button>
+                                  <button
+                                    className="ghost"
+                                    type="button"
+                                    onClick={cancelRecording}
+                                    disabled={!isRecording || isLoading}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </>
+                            ) : (
+                              <button
+                                className="secondary"
+                                type="button"
+                                onClick={() => startRecording(event.id)}
+                                disabled={isRecording || isLoading || isUploadingAsset}
+                                title="Record a new audio narration linked to this event"
+                              >
+                                &#9679; Record Narration
+                              </button>
+                            )}
+                            {eventRecordingPending[event.id] && (
+                              <div className="pendingRecordingInline">
+                                <audio
+                                  controls
+                                  preload="metadata"
+                                  src={eventRecordingPending[event.id].audioUrl}
+                                  style={{ flex: 1 }}
+                                />
+                                <span className="meta">
+                                  {eventRecordingPending[event.id].status === "processing" && "Processing…"}
+                                  {eventRecordingPending[event.id].status === "saved" && "Saved ✓"}
+                                  {eventRecordingPending[event.id].status === "failed" && (eventRecordingPending[event.id].error ?? "Failed")}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                           <div className="lifeEventManagementRow">
                             <select
                               className="directoryInput"
@@ -1871,21 +2160,43 @@ export default function HomePage() {
                             <button
                               className="ghost"
                               type="button"
+                              title="Remove event wrapper only (keeps linked memory and assets)."
                               onClick={() => deleteLifeEvent(event.id)}
                               disabled={isSavingLifeStructure}
                             >
-                              Delete Event
+                              Remove Event
                             </button>
                           </div>
                           {activeEventAssets.length === 0 ? (
                             <p className="meta">No assets linked to this event yet.</p>
                           ) : (
                             <div className="lifeAssetList">
+                              <p className="entitySectionLabel">
+                                <span className="entityPill entityPillAsset">Assets</span>
+                                Supporting files linked to this event
+                              </p>
                               {activeEventAssets.map((asset) => (
-                                <div key={asset.id} className="lifeAssetRow">
+                                <div
+                                  key={asset.id}
+                                  id={`asset-row-${asset.id}`}
+                                  className={`lifeAssetRow${highlightedElementId === `asset-row-${asset.id}` ? " focusPulse" : ""}`}
+                                >
                                   <div>
                                     <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
                                     <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
+                                    {renderImageMetadataBadges(asset)}
+                                    {(asset.image_width !== null || asset.image_height !== null) && (
+                                      <p className="meta">Dimensions: {asset.image_width || "?"} x {asset.image_height || "?"}</p>
+                                    )}
+                                    {formatAssetCaptureDate(asset) && (
+                                      <p className="meta">Captured: {formatAssetCaptureDate(asset)}</p>
+                                    )}
+                                    {formatAssetGps(asset) && (
+                                      <p className="meta">Location: {formatAssetGps(asset)}</p>
+                                    )}
+                                    {(asset.camera_make || asset.camera_model) && (
+                                      <p className="meta">Camera: {[asset.camera_make, asset.camera_model].filter(Boolean).join(" ")}</p>
+                                    )}
                                     {asset.playback_url && (
                                       <audio
                                         controls
@@ -1919,10 +2230,27 @@ export default function HomePage() {
                 ) : (
                   <div className="lifeAssetList">
                     {unlinkedAssets.map((asset) => (
-                      <div key={asset.id} className="lifeAssetRow">
+                      <div
+                        key={asset.id}
+                        id={`asset-row-${asset.id}`}
+                        className={`lifeAssetRow${highlightedElementId === `asset-row-${asset.id}` ? " focusPulse" : ""}`}
+                      >
                         <div>
                           <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
                           <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
+                          {renderImageMetadataBadges(asset)}
+                          {(asset.image_width !== null || asset.image_height !== null) && (
+                            <p className="meta">Dimensions: {asset.image_width || "?"} x {asset.image_height || "?"}</p>
+                          )}
+                          {formatAssetCaptureDate(asset) && (
+                            <p className="meta">Captured: {formatAssetCaptureDate(asset)}</p>
+                          )}
+                          {formatAssetGps(asset) && (
+                            <p className="meta">Location: {formatAssetGps(asset)}</p>
+                          )}
+                          {(asset.camera_make || asset.camera_model) && (
+                            <p className="meta">Camera: {[asset.camera_make, asset.camera_model].filter(Boolean).join(" ")}</p>
+                          )}
                         </div>
                         <div className="lifeAssetLinkControls">
                           <select
@@ -2053,6 +2381,8 @@ export default function HomePage() {
               {timelineStandaloneMemories.map((memory) => (
                 <MemoryCard
                   key={memory.id}
+                  containerId={`memory-card-${memory.id}`}
+                  isHighlighted={highlightedElementId === `memory-card-${memory.id}`}
                   memory={memory}
                   linkedQuestions={questions.filter((q) => q.source_memory_id === memory.id)}
                   peopleOptions={peopleDirectory}
@@ -2153,7 +2483,7 @@ export default function HomePage() {
           <div className="controls">
             <button
               className="primary"
-              onClick={startRecording}
+              onClick={() => startRecording()}
               disabled={isRecording || isLoading || audioDevices.length === 0}
               type="button"
             >
