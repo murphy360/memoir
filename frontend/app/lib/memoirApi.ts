@@ -151,7 +151,7 @@ export async function renameEventTitle(eventId: number, title: string): Promise<
 
 export async function updateEventById(
   eventId: number,
-  payload: { title?: string; event_date_text?: string | null; description?: string | null },
+  payload: { title?: string; event_date_text?: string | null; description?: string | null; period_id?: number | null },
 ): Promise<LifeEvent> {
   const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}`), {
     method: "PATCH",

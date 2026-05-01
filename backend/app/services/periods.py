@@ -61,6 +61,13 @@ def build_period_response(period: LifePeriod) -> LifePeriodResponse:
 
 def build_event_response(event: LifeEvent) -> LifeEventResponse:
     legacy_memory = event.legacy_memory
+    linked_memory_ids: list[int] = []
+    if event.legacy_memory_id is not None:
+        linked_memory_ids.append(event.legacy_memory_id)
+    for link in event.linked_assets:
+        asset = link.asset
+        if asset and asset.legacy_memory_id is not None and asset.legacy_memory_id not in linked_memory_ids:
+            linked_memory_ids.append(asset.legacy_memory_id)
 
     return LifeEventResponse(
         id=event.id,
@@ -79,6 +86,7 @@ def build_event_response(event: LifeEvent) -> LifeEventResponse:
         date_day=event.date_day,
         date_decade=event.date_decade,
         legacy_memory_id=event.legacy_memory_id,
+        linked_memory_ids=linked_memory_ids,
         legacy_audio_url=(legacy_memory.audio_url if legacy_memory else None),
         legacy_audio_size_bytes=(legacy_memory.audio_size_bytes if legacy_memory else None),
         linked_asset_count=len(event.linked_assets),

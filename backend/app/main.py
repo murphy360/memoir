@@ -358,6 +358,8 @@ def update_event(event_id: int, body: UpdateLifeEventRequest, db: Session = Depe
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
+    previous_period_id = event.period_id
+
     if body.title is not None:
         clean_title = body.title.strip()
         if not clean_title:
@@ -370,6 +372,20 @@ def update_event(event_id: int, body: UpdateLifeEventRequest, db: Session = Depe
     if "event_date_text" in body.model_fields_set:
         next_date_text = (body.event_date_text or "").strip()[:100]
         event.event_date_text = next_date_text or None
+
+    if "period_id" in body.model_fields_set:
+        if body.period_id is not None:
+            if not db.get(LifePeriod, body.period_id):
+                raise HTTPException(status_code=404, detail="Target period not found")
+        event.period_id = body.period_id
+
+    if event.period_id != previous_period_id:
+        if previous_period_id is not None:
+            previous_period = db.get(LifePeriod, previous_period_id)
+            refresh_period_summary(db, previous_period)
+        if event.period_id is not None:
+            next_period = db.get(LifePeriod, event.period_id)
+            refresh_period_summary(db, next_period)
 
     db.commit()
     db.refresh(event)

@@ -113,6 +113,7 @@ export type LifeEvent = {
   date_day: number | null;
   date_decade: number | null;
   legacy_memory_id: number | null;
+  linked_memory_ids: number[];
   legacy_audio_url: string | null;
   legacy_audio_size_bytes: number | null;
   linked_asset_count: number;

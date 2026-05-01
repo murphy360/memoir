@@ -131,6 +131,7 @@ class LifeEventResponse(BaseModel):
     date_day: Optional[int]
     date_decade: Optional[int]
     legacy_memory_id: Optional[int]
+    linked_memory_ids: list[int] = Field(default_factory=list)
     legacy_audio_url: Optional[str]
     legacy_audio_size_bytes: Optional[int]
     linked_asset_count: int = 0
@@ -158,6 +159,7 @@ class UpdateLifeEventRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     event_date_text: Optional[str] = None
+    period_id: Optional[int] = None
 
 
 class AssetResponse(BaseModel):

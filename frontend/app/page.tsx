@@ -63,6 +63,8 @@ type PendingRecording = {
   error?: string;
 };
 
+const UNASSIGNED_PERIOD_VALUE = "__unassigned__";
+
 type AudioInputDevice = {
   deviceId: string;
   label: string;
@@ -123,8 +125,8 @@ function renderImageMetadataBadges(asset: AssetEntry): JSX.Element | null {
 
 function collectEventMemoryIds(event: LifeEvent, assets: AssetEntry[]): number[] {
   const ids = new Set<number>();
-  if (event.legacy_memory_id !== null) {
-    ids.add(event.legacy_memory_id);
+  for (const memoryId of event.linked_memory_ids) {
+    ids.add(memoryId);
   }
   for (const asset of assets) {
     if (asset.legacy_memory_id !== null) {
@@ -191,6 +193,7 @@ export default function HomePage() {
   const [isUploadingAsset, setIsUploadingAsset] = useState(false);
   const [assetLinkTargets, setAssetLinkTargets] = useState<Record<number, string>>({});
   const [eventMergeTargets, setEventMergeTargets] = useState<Record<number, string>>({});
+  const [eventMoveTargets, setEventMoveTargets] = useState<Record<number, string>>({});
   const [newPeriodTitle, setNewPeriodTitle] = useState("");
   const [newPeriodStart, setNewPeriodStart] = useState("");
   const [newPeriodEnd, setNewPeriodEnd] = useState("");
@@ -406,7 +409,7 @@ export default function HomePage() {
   }
 
   function focusMemoryInTimeline(memoryId: number, data: TimelineBundle | null) {
-    const linkedEvent = data?.events?.find((event) => event.legacy_memory_id === memoryId) || null;
+    const linkedEvent = data?.events?.find((event) => event.linked_memory_ids.includes(memoryId)) || null;
     if (linkedEvent) {
       focusEventInTimeline(linkedEvent.id, linkedEvent.period_id);
       markAndScrollTo(`memory-card-${memoryId}`, 320);
@@ -729,6 +732,32 @@ export default function HomePage() {
       setStatus("Event merged.");
     } catch {
       setStatus("Failed to merge event.");
+    } finally {
+      setIsSavingLifeStructure(false);
+    }
+  }
+
+  async function moveEventToPeriod(event: LifeEvent) {
+    const selectedTarget = eventMoveTargets[event.id] || (event.period_id === null ? UNASSIGNED_PERIOD_VALUE : `${event.period_id}`);
+    const nextPeriodId = selectedTarget === UNASSIGNED_PERIOD_VALUE ? null : Number(selectedTarget);
+    if (nextPeriodId === event.period_id) {
+      return;
+    }
+
+    setIsSavingLifeStructure(true);
+    setStatus("Moving event to selected period...");
+    try {
+      await updateEventById(event.id, { period_id: nextPeriodId });
+      setEventMoveTargets((current) => {
+        const next = { ...current };
+        delete next[event.id];
+        return next;
+      });
+      await loadTimeline();
+      focusEventInTimeline(event.id, nextPeriodId);
+      setStatus("Event moved.");
+    } catch {
+      setStatus("Failed to move event.");
     } finally {
       setIsSavingLifeStructure(false);
     }
@@ -1548,15 +1577,14 @@ export default function HomePage() {
     : placesDirectory.length;
   const lifeEventMemoryIds = new Set(
     lifeEvents
-      .map((event) => event.legacy_memory_id)
-      .filter((memoryId): memoryId is number => memoryId !== null),
+      .flatMap((event) => event.linked_memory_ids),
   );
   const questionsWithContext = questions.map((question) => {
     const sourceMemory = question.source_memory_id
       ? timeline.find((memory) => memory.id === question.source_memory_id) ?? null
       : null;
     const sourceEvent = sourceMemory
-      ? lifeEvents.find((event) => event.legacy_memory_id === sourceMemory.id) ?? null
+      ? lifeEvents.find((event) => event.linked_memory_ids.includes(sourceMemory.id)) ?? null
       : null;
     const sourcePeriod = sourceEvent && sourceEvent.period_id !== null
       ? lifePeriods.find((period) => period.id === sourceEvent.period_id) ?? null
@@ -2225,6 +2253,27 @@ export default function HomePage() {
 
                                 {activeEventId === event.id && (
                                   <>
+                                    <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
+                                      <select
+                                        className="directoryInput"
+                                        value={eventMoveTargets[event.id] || (event.period_id === null ? UNASSIGNED_PERIOD_VALUE : `${event.period_id}`)}
+                                        onChange={(e) => setEventMoveTargets((current) => ({ ...current, [event.id]: e.target.value }))}
+                                        disabled={isSavingLifeStructure}
+                                      >
+                                        <option value={UNASSIGNED_PERIOD_VALUE}>Unassigned</option>
+                                        {sortedLifePeriods.map((periodOption) => (
+                                          <option key={periodOption.id} value={periodOption.id}>{periodOption.title}</option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        className="secondary"
+                                        type="button"
+                                        onClick={() => moveEventToPeriod(event)}
+                                        disabled={isSavingLifeStructure}
+                                      >
+                                        Move to Period
+                                      </button>
+                                    </div>
                                     {editingEventTitleId === event.id && (
                                       <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
                                         <select
@@ -2870,6 +2919,27 @@ export default function HomePage() {
 
                       {activeEventId === event.id && (
                         <>
+                          <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
+                            <select
+                              className="directoryInput"
+                              value={eventMoveTargets[event.id] || (event.period_id === null ? UNASSIGNED_PERIOD_VALUE : `${event.period_id}`)}
+                              onChange={(e) => setEventMoveTargets((current) => ({ ...current, [event.id]: e.target.value }))}
+                              disabled={isSavingLifeStructure}
+                            >
+                              <option value={UNASSIGNED_PERIOD_VALUE}>Unassigned</option>
+                              {sortedLifePeriods.map((periodOption) => (
+                                <option key={periodOption.id} value={periodOption.id}>{periodOption.title}</option>
+                              ))}
+                            </select>
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => moveEventToPeriod(event)}
+                              disabled={isSavingLifeStructure}
+                            >
+                              Move to Period
+                            </button>
+                          </div>
                           {editingEventTitleId === event.id && (
                             <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
                               <select
