@@ -176,6 +176,10 @@ class LifeEvent(Base):
     period_id: Mapped[Optional[int]] = mapped_column(ForeignKey("life_periods.id", ondelete="SET NULL"), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    research_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    research_sources_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    research_queries_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     event_date_text: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     event_date_sort: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
     date_precision: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
@@ -190,6 +194,14 @@ class LifeEvent(Base):
     period: Mapped[Optional["LifePeriod"]] = relationship(back_populates="events")
     linked_assets: Mapped[list["EventAsset"]] = relationship(back_populates="event", cascade="all, delete-orphan")
     legacy_memory: Mapped[Optional["MemoryEntry"]] = relationship(foreign_keys=[legacy_memory_id])
+
+    @property
+    def research_sources(self) -> list[dict[str, str]]:
+        return _deserialize_object_list(self.research_sources_json)
+
+    @property
+    def research_queries(self) -> list[str]:
+        return _deserialize_list(self.research_queries_json)
 
 
 class EventAsset(Base):

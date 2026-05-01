@@ -94,6 +94,10 @@ export type LifeEvent = {
   period_id: number | null;
   title: string;
   description: string | null;
+  summary: string | null;
+  research_summary: string | null;
+  research_queries: string[];
+  research_sources: ResearchSource[];
   event_date_text: string | null;
   date_precision: string | null;
   date_year: number | null;

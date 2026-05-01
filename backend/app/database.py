@@ -161,6 +161,19 @@ def ensure_schema_migrations() -> None:
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_title ON life_events (title)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_event_date_sort ON life_events (event_date_sort)"))
 
+        event_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(life_events)")).fetchall()
+        }
+        if "summary" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN summary TEXT"))
+        if "research_summary" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN research_summary TEXT"))
+        if "research_sources_json" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN research_sources_json TEXT"))
+        if "research_queries_json" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN research_queries_json TEXT"))
+
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS assets (
                 id INTEGER PRIMARY KEY,

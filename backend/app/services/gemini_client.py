@@ -337,6 +337,84 @@ def research_memory_details(
     )
 
 
+def summarize_event_details(
+    event_title: str,
+    event_date_text: Optional[str],
+    memory_points: list[str],
+    asset_points: list[str],
+) -> str:
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+    clean_memory_points = [point.strip() for point in memory_points if point and point.strip()]
+    clean_asset_points = [point.strip() for point in asset_points if point and point.strip()]
+
+    if gemini_key:
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
+        memory_block = "\n".join(f"- {point}" for point in clean_memory_points[:20]) or "- No memory narration provided"
+        asset_block = "\n".join(f"- {point}" for point in clean_asset_points[:20]) or "- No supporting assets linked"
+
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "text": (
+                                "Write a concise event summary for a personal memoir timeline. "
+                                "Keep it factual and readable in 2-4 short paragraphs, then end with 3-6 bullet highlights.\n\n"
+                                f"Event title: {event_title}\n"
+                                f"Event date text: {event_date_text or 'Unknown'}\n\n"
+                                "Memory narration snippets:\n"
+                                f"{memory_block}\n\n"
+                                "Supporting assets and notes:\n"
+                                f"{asset_block}"
+                            )
+                        }
+                    ],
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 1500,
+                "responseMimeType": "text/plain",
+            },
+        }
+
+        try:
+            response = requests.post(endpoint, params={"key": gemini_key}, json=payload, timeout=60)
+            if response.ok:
+                data = response.json()
+                candidate = data.get("candidates", [{}])[0]
+                parts = candidate.get("content", {}).get("parts", [])
+                text = "\n".join(part.get("text", "").strip() for part in parts if part.get("text")).strip()
+                if text:
+                    return text[:8000]
+            else:
+                logger.warning("Gemini event summary request failed: %s", response.text[:300])
+        except Exception as exc:
+            logger.warning("Gemini event summary request exception: %s", exc)
+
+    if clean_memory_points:
+        opening = clean_memory_points[0]
+    else:
+        opening = "No narrated memories are linked yet."
+    lines = [
+        f"{event_title} ({event_date_text or 'Unknown date'})",
+        "",
+        opening,
+    ]
+    if len(clean_memory_points) > 1:
+        lines.append("")
+        lines.append("Additional memory highlights:")
+        lines.extend(f"- {point}" for point in clean_memory_points[1:6])
+    if clean_asset_points:
+        lines.append("")
+        lines.append("Supporting assets:")
+        lines.extend(f"- {point}" for point in clean_asset_points[:6])
+    return "\n".join(lines)[:8000]
+
+
 def _extract_grounding_queries(grounding: object) -> list[str]:
     if not isinstance(grounding, dict):
         return []

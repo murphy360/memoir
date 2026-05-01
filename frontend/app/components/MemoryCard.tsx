@@ -9,7 +9,6 @@ type MemoryCardProps = {
   peopleOptions: DirectoryEntry[];
   formatBytes: (bytes: number) => string;
   resolveApiUrl: (path: string) => string;
-  onResearch: (memoryId: number) => Promise<void>;
   onAcceptSuggestion: (memoryId: number) => Promise<void>;
   onDismissSuggestion: (memoryId: number) => Promise<void>;
   onReanalyze: (memoryId: number) => Promise<void>;
@@ -35,7 +34,6 @@ export function MemoryCard({
   peopleOptions,
   formatBytes,
   resolveApiUrl,
-  onResearch,
   onAcceptSuggestion,
   onDismissSuggestion,
   onReanalyze,
@@ -217,9 +215,6 @@ export function MemoryCard({
         </section>
       )}
       {isExpanded && <div className="memoryActions">
-        <button className="secondary" type="button" onClick={() => onResearch(memory.id)} disabled={isBusy}>
-          {memory.research_summary ? "Refresh Research" : "Research"}
-        </button>
         <button className="secondary" type="button" onClick={() => onReanalyze(memory.id)} disabled={isBusy}>
           Reanalyze
         </button>

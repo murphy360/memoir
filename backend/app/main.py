@@ -49,6 +49,7 @@ from app.services.document_storage import save_document_file
 from app.services.gemini_client import (
     extract_metadata_with_gemini_function_call,
     research_memory_details,
+    summarize_event_details,
     suggest_date_from_research,
 )
 from app.services.gemini_client import extract_text_from_document
@@ -437,6 +438,112 @@ def list_event_assets(event_id: int, db: Session = Depends(get_db)) -> list[Asse
 
     assets = [link.asset for link in event.linked_assets if link.asset]
     return [build_asset_response(asset) for asset in assets]
+
+
+@app.post("/api/events/{event_id}/summarize", response_model=LifeEventResponse)
+def summarize_event(event_id: int, db: Session = Depends(get_db)) -> LifeEventResponse:
+    event = db.get(LifeEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    memories = _collect_event_memories(event, db)
+    assets = [link.asset for link in event.linked_assets if link.asset]
+
+    memory_points: list[str] = []
+    for memory in memories:
+        heading = (memory.event_description or "").strip() or f"Memory {memory.id}"
+        transcript = " ".join((memory.transcript or "").split())
+        if transcript:
+            memory_points.append(f"{heading}: {transcript[:280]}")
+        else:
+            memory_points.append(heading)
+
+    asset_points: list[str] = []
+    for asset in assets:
+        title = (asset.title or asset.original_filename or f"Asset {asset.id}").strip()
+        details = []
+        if asset.notes:
+            details.append(" ".join(asset.notes.split())[:180])
+        if asset.text_excerpt:
+            details.append(" ".join(asset.text_excerpt.split())[:180])
+        if asset.captured_at_text:
+            details.append(asset.captured_at_text)
+        if details:
+            asset_points.append(f"{title}: {' | '.join(details)}")
+        else:
+            asset_points.append(title)
+
+    summary = summarize_event_details(
+        event_title=event.title,
+        event_date_text=event.event_date_text,
+        memory_points=memory_points,
+        asset_points=asset_points,
+    )
+    event.summary = summary
+
+    db.commit()
+    db.refresh(event)
+    return build_event_response(event)
+
+
+@app.post("/api/events/{event_id}/research", response_model=LifeEventResponse)
+def research_event(event_id: int, db: Session = Depends(get_db)) -> LifeEventResponse:
+    event = db.get(LifeEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    memories = _collect_event_memories(event, db)
+    assets = [link.asset for link in event.linked_assets if link.asset]
+
+    transcript_sections: list[str] = [f"Event title: {event.title}"]
+    if event.description:
+        transcript_sections.append(f"Event description: {event.description}")
+
+    for memory in memories:
+        transcript_sections.append(f"Memory: {memory.event_description}")
+        transcript_sections.append(memory.transcript or "")
+
+    for asset in assets:
+        asset_title = asset.title or asset.original_filename or f"Asset {asset.id}"
+        transcript_sections.append(f"Asset: {asset_title}")
+        if asset.notes:
+            transcript_sections.append(f"Notes: {asset.notes}")
+        if asset.text_excerpt:
+            transcript_sections.append(f"Extracted text: {asset.text_excerpt}")
+        if asset.captured_at_text:
+            transcript_sections.append(f"Captured at: {asset.captured_at_text}")
+
+    combined_transcript = "\n\n".join(section for section in transcript_sections if section.strip())[:20000]
+    people = sorted({name for memory in memories for name in memory.referenced_people if name})
+    locations = sorted({name for memory in memories for name in memory.referenced_locations if name})
+
+    research = research_memory_details(
+        transcript=combined_transcript,
+        event_description=event.title,
+        estimated_date_text=event.event_date_text,
+        referenced_locations=locations,
+        referenced_people=people,
+        document_bytes=None,
+        document_mime_type=None,
+    )
+
+    event.research_summary = research.summary
+    event.research_queries_json = json.dumps(research.queries)
+    event.research_sources_json = json.dumps(
+        [{"title": source.title, "url": source.url} for source in research.sources]
+    )
+
+    source_memory_id = _event_research_source_memory_id(event, memories)
+    if source_memory_id is not None:
+        add_unique_pending_questions(
+            db,
+            _extract_questions_from_research(research.summary),
+            source_memory_id,
+        )
+
+    db.commit()
+    db.refresh(event)
+    return build_event_response(event)
 
 
 @app.get("/api/assets/unlinked", response_model=list[AssetResponse])
@@ -1314,6 +1421,36 @@ def _extract_questions_from_research(summary: str) -> list[str]:
                 if text.endswith("?"):
                     questions.append(text)
     return questions[:5]
+
+
+def _collect_event_memories(event: LifeEvent, db: Session) -> list[MemoryEntry]:
+    memory_ids: list[int] = []
+    if event.legacy_memory_id is not None:
+        memory_ids.append(event.legacy_memory_id)
+
+    for link in event.linked_assets:
+        asset = link.asset
+        if asset and asset.legacy_memory_id is not None:
+            memory_ids.append(asset.legacy_memory_id)
+
+    seen: set[int] = set()
+    memories: list[MemoryEntry] = []
+    for memory_id in memory_ids:
+        if memory_id in seen:
+            continue
+        seen.add(memory_id)
+        memory = db.get(MemoryEntry, memory_id)
+        if memory:
+            memories.append(memory)
+    return memories
+
+
+def _event_research_source_memory_id(event: LifeEvent, memories: list[MemoryEntry]) -> Optional[int]:
+    if event.legacy_memory_id is not None:
+        return event.legacy_memory_id
+    if memories:
+        return memories[0].id
+    return None
 
 
 @app.post("/api/memories/{memory_id}/research", response_model=MemoryResponse)

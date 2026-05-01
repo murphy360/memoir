@@ -236,6 +236,22 @@ export async function mergeEventInto(sourceId: number, targetId: number): Promis
   return response.json();
 }
 
+export async function summarizeEventById(eventId: number): Promise<LifeEvent> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}/summarize`), {
+    method: "POST",
+  });
+  await expectOk(response, "Event summary failed");
+  return response.json();
+}
+
+export async function researchEventById(eventId: number): Promise<LifeEvent> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}/research`), {
+    method: "POST",
+  });
+  await expectOk(response, "Event research failed");
+  return response.json();
+}
+
 export async function dismissQuestionById(questionId: number): Promise<void> {
   await fetch(toAbsoluteApiUrl(`/api/questions/${questionId}/dismiss`), { method: "POST" });
 }

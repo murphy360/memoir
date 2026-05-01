@@ -112,6 +112,10 @@ class LifeEventResponse(BaseModel):
     period_id: Optional[int]
     title: str
     description: Optional[str]
+    summary: Optional[str]
+    research_summary: Optional[str]
+    research_queries: list[str] = Field(default_factory=list)
+    research_sources: list[ResearchSourceResponse] = Field(default_factory=list)
     event_date_text: Optional[str]
     date_precision: Optional[str]
     date_year: Optional[int]

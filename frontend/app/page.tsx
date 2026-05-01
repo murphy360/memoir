@@ -32,10 +32,11 @@ import {
   renameDirectoryEntry as renameDirectoryEntryRequest,
   renamePeriodTitle,
   renameEventTitle,
+  researchEventById,
   resolveApiUrl,
-  researchMemoryById,
   saveMainCharacterName as saveMainCharacterNameRequest,
   splitPersonEntry as splitPersonEntryRequest,
+  summarizeEventById,
   addPersonAlias as addPersonAliasRequest,
   updateMemoryTitle as updateMemoryTitleById,
   updateAssetNotes as updateAssetNotesById,
@@ -171,6 +172,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [highlightedElementId, setHighlightedElementId] = useState<string | null>(null);
   const [memoryActionId, setMemoryActionId] = useState<number | null>(null);
+  const [eventActionId, setEventActionId] = useState<number | null>(null);
   const [directoryBusyKey, setDirectoryBusyKey] = useState<string | null>(null);
   const [isPeriodComposerOpen, setIsPeriodComposerOpen] = useState(false);
   const [expandedPeriods, setExpandedPeriods] = useState<Record<number, boolean>>({});
@@ -619,17 +621,37 @@ export default function HomePage() {
     }
   }
 
-  async function researchMemory(memoryId: number) {
-    setMemoryActionId(memoryId);
-    setStatus("Researching memory...");
+  async function summarizeEvent(eventId: number) {
+    setEventActionId(eventId);
+    setStatus("Summarizing event...");
     try {
-      await researchMemoryById(memoryId);
+      await summarizeEventById(eventId);
       await loadTimeline();
-      setStatus("Memory research updated.");
+      if (activeEventId === eventId) {
+        await loadAssetsForEvent(eventId);
+      }
+      setStatus("Event summary updated.");
     } catch {
-      setStatus("Failed to research memory.");
+      setStatus("Failed to summarize event.");
     } finally {
-      setMemoryActionId(null);
+      setEventActionId(null);
+    }
+  }
+
+  async function deepResearchEvent(eventId: number) {
+    setEventActionId(eventId);
+    setStatus("Researching event...");
+    try {
+      await researchEventById(eventId);
+      await loadTimeline();
+      if (activeEventId === eventId) {
+        await loadAssetsForEvent(eventId);
+      }
+      setStatus("Event research updated.");
+    } catch {
+      setStatus("Failed to research event.");
+    } finally {
+      setEventActionId(null);
     }
   }
 
@@ -1941,6 +1963,60 @@ export default function HomePage() {
                                         </button>
                                       </div>
                                     )}
+                                    <div className="controls" style={{ marginBottom: "0.55rem", flexWrap: "wrap" }}>
+                                      <button
+                                        className="secondary"
+                                        type="button"
+                                        onClick={() => summarizeEvent(event.id)}
+                                        disabled={eventActionId === event.id || isRecording || isLoading || isSavingLifeStructure}
+                                      >
+                                        {event.summary ? "Refresh Event Summary" : "Summarize Event"}
+                                      </button>
+                                      <button
+                                        className="secondary"
+                                        type="button"
+                                        onClick={() => deepResearchEvent(event.id)}
+                                        disabled={eventActionId === event.id || isRecording || isLoading || isSavingLifeStructure}
+                                      >
+                                        {event.research_summary ? "Refresh Deep Research" : "Deep Research"}
+                                      </button>
+                                    </div>
+                                    {event.summary && (
+                                      <section className="researchPanel" style={{ marginBottom: "0.55rem" }}>
+                                        <p className="researchLabel">Event Summary</p>
+                                        <pre className="researchSummary">{event.summary}</pre>
+                                      </section>
+                                    )}
+                                    {event.research_summary && (
+                                      <section className="researchPanel" style={{ marginBottom: "0.55rem" }}>
+                                        <p className="researchLabel">Deep Research</p>
+                                        <pre className="researchSummary">{event.research_summary}</pre>
+                                        {(event.research_queries || []).length > 0 && (
+                                          <div className="researchQueries">
+                                            <p className="researchSubhead">Search queries used</p>
+                                            <div className="researchQueryList">
+                                              {(event.research_queries || []).map((query) => (
+                                                <span key={`${event.id}-query-${query}`} className="researchQueryChip">{query}</span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {(event.research_sources || []).length > 0 && (
+                                          <div className="researchSources">
+                                            <p className="researchSubhead">Sources</p>
+                                            <ul className="researchSourceList">
+                                              {(event.research_sources || []).map((source) => (
+                                                <li key={`${event.id}-source-${source.url}`}>
+                                                  <a href={source.url} target="_blank" rel="noreferrer">
+                                                    {source.title}
+                                                  </a>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+                                      </section>
+                                    )}
                                     {(() => {
                                       const memoryIds = collectEventMemoryIds(
                                         event,
@@ -2030,7 +2106,6 @@ export default function HomePage() {
                                                   peopleOptions={peopleDirectory}
                                                   formatBytes={formatBytes}
                                                   resolveApiUrl={resolveApiUrl}
-                                                  onResearch={researchMemory}
                                                   onAcceptSuggestion={acceptResearchSuggestion}
                                                   onDismissSuggestion={dismissResearchSuggestion}
                                                   onReanalyze={reanalyzeMemory}
@@ -2457,6 +2532,60 @@ export default function HomePage() {
                               </button>
                             </div>
                           )}
+                          <div className="controls" style={{ marginBottom: "0.55rem", flexWrap: "wrap" }}>
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => summarizeEvent(event.id)}
+                              disabled={eventActionId === event.id || isRecording || isLoading || isSavingLifeStructure}
+                            >
+                              {event.summary ? "Refresh Event Summary" : "Summarize Event"}
+                            </button>
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => deepResearchEvent(event.id)}
+                              disabled={eventActionId === event.id || isRecording || isLoading || isSavingLifeStructure}
+                            >
+                              {event.research_summary ? "Refresh Deep Research" : "Deep Research"}
+                            </button>
+                          </div>
+                          {event.summary && (
+                            <section className="researchPanel" style={{ marginBottom: "0.55rem" }}>
+                              <p className="researchLabel">Event Summary</p>
+                              <pre className="researchSummary">{event.summary}</pre>
+                            </section>
+                          )}
+                          {event.research_summary && (
+                            <section className="researchPanel" style={{ marginBottom: "0.55rem" }}>
+                              <p className="researchLabel">Deep Research</p>
+                              <pre className="researchSummary">{event.research_summary}</pre>
+                              {(event.research_queries || []).length > 0 && (
+                                <div className="researchQueries">
+                                  <p className="researchSubhead">Search queries used</p>
+                                  <div className="researchQueryList">
+                                    {(event.research_queries || []).map((query) => (
+                                      <span key={`${event.id}-query-${query}`} className="researchQueryChip">{query}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {(event.research_sources || []).length > 0 && (
+                                <div className="researchSources">
+                                  <p className="researchSubhead">Sources</p>
+                                  <ul className="researchSourceList">
+                                    {(event.research_sources || []).map((source) => (
+                                      <li key={`${event.id}-source-${source.url}`}>
+                                        <a href={source.url} target="_blank" rel="noreferrer">
+                                          {source.title}
+                                        </a>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </section>
+                          )}
                           {(() => {
                             const memoryIds = collectEventMemoryIds(
                               event,
@@ -2546,7 +2675,6 @@ export default function HomePage() {
                                         peopleOptions={peopleDirectory}
                                         formatBytes={formatBytes}
                                         resolveApiUrl={resolveApiUrl}
-                                        onResearch={researchMemory}
                                         onAcceptSuggestion={acceptResearchSuggestion}
                                         onDismissSuggestion={dismissResearchSuggestion}
                                         onReanalyze={reanalyzeMemory}
@@ -3140,7 +3268,6 @@ export default function HomePage() {
                   peopleOptions={peopleDirectory}
                   formatBytes={formatBytes}
                   resolveApiUrl={resolveApiUrl}
-                  onResearch={researchMemory}
                   onAcceptSuggestion={acceptResearchSuggestion}
                   onDismissSuggestion={dismissResearchSuggestion}
                   onReanalyze={reanalyzeMemory}
