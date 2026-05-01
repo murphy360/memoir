@@ -85,6 +85,7 @@ def build_event_response(event: LifeEvent) -> LifeEventResponse:
         date_month=event.date_month,
         date_day=event.date_day,
         date_decade=event.date_decade,
+        location=event.location,
         legacy_memory_id=event.legacy_memory_id,
         linked_memory_ids=linked_memory_ids,
         legacy_audio_url=(legacy_memory.audio_url if legacy_memory else None),

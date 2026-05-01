@@ -107,6 +107,7 @@ export type LifeEvent = {
   research_sources: ResearchSource[];
   research_suggested_edit: EventEditSuggestion | null;
   event_date_text: string | null;
+  location: string | null;
   date_precision: string | null;
   date_year: number | null;
   date_month: number | null;

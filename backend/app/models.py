@@ -188,6 +188,7 @@ class LifeEvent(Base):
     date_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     date_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     date_decade: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     legacy_memory_id: Mapped[Optional[int]] = mapped_column(ForeignKey("memories.id", ondelete="SET NULL"), nullable=True, unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

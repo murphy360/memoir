@@ -124,6 +124,7 @@ class LifeEventResponse(BaseModel):
     research_queries: list[str] = Field(default_factory=list)
     research_sources: list[ResearchSourceResponse] = Field(default_factory=list)
     research_suggested_edit: Optional[EventEditSuggestionResponse] = None
+    location: Optional[str]
     event_date_text: Optional[str]
     date_precision: Optional[str]
     date_year: Optional[int]
@@ -143,6 +144,7 @@ class CreateLifeEventRequest(BaseModel):
     title: str
     period_id: Optional[int] = None
     description: Optional[str] = None
+    location: Optional[str] = None
     event_date_text: Optional[str] = None
     date_precision: Optional[str] = None
     date_year: Optional[int] = None
@@ -158,6 +160,7 @@ class MergeLifeEventRequest(BaseModel):
 class UpdateLifeEventRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    location: Optional[str] = None
     event_date_text: Optional[str] = None
     period_id: Optional[int] = None
 

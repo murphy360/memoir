@@ -320,6 +320,7 @@ def create_event(body: CreateLifeEventRequest, db: Session = Depends(get_db)) ->
         period_id=body.period_id,
         title=title,
         description=body.description,
+        location=body.location,
         event_date_text=body.event_date_text,
         date_precision=body.date_precision,
         date_year=body.date_year,
@@ -368,6 +369,9 @@ def update_event(event_id: int, body: UpdateLifeEventRequest, db: Session = Depe
 
     if "description" in body.model_fields_set:
         event.description = (body.description or "").strip()[:1200] or None
+
+    if "location" in body.model_fields_set:
+        event.location = (body.location or "").strip()[:255] or None
 
     if "event_date_text" in body.model_fields_set:
         next_date_text = (body.event_date_text or "").strip()[:100]

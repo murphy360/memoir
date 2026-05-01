@@ -224,7 +224,7 @@ export default function HomePage() {
   const [isPeriodComposerOpen, setIsPeriodComposerOpen] = useState(false);
   const [expandedPeriods, setExpandedPeriods] = useState<Record<number, boolean>>({});
   const [eventDraftsByPeriod, setEventDraftsByPeriod] = useState<
-    Record<number, { title: string; dateText: string; description: string }>
+    Record<number, { title: string; dateText: string; description: string; location: string }>
   >({});
   const [periodAnalysisById, setPeriodAnalysisById] = useState<Record<number, LifePeriodAnalysis | null>>({});
   const [periodAnalysisBusyId, setPeriodAnalysisBusyId] = useState<number | null>(null);
@@ -237,6 +237,8 @@ export default function HomePage() {
   const [editingEventTitleValue, setEditingEventTitleValue] = useState("");
   const [editingEventDateId, setEditingEventDateId] = useState<number | null>(null);
   const [editingEventDateValue, setEditingEventDateValue] = useState("");
+  const [editingEventLocationId, setEditingEventLocationId] = useState<number | null>(null);
+  const [editingEventLocationValue, setEditingEventLocationValue] = useState("");
   const [editingMemoryTitleId, setEditingMemoryTitleId] = useState<number | null>(null);
   const [editingMemoryTitleValue, setEditingMemoryTitleValue] = useState("");
   const [memoryTitleSavingId, setMemoryTitleSavingId] = useState<number | null>(null);
@@ -460,6 +462,7 @@ export default function HomePage() {
     title?: string;
     eventDateText?: string;
     description?: string;
+    location?: string;
     periodId?: number | null;
     resetPeriodDraftId?: number;
   }) {
@@ -467,6 +470,7 @@ export default function HomePage() {
     const periodId = options?.periodId ?? (newEventPeriodId ? Number(newEventPeriodId) : null);
     const eventDateText = options?.eventDateText ?? newEventDateText;
     const description = options?.description ?? newEventDescription;
+    const location = options?.location ?? "";
 
     if (!title.trim()) {
       return;
@@ -478,6 +482,7 @@ export default function HomePage() {
         title: title.trim(),
         period_id: periodId,
         description: description.trim() || null,
+        location: location.trim() || null,
         event_date_text: eventDateText.trim() || null,
       });
       setNewEventTitle("");
@@ -490,6 +495,7 @@ export default function HomePage() {
             title: "",
             dateText: "",
             description: "",
+            location: "",
           },
         }));
       }
@@ -536,7 +542,7 @@ export default function HomePage() {
 
   function updateEventDraftForPeriod(
     periodId: number,
-    patch: Partial<{ title: string; dateText: string; description: string }>,
+    patch: Partial<{ title: string; dateText: string; description: string; location: string }>,
   ) {
     setEventDraftsByPeriod((current) => ({
       ...current,
@@ -544,6 +550,7 @@ export default function HomePage() {
         title: current[periodId]?.title || "",
         dateText: current[periodId]?.dateText || "",
         description: current[periodId]?.description || "",
+        location: current[periodId]?.location || "",
         ...patch,
       },
     }));
@@ -605,6 +612,19 @@ export default function HomePage() {
       setStatus("Event date updated.");
     } catch {
       setStatus("Failed to update event date.");
+    }
+  }
+
+  async function saveEventLocation(eventId: number, newLocation: string) {
+    setStatus("Saving event location...");
+    try {
+      await updateEventById(eventId, { location: newLocation.trim() || null });
+      setEditingEventLocationId(null);
+      setEditingEventLocationValue("");
+      await loadTimeline();
+      setStatus("Event location updated.");
+    } catch {
+      setStatus("Failed to update event location.");
     }
   }
 
@@ -2080,6 +2100,14 @@ export default function HomePage() {
                                 onChange={(e) => updateEventDraftForPeriod(period.id, { dateText: e.target.value })}
                                 disabled={isSavingLifeStructure || isRecording || isLoading}
                               />
+                              <input
+                                className="directoryInput"
+                                type="text"
+                                placeholder="Location (optional)"
+                                value={draft.location || ""}
+                                onChange={(e) => updateEventDraftForPeriod(period.id, { location: e.target.value })}
+                                disabled={isSavingLifeStructure || isRecording || isLoading}
+                              />
                               <textarea
                                 className="directoryInput"
                                 placeholder="Event description"
@@ -2098,6 +2126,7 @@ export default function HomePage() {
                                     title: draft.title,
                                     eventDateText: draft.dateText,
                                     description: draft.description,
+                                    location: draft.location,
                                     periodId: period.id,
                                     resetPeriodDraftId: period.id,
                                   })
@@ -2219,6 +2248,39 @@ export default function HomePage() {
                                           onClick={() => { setEditingEventDateId(event.id); setEditingEventDateValue(event.event_date_text || ""); }}
                                         >
                                           Edit Date
+                                        </button>
+                                      </div>
+                                    )}
+                                    {editingEventLocationId === event.id ? (
+                                      <div className="controls" style={{ marginTop: "0.25rem" }}>
+                                        <input
+                                          className="directoryInput"
+                                          type="text"
+                                          value={editingEventLocationValue}
+                                          autoFocus
+                                          placeholder="Location"
+                                          onChange={(e) => setEditingEventLocationValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") void saveEventLocation(event.id, editingEventLocationValue);
+                                            if (e.key === "Escape") { setEditingEventLocationId(null); setEditingEventLocationValue(""); }
+                                          }}
+                                          style={{ flex: 1 }}
+                                        />
+                                        <button className="primary" type="button" onClick={() => void saveEventLocation(event.id, editingEventLocationValue)}>Save</button>
+                                        <button className="secondary" type="button" onClick={() => { setEditingEventLocationId(null); setEditingEventLocationValue(""); }}>Cancel</button>
+                                      </div>
+                                    ) : (
+                                      <div className="controls" style={{ justifyContent: "space-between", gap: "0.4rem", marginTop: "0.2rem" }}>
+                                        <p className="meta" style={{ margin: 0, flex: 1 }}>
+                                          Location: {event.location || "—"}
+                                        </p>
+                                        <button
+                                          className="secondary"
+                                          type="button"
+                                          style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem", flexShrink: 0 }}
+                                          onClick={() => { setEditingEventLocationId(event.id); setEditingEventLocationValue(event.location || ""); }}
+                                        >
+                                          Edit Location
                                         </button>
                                       </div>
                                     )}
@@ -2885,6 +2947,39 @@ export default function HomePage() {
                                 onClick={() => { setEditingEventDateId(event.id); setEditingEventDateValue(event.event_date_text || ""); }}
                               >
                                 Edit Date
+                              </button>
+                            </div>
+                          )}
+                          {editingEventLocationId === event.id ? (
+                            <div className="controls" style={{ marginTop: "0.25rem" }}>
+                              <input
+                                className="directoryInput"
+                                type="text"
+                                value={editingEventLocationValue}
+                                autoFocus
+                                placeholder="Location"
+                                onChange={(e) => setEditingEventLocationValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") void saveEventLocation(event.id, editingEventLocationValue);
+                                  if (e.key === "Escape") { setEditingEventLocationId(null); setEditingEventLocationValue(""); }
+                                }}
+                                style={{ flex: 1 }}
+                              />
+                              <button className="primary" type="button" onClick={() => void saveEventLocation(event.id, editingEventLocationValue)}>Save</button>
+                              <button className="secondary" type="button" onClick={() => { setEditingEventLocationId(null); setEditingEventLocationValue(""); }}>Cancel</button>
+                            </div>
+                          ) : (
+                            <div className="controls" style={{ justifyContent: "space-between", gap: "0.4rem", marginTop: "0.2rem" }}>
+                              <p className="meta" style={{ margin: 0, flex: 1 }}>
+                                Location: {event.location || "—"}
+                              </p>
+                              <button
+                                className="secondary"
+                                type="button"
+                                style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem", flexShrink: 0 }}
+                                onClick={() => { setEditingEventLocationId(event.id); setEditingEventLocationValue(event.location || ""); }}
+                              >
+                                Edit Location
                               </button>
                             </div>
                           )}
