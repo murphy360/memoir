@@ -13,7 +13,6 @@ import {
   createDirectoryEntry as createDirectoryEntryRequest,
   createEvent,
   createMemoryFromAudioBlob,
-  createMemoryFromDocument,
   createPeriod,
   deleteAsset as deleteAssetById,
   deleteDirectoryEntry as deleteDirectoryEntryRequest,
@@ -172,6 +171,9 @@ export default function HomePage() {
   const [editingEventTitleValue, setEditingEventTitleValue] = useState("");
   const [collapsedMemoryEventIds, setCollapsedMemoryEventIds] = useState<Set<number>>(new Set());
   const [expandedAssetRowIds, setExpandedAssetRowIds] = useState<Set<number>>(new Set());
+  const [eventCapturePanelOpenIds, setEventCapturePanelOpenIds] = useState<Set<number>>(new Set());
+  const [eventDocumentUploadingId, setEventDocumentUploadingId] = useState<number | null>(null);
+  const [eventDocumentErrors, setEventDocumentErrors] = useState<Record<number, string | null>>({});
   const [mergingPeriodId, setMergingPeriodId] = useState<number | null>(null);
 
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -1090,15 +1092,17 @@ export default function HomePage() {
   async function uploadDocument(file: File) {
     setIsUploadingDocument(true);
     setDocumentUploadError(null);
-    setStatus("Analyzing document...");
+    setStatus("Uploading file...");
     try {
       const formData = new FormData();
       formData.append("file", file, file.name);
-      const created = await createMemoryFromDocument(formData);
+      const kind = file.type.startsWith("image/") ? "photo" : "document";
+      formData.append("kind", kind);
+      const uploaded = await uploadAsset(formData);
 
-      const data = await loadTimeline();
-      focusMemoryInTimeline(created.id, data);
-      setStatus("Document analyzed and saved as a memory.");
+      await loadTimeline();
+      markAndScrollTo(`asset-row-${uploaded.id}`, 180);
+      setStatus("File uploaded to unlinked assets inbox.");
       if (documentFileInputRef.current) {
         documentFileInputRef.current.value = "";
       }
@@ -1108,6 +1112,29 @@ export default function HomePage() {
       setStatus("Document upload failed.");
     } finally {
       setIsUploadingDocument(false);
+    }
+  }
+
+  async function uploadDocumentToEvent(file: File, eventId: number) {
+    setEventDocumentUploadingId(eventId);
+    setEventDocumentErrors((prev) => ({ ...prev, [eventId]: null }));
+    setStatus("Uploading file to event...");
+    try {
+      const formData = new FormData();
+      formData.append("file", file, file.name);
+      const kind = file.type.startsWith("image/") ? "photo" : "document";
+      formData.append("kind", kind);
+      formData.append("event_id", String(eventId));
+      const uploaded = await uploadAsset(formData);
+      await Promise.all([loadTimeline(), loadAssetsForEvent(eventId)]);
+      markAndScrollTo(`asset-row-${uploaded.id}`, 220);
+      setStatus("File uploaded and linked to event.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to process document.";
+      setEventDocumentErrors((prev) => ({ ...prev, [eventId]: message }));
+      setStatus("Document upload failed.");
+    } finally {
+      setEventDocumentUploadingId(null);
     }
   }
 
@@ -1950,73 +1977,109 @@ export default function HomePage() {
                                         ))}
                                       </div>
                                     )}
-                                    <p className="meta">
-                                      Managing event: <span className="badge">{event.title}</span>
-                                    </p>
-                                    <div className="lifeFormFields">
-                                      <input
-                                        ref={eventAssetInputRef}
-                                        type="file"
-                                        accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt,.mp3,.wav,.m4a,.ogg,.webm,audio/*"
-                                        disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
-                                        onChange={(e) => {
-                                          const file = e.target.files?.[0];
-                                          if (file) {
-                                            uploadAssetToActiveEvent(file);
-                                          }
-                                        }}
-                                      />
+                                    <div style={{ marginTop: "0.5rem" }}>
+                                      <button
+                                        className="secondary"
+                                        type="button"
+                                        onClick={() => setEventCapturePanelOpenIds((prev) => {
+                                          const next = new Set(prev);
+                                          if (next.has(event.id)) next.delete(event.id); else next.add(event.id);
+                                          return next;
+                                        })}
+                                        disabled={isRecording && recordingForEventId !== event.id}
+                                      >
+                                        {eventCapturePanelOpenIds.has(event.id) ? "Close Add Memory" : "+ Add Memory"}
+                                      </button>
                                     </div>
-                                    <div className="lifeFormFields">
-                                      {recordingForEventId === event.id ? (
-                                        <>
-                                          <p className="meta">Recording for this event… <span className="badge">live</span></p>
-                                          <div className="controls">
-                                            <button
-                                              className="secondary"
-                                              type="button"
-                                              onClick={stopRecording}
-                                              disabled={!isRecording || isLoading}
+                                    {eventCapturePanelOpenIds.has(event.id) && (
+                                      <div className="eventCapturePanel">
+                                        <div className="captureBlock">
+                                          <h4 className="captureBlockTitle">Record Audio</h4>
+                                          <div className="inputSection">
+                                            <label className="meta" htmlFor={`event-mic-${event.id}`}>Input device</label>
+                                            <select
+                                              id={`event-mic-${event.id}`}
+                                              className="micSelect"
+                                              value={selectedDeviceId}
+                                              onChange={(e) => {
+                                                const nextDeviceId = e.target.value;
+                                                setSelectedDeviceId(nextDeviceId);
+                                                if (nextDeviceId) localStorage.setItem(AUDIO_DEVICE_STORAGE_KEY, nextDeviceId);
+                                                else localStorage.removeItem(AUDIO_DEVICE_STORAGE_KEY);
+                                              }}
+                                              disabled={isRecording || isLoading || audioDevices.length === 0}
                                             >
-                                              Stop &amp; Process
-                                            </button>
-                                            <button
-                                              className="ghost"
-                                              type="button"
-                                              onClick={cancelRecording}
-                                              disabled={!isRecording || isLoading}
-                                            >
-                                              Cancel
-                                            </button>
+                                              {audioDevices.length === 0 && <option value="">No microphones found</option>}
+                                              {audioDevices.map((device) => (
+                                                <option key={device.deviceId} value={device.deviceId}>{device.label}</option>
+                                              ))}
+                                            </select>
+                                            <div className="levelWrap" aria-label="audio input level">
+                                              <div className="levelTrack">
+                                                <div className="levelFill" style={{ width: `${Math.round(audioLevel * 100)}%` }} />
+                                              </div>
+                                              <span className="meta levelText">Input level: {Math.round(audioLevel * 100)}%</span>
+                                            </div>
                                           </div>
-                                        </>
-                                      ) : (
-                                        <button
-                                          className="secondary"
-                                          type="button"
-                                          onClick={() => startRecording(event.id)}
-                                          disabled={isRecording || isLoading || isUploadingAsset}
-                                          title="Record a new audio narration linked to this event"
-                                        >
-                                          &#9679; Record Narration
-                                        </button>
-                                      )}
-                                      {eventRecordingPending[event.id] && (
-                                        <div className="pendingRecordingInline">
-                                          <audio
-                                            controls
-                                            preload="metadata"
-                                            src={eventRecordingPending[event.id].audioUrl}
-                                            style={{ flex: 1 }}
-                                          />
-                                          <span className="meta">
-                                            {eventRecordingPending[event.id].status === "processing" && "Processing…"}
-                                            {eventRecordingPending[event.id].status === "saved" && "Saved ✓"}
-                                            {eventRecordingPending[event.id].status === "failed" && (eventRecordingPending[event.id].error ?? "Failed")}
-                                          </span>
+                                          {recordingForEventId === event.id ? (
+                                            <>
+                                              <p className="meta" style={{ marginBottom: "0.35rem" }}>Recording… <span className="badge">live</span></p>
+                                              <div className="controls">
+                                                <button className="secondary" type="button" onClick={stopRecording} disabled={!isRecording || isLoading}>Stop &amp; Process</button>
+                                                <button className="ghost" type="button" onClick={cancelRecording} disabled={!isRecording || isLoading}>Cancel</button>
+                                              </div>
+                                            </>
+                                          ) : (
+                                            <div className="controls">
+                                              <button className="primary" type="button" onClick={() => startRecording(event.id)} disabled={isRecording || isLoading || audioDevices.length === 0}>Start Recording</button>
+                                            </div>
+                                          )}
+                                          {eventRecordingPending[event.id] && (
+                                            <div className="pendingRecordingInline" style={{ marginTop: "0.5rem" }}>
+                                              <audio controls preload="metadata" src={eventRecordingPending[event.id].audioUrl} style={{ flex: 1 }} />
+                                              <span className="meta">
+                                                {eventRecordingPending[event.id].status === "processing" && "Processing…"}
+                                                {eventRecordingPending[event.id].status === "saved" && "Saved ✓"}
+                                                {eventRecordingPending[event.id].status === "failed" && (eventRecordingPending[event.id].error ?? "Failed")}
+                                              </span>
+                                            </div>
+                                          )}
                                         </div>
-                                      )}
-                                    </div>
+                                        <div className="captureBlock">
+                                          <h4 className="captureBlockTitle">Upload a Document</h4>
+                                          <p className="meta">Upload a PDF, image, or text file and link it directly to this event as an asset.</p>
+                                          <div className="controls">
+                                            <input
+                                              type="file"
+                                              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt"
+                                              disabled={eventDocumentUploadingId === event.id || isRecording || isLoading}
+                                              onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) uploadDocumentToEvent(file, event.id);
+                                                e.currentTarget.value = "";
+                                              }}
+                                              style={{ flex: 1 }}
+                                            />
+                                          </div>
+                                          {eventDocumentUploadingId === event.id && <p className="status">Uploading…</p>}
+                                          {eventDocumentErrors[event.id] && <p className="status" style={{ color: "var(--error, #c00)" }}>{eventDocumentErrors[event.id]}</p>}
+                                        </div>
+                                        <div className="captureBlock">
+                                          <h4 className="captureBlockTitle">Upload Asset</h4>
+                                          <p className="meta">Upload a photo, audio, or file directly as an asset without AI analysis.</p>
+                                          <input
+                                            ref={eventAssetInputRef}
+                                            type="file"
+                                            accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt,.mp3,.wav,.m4a,.ogg,.webm,audio/*"
+                                            disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) uploadAssetToActiveEvent(file);
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
                                     {activeEventAssets.length === 0 ? (
                                       <p className="meta">No assets linked to this event yet.</p>
                                     ) : (
@@ -2373,73 +2436,109 @@ export default function HomePage() {
                               ))}
                             </div>
                           )}
-                          <p className="meta">
-                            Managing event: <span className="badge">{event.title}</span>
-                          </p>
-                          <div className="lifeFormFields">
-                            <input
-                              ref={eventAssetInputRef}
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt,.mp3,.wav,.m4a,.ogg,.webm,audio/*"
-                              disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  uploadAssetToActiveEvent(file);
-                                }
-                              }}
-                            />
+                          <div style={{ marginTop: "0.5rem" }}>
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => setEventCapturePanelOpenIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(event.id)) next.delete(event.id); else next.add(event.id);
+                                return next;
+                              })}
+                              disabled={isRecording && recordingForEventId !== event.id}
+                            >
+                              {eventCapturePanelOpenIds.has(event.id) ? "Close Add Memory" : "+ Add Memory"}
+                            </button>
                           </div>
-                          <div className="lifeFormFields">
-                            {recordingForEventId === event.id ? (
-                              <>
-                                <p className="meta">Recording for this event… <span className="badge">live</span></p>
-                                <div className="controls">
-                                  <button
-                                    className="secondary"
-                                    type="button"
-                                    onClick={stopRecording}
-                                    disabled={!isRecording || isLoading}
+                          {eventCapturePanelOpenIds.has(event.id) && (
+                            <div className="eventCapturePanel">
+                              <div className="captureBlock">
+                                <h4 className="captureBlockTitle">Record Audio</h4>
+                                <div className="inputSection">
+                                  <label className="meta" htmlFor={`event-mic-${event.id}`}>Input device</label>
+                                  <select
+                                    id={`event-mic-${event.id}`}
+                                    className="micSelect"
+                                    value={selectedDeviceId}
+                                    onChange={(e) => {
+                                      const nextDeviceId = e.target.value;
+                                      setSelectedDeviceId(nextDeviceId);
+                                      if (nextDeviceId) localStorage.setItem(AUDIO_DEVICE_STORAGE_KEY, nextDeviceId);
+                                      else localStorage.removeItem(AUDIO_DEVICE_STORAGE_KEY);
+                                    }}
+                                    disabled={isRecording || isLoading || audioDevices.length === 0}
                                   >
-                                    Stop &amp; Process
-                                  </button>
-                                  <button
-                                    className="ghost"
-                                    type="button"
-                                    onClick={cancelRecording}
-                                    disabled={!isRecording || isLoading}
-                                  >
-                                    Cancel
-                                  </button>
+                                    {audioDevices.length === 0 && <option value="">No microphones found</option>}
+                                    {audioDevices.map((device) => (
+                                      <option key={device.deviceId} value={device.deviceId}>{device.label}</option>
+                                    ))}
+                                  </select>
+                                  <div className="levelWrap" aria-label="audio input level">
+                                    <div className="levelTrack">
+                                      <div className="levelFill" style={{ width: `${Math.round(audioLevel * 100)}%` }} />
+                                    </div>
+                                    <span className="meta levelText">Input level: {Math.round(audioLevel * 100)}%</span>
+                                  </div>
                                 </div>
-                              </>
-                            ) : (
-                              <button
-                                className="secondary"
-                                type="button"
-                                onClick={() => startRecording(event.id)}
-                                disabled={isRecording || isLoading || isUploadingAsset}
-                                title="Record a new audio narration linked to this event"
-                              >
-                                &#9679; Record Narration
-                              </button>
-                            )}
-                            {eventRecordingPending[event.id] && (
-                              <div className="pendingRecordingInline">
-                                <audio
-                                  controls
-                                  preload="metadata"
-                                  src={eventRecordingPending[event.id].audioUrl}
-                                  style={{ flex: 1 }}
-                                />
-                                <span className="meta">
-                                  {eventRecordingPending[event.id].status === "processing" && "Processing…"}
-                                  {eventRecordingPending[event.id].status === "saved" && "Saved ✓"}
-                                  {eventRecordingPending[event.id].status === "failed" && (eventRecordingPending[event.id].error ?? "Failed")}
-                                </span>
+                                {recordingForEventId === event.id ? (
+                                  <>
+                                    <p className="meta" style={{ marginBottom: "0.35rem" }}>Recording… <span className="badge">live</span></p>
+                                    <div className="controls">
+                                      <button className="secondary" type="button" onClick={stopRecording} disabled={!isRecording || isLoading}>Stop &amp; Process</button>
+                                      <button className="ghost" type="button" onClick={cancelRecording} disabled={!isRecording || isLoading}>Cancel</button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="controls">
+                                    <button className="primary" type="button" onClick={() => startRecording(event.id)} disabled={isRecording || isLoading || audioDevices.length === 0}>Start Recording</button>
+                                  </div>
+                                )}
+                                {eventRecordingPending[event.id] && (
+                                  <div className="pendingRecordingInline" style={{ marginTop: "0.5rem" }}>
+                                    <audio controls preload="metadata" src={eventRecordingPending[event.id].audioUrl} style={{ flex: 1 }} />
+                                    <span className="meta">
+                                      {eventRecordingPending[event.id].status === "processing" && "Processing…"}
+                                      {eventRecordingPending[event.id].status === "saved" && "Saved ✓"}
+                                      {eventRecordingPending[event.id].status === "failed" && (eventRecordingPending[event.id].error ?? "Failed")}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
+                              <div className="captureBlock">
+                                <h4 className="captureBlockTitle">Upload a Document</h4>
+                                <p className="meta">Upload a PDF, image, or text file and link it directly to this event as an asset.</p>
+                                <div className="controls">
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt"
+                                    disabled={eventDocumentUploadingId === event.id || isRecording || isLoading}
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) uploadDocumentToEvent(file, event.id);
+                                      e.currentTarget.value = "";
+                                    }}
+                                    style={{ flex: 1 }}
+                                  />
+                                </div>
+                                {eventDocumentUploadingId === event.id && <p className="status">Uploading…</p>}
+                                {eventDocumentErrors[event.id] && <p className="status" style={{ color: "var(--error, #c00)" }}>{eventDocumentErrors[event.id]}</p>}
+                              </div>
+                              <div className="captureBlock">
+                                <h4 className="captureBlockTitle">Upload Asset</h4>
+                                <p className="meta">Upload a photo, audio, or file directly as an asset without AI analysis.</p>
+                                <input
+                                  ref={eventAssetInputRef}
+                                  type="file"
+                                  accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt,.mp3,.wav,.m4a,.ogg,.webm,audio/*"
+                                  disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) uploadAssetToActiveEvent(file);
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
                           {activeEventAssets.length === 0 ? (
                             <p className="meta">No assets linked to this event yet.</p>
                           ) : (
@@ -3008,7 +3107,7 @@ export default function HomePage() {
 
         <div className="captureBlock">
           <h3 className="captureBlockTitle">Upload a Document</h3>
-          <p className="meta">Upload a PDF, image, or text file, or paste a screen clipping. Gemini will analyze it and save it as a memory entry.</p>
+          <p className="meta">Upload a PDF, image, or text file, or paste a screen clipping. It will be saved as an asset in the unlinked inbox.</p>
           <div className="controls">
             <input
               ref={documentFileInputRef}
@@ -3046,7 +3145,7 @@ export default function HomePage() {
             <p className="pasteTargetTitle">Paste or Drop a File</p>
             <p className="meta">Click this area and press Ctrl+V, or drag and drop a PDF, image, or text file here.</p>
           </div>
-          {(isUploadingDocument || isReadingClipboard) && <p className="status">Analyzing document with Gemini...</p>}
+          {(isUploadingDocument || isReadingClipboard) && <p className="status">Uploading file...</p>}
           {documentUploadError && <p className="status" style={{ color: "var(--error, #c00)" }}>{documentUploadError}</p>}
         </div>
 

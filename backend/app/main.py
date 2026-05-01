@@ -1000,6 +1000,11 @@ async def create_memory(
         # second event) and instead create the audio asset + link it manually.
         target_event = db.query(LifeEvent).filter(LifeEvent.id == event_id).first()
         if target_event:
+            conflicting_asset = db.query(Asset).filter(Asset.legacy_memory_id == entry.id).first()
+            if conflicting_asset and conflicting_asset.kind != "audio":
+                conflicting_asset.legacy_memory_id = None
+                db.flush()
+
             audio_asset = (
                 db.query(Asset)
                 .filter(Asset.legacy_memory_id == entry.id, Asset.kind == "audio")
@@ -1065,6 +1070,7 @@ _EXTENSION_TO_MIME: dict[str, str] = {
 @app.post("/api/memories/document", response_model=MemoryResponse)
 async def create_memory_from_document(
     file: UploadFile = File(...),
+    event_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
 ) -> MemoryEntry:
     file_bytes = await file.read()
@@ -1131,7 +1137,43 @@ async def create_memory_from_document(
     assign_recorder_person(db, entry, metadata.recorder_name)
     sync_memory_people(db, entry, metadata.people)
     sync_memory_places(db, entry, metadata.locations)
-    sync_life_hierarchy_for_memory(db, entry)
+
+    if event_id is not None:
+        target_event = db.query(LifeEvent).filter(LifeEvent.id == event_id).first()
+        if target_event:
+            asset_kind = "photo" if (document_content_type or "").startswith("image/") else "document"
+            conflicting_asset = db.query(Asset).filter(Asset.legacy_memory_id == entry.id).first()
+            if conflicting_asset and conflicting_asset.kind != asset_kind:
+                conflicting_asset.legacy_memory_id = None
+                db.flush()
+
+            document_asset = Asset(
+                period_id=target_event.period_id,
+                kind=asset_kind,
+                title=derive_asset_title(document_original_filename or ""),
+                storage_filename=document_filename,
+                original_filename=document_original_filename,
+                content_type=document_content_type,
+                size_bytes=document_size_bytes,
+                text_excerpt=(transcript or "").strip()[:1200] or None,
+                notes=f"Uploaded to event: {target_event.title}",
+                legacy_memory_id=entry.id,
+            )
+            db.add(document_asset)
+            db.flush()
+            if asset_kind == "photo" and document_filename:
+                doc_path = DOCUMENT_STORAGE_DIR / document_filename
+                if doc_path.exists():
+                    try:
+                        extract_and_apply_image_metadata(document_asset, doc_path.read_bytes(), document_content_type)
+                    except Exception:
+                        pass
+            ensure_event_asset_link(db, target_event, document_asset)
+            if target_event.legacy_memory_id is None:
+                target_event.legacy_memory_id = entry.id
+    else:
+        sync_life_hierarchy_for_memory(db, entry)
+
     db.commit()
     db.refresh(entry)
 

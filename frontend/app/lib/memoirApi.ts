@@ -382,7 +382,10 @@ export async function answerQuestionWithMemory(questionId: number, answerMemoryI
   });
 }
 
-export async function createMemoryFromDocument(formData: FormData): Promise<MemoryEntry> {
+export async function createMemoryFromDocument(formData: FormData, eventId?: number): Promise<MemoryEntry> {
+  if (eventId !== undefined) {
+    formData.append("event_id", String(eventId));
+  }
   const response = await fetch(toAbsoluteApiUrl("/api/memories/document"), {
     method: "POST",
     body: formData,
