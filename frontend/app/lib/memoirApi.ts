@@ -197,6 +197,15 @@ export async function updateAssetNotes(assetId: number, notes: string | null): P
   await expectOk(response, "Update asset notes failed");
 }
 
+export async function updateAssetTitle(assetId: number, title: string | null): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/assets/${assetId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  await expectOk(response, "Update asset title failed");
+}
+
 export async function linkAssetToEvent(
   assetId: number,
   eventId: number,

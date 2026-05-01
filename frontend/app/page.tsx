@@ -39,6 +39,7 @@ import {
   splitPersonEntry as splitPersonEntryRequest,
   addPersonAlias as addPersonAliasRequest,
   updateAssetNotes as updateAssetNotesById,
+  updateAssetTitle as updateAssetTitleById,
   uploadAsset,
 } from "./lib/memoirApi";
 import {
@@ -140,6 +141,9 @@ export default function HomePage() {
   const [newEventDateText, setNewEventDateText] = useState("");
   const [newEventDescription, setNewEventDescription] = useState("");
   const [newEventPeriodId, setNewEventPeriodId] = useState("");
+  const [editingAssetTitleId, setEditingAssetTitleId] = useState<number | null>(null);
+  const [editingAssetTitleValue, setEditingAssetTitleValue] = useState("");
+  const [assetTitleSavingId, setAssetTitleSavingId] = useState<number | null>(null);
   const [editingAssetNotesId, setEditingAssetNotesId] = useState<number | null>(null);
   const [editingAssetNotesValue, setEditingAssetNotesValue] = useState("");
   const [assetNotesSavingId, setAssetNotesSavingId] = useState<number | null>(null);
@@ -166,8 +170,9 @@ export default function HomePage() {
   const [editingPeriodTitleValue, setEditingPeriodTitleValue] = useState("");
   const [editingEventTitleId, setEditingEventTitleId] = useState<number | null>(null);
   const [editingEventTitleValue, setEditingEventTitleValue] = useState("");
-    const [collapsedMemoryEventIds, setCollapsedMemoryEventIds] = useState<Set<number>>(new Set());
-    const [mergingPeriodId, setMergingPeriodId] = useState<number | null>(null);
+  const [collapsedMemoryEventIds, setCollapsedMemoryEventIds] = useState<Set<number>>(new Set());
+  const [expandedAssetRowIds, setExpandedAssetRowIds] = useState<Set<number>>(new Set());
+  const [mergingPeriodId, setMergingPeriodId] = useState<number | null>(null);
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
@@ -669,6 +674,25 @@ export default function HomePage() {
       setStatus("Asset deleted.");
     } catch {
       setStatus("Failed to delete asset.");
+    }
+  }
+
+  async function saveAssetTitle(assetId: number, eventId?: number) {
+    setAssetTitleSavingId(assetId);
+    setStatus("Saving asset title...");
+    try {
+      await updateAssetTitleById(assetId, editingAssetTitleValue.trim() || null);
+      setEditingAssetTitleId(null);
+      setEditingAssetTitleValue("");
+      if (eventId !== undefined) {
+        await loadAssetsForEvent(eventId);
+      }
+      await loadTimeline();
+      setStatus("Asset title updated.");
+    } catch {
+      setStatus("Failed to update asset title.");
+    } finally {
+      setAssetTitleSavingId(null);
     }
   }
 
@@ -1816,6 +1840,38 @@ export default function HomePage() {
 
                                 {activeEventId === event.id && (
                                   <>
+                                    {editingEventTitleId === event.id && (
+                                      <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
+                                        <select
+                                          className="directoryInput"
+                                          value={eventMergeTargets[event.id] || ""}
+                                          onChange={(e) => setEventMergeTargets((current) => ({ ...current, [event.id]: e.target.value }))}
+                                          disabled={isSavingLifeStructure}
+                                        >
+                                          <option value="">Merge into another event</option>
+                                          {eventsForPeriod.filter((candidate) => candidate.id !== event.id).map((candidate) => (
+                                            <option key={candidate.id} value={candidate.id}>{candidate.title}</option>
+                                          ))}
+                                        </select>
+                                        <button
+                                          className="secondary"
+                                          type="button"
+                                          onClick={() => mergeLifeEvent(event.id)}
+                                          disabled={!eventMergeTargets[event.id] || isSavingLifeStructure}
+                                        >
+                                          Merge Event
+                                        </button>
+                                        <button
+                                          className="ghost"
+                                          type="button"
+                                          title="Remove event wrapper only (keeps linked memory and assets)."
+                                          onClick={() => deleteLifeEvent(event.id)}
+                                          disabled={isSavingLifeStructure}
+                                        >
+                                          Remove Event
+                                        </button>
+                                      </div>
+                                    )}
                                     {event.legacy_memory_id && (() => {
                                       const linkedMemory = timeline.find((memory) => memory.id === event.legacy_memory_id);
                                       if (!linkedMemory) {
@@ -1961,56 +2017,82 @@ export default function HomePage() {
                                         </div>
                                       )}
                                     </div>
-                                    <div className="lifeEventManagementRow">
-                                      <select
-                                        className="directoryInput"
-                                        value={eventMergeTargets[event.id] || ""}
-                                        onChange={(e) => setEventMergeTargets((current) => ({ ...current, [event.id]: e.target.value }))}
-                                        disabled={isSavingLifeStructure}
-                                      >
-                                        <option value="">Merge into another event</option>
-                                        {eventsForPeriod.filter((candidate) => candidate.id !== event.id).map((candidate) => (
-                                          <option key={candidate.id} value={candidate.id}>{candidate.title}</option>
-                                        ))}
-                                      </select>
-                                      <button
-                                        className="secondary"
-                                        type="button"
-                                        onClick={() => mergeLifeEvent(event.id)}
-                                        disabled={!eventMergeTargets[event.id] || isSavingLifeStructure}
-                                      >
-                                        Merge Event
-                                      </button>
-                                      <button
-                                        className="ghost"
-                                        type="button"
-                                        title="Remove event wrapper only (keeps linked memory and assets)."
-                                        onClick={() => deleteLifeEvent(event.id)}
-                                        disabled={isSavingLifeStructure}
-                                      >
-                                        Remove Event
-                                      </button>
-                                    </div>
                                     {activeEventAssets.length === 0 ? (
                                       <p className="meta">No assets linked to this event yet.</p>
                                     ) : (
                                       <div className="lifeAssetList">
-                                        <p className="entitySectionLabel">
+                                        <div className="entitySectionLabel">
                                           <span className="entityPill entityPillAsset">Assets</span>
                                           Supporting files linked to this event
-                                        </p>
+                                        </div>
                                         {activeEventAssets.map((asset) => (
                                           <div
                                             key={asset.id}
                                             id={`asset-row-${asset.id}`}
                                             className={`lifeAssetRow${highlightedElementId === `asset-row-${asset.id}` ? " focusPulse" : ""}`}
                                           >
-                                            <div>
-                                              <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                                            <div className="assetRowHeader">
+                                              <span style={{ flex: 1, minWidth: 0 }}>
+                                                <strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong>
+                                                <span className="meta"> · {asset.kind}{asset.size_bytes ? ` · ${formatBytes(asset.size_bytes)}` : ""}</span>
+                                              </span>
+                                              <button
+                                                className="secondary"
+                                                type="button"
+                                                style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
+                                                onClick={() => setExpandedAssetRowIds((prev) => {
+                                                  const next = new Set(prev);
+                                                  if (next.has(asset.id)) next.delete(asset.id); else next.add(asset.id);
+                                                  return next;
+                                                })}
+                                              >
+                                                {expandedAssetRowIds.has(asset.id) ? "Collapse" : "Expand"}
+                                              </button>
+                                            </div>
+                                            {expandedAssetRowIds.has(asset.id) && <div>
+                                              {editingAssetTitleId === asset.id ? (
+                                                <div className="controls" style={{ marginBottom: "0.35rem" }}>
+                                                  <input
+                                                    className="directoryInput"
+                                                    type="text"
+                                                    value={editingAssetTitleValue}
+                                                    autoFocus
+                                                    onChange={(e) => setEditingAssetTitleValue(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === "Enter") {
+                                                        void saveAssetTitle(asset.id, event.id);
+                                                      }
+                                                      if (e.key === "Escape") {
+                                                        setEditingAssetTitleId(null);
+                                                        setEditingAssetTitleValue("");
+                                                      }
+                                                    }}
+                                                    style={{ flex: 1 }}
+                                                  />
+                                                  <button className="primary" type="button" onClick={() => void saveAssetTitle(asset.id, event.id)} disabled={assetTitleSavingId === asset.id}>Save</button>
+                                                  <button className="secondary" type="button" onClick={() => { setEditingAssetTitleId(null); setEditingAssetTitleValue(""); }}>Cancel</button>
+                                                </div>
+                                              ) : (
+                                                <div className="assetNotesRow" style={{ marginTop: 0 }}>
+                                                  <p><strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                                                  <button
+                                                    className="secondary"
+                                                    type="button"
+                                                    style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
+                                                    onClick={() => {
+                                                      setEditingAssetTitleId(asset.id);
+                                                      setEditingAssetTitleValue(asset.title || "");
+                                                    }}
+                                                  >
+                                                    Edit Title
+                                                  </button>
+                                                </div>
+                                              )}
+                                              <p className="meta">Filename: {asset.original_filename || "none"}</p>
                                               {asset.kind === "photo" && (
                                                 <img
                                                   src={resolveApiUrl(`${asset.download_url}?download=false`)}
-                                                  alt={asset.original_filename || `Asset ${asset.id}`}
+                                                  alt={asset.title || asset.original_filename || `Asset ${asset.id}`}
                                                   className="assetThumbnail"
                                                 />
                                               )}
@@ -2077,8 +2159,8 @@ export default function HomePage() {
                                               {asset.text_excerpt && (
                                                 <p className="meta assetTranscript">Transcript: {asset.text_excerpt}</p>
                                               )}
-                                            </div>
-                                            <div className="assetActions">
+                                            </div>}
+                                            {expandedAssetRowIds.has(asset.id) && <div className="assetActions">
                                               <a className="secondary linkButton" href={resolveApiUrl(`${asset.download_url}?download=false`)} target="_blank" rel="noreferrer">
                                                 View
                                               </a>
@@ -2092,7 +2174,7 @@ export default function HomePage() {
                                               >
                                                 Delete
                                               </button>
-                                            </div>
+                                            </div>}
                                           </div>
                                         ))}
                                       </div>
@@ -2181,6 +2263,38 @@ export default function HomePage() {
 
                       {activeEventId === event.id && (
                         <>
+                          {editingEventTitleId === event.id && (
+                            <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
+                              <select
+                                className="directoryInput"
+                                value={eventMergeTargets[event.id] || ""}
+                                onChange={(e) => setEventMergeTargets((current) => ({ ...current, [event.id]: e.target.value }))}
+                                disabled={isSavingLifeStructure}
+                              >
+                                <option value="">Merge into another event</option>
+                                {lifeEvents.filter((candidate) => candidate.id !== event.id).map((candidate) => (
+                                  <option key={candidate.id} value={candidate.id}>{candidate.title}</option>
+                                ))}
+                              </select>
+                              <button
+                                className="secondary"
+                                type="button"
+                                onClick={() => mergeLifeEvent(event.id)}
+                                disabled={!eventMergeTargets[event.id] || isSavingLifeStructure}
+                              >
+                                Merge Event
+                              </button>
+                              <button
+                                className="ghost"
+                                type="button"
+                                title="Remove event wrapper only (keeps linked memory and assets)."
+                                onClick={() => deleteLifeEvent(event.id)}
+                                disabled={isSavingLifeStructure}
+                              >
+                                Remove Event
+                              </button>
+                            </div>
+                          )}
                           {event.legacy_memory_id && (() => {
                             const linkedMemory = timeline.find((memory) => memory.id === event.legacy_memory_id);
                             if (!linkedMemory) {
@@ -2326,56 +2440,82 @@ export default function HomePage() {
                               </div>
                             )}
                           </div>
-                          <div className="lifeEventManagementRow">
-                            <select
-                              className="directoryInput"
-                              value={eventMergeTargets[event.id] || ""}
-                              onChange={(e) => setEventMergeTargets((current) => ({ ...current, [event.id]: e.target.value }))}
-                              disabled={isSavingLifeStructure}
-                            >
-                              <option value="">Merge into another event</option>
-                              {lifeEvents.filter((candidate) => candidate.id !== event.id).map((candidate) => (
-                                <option key={candidate.id} value={candidate.id}>{candidate.title}</option>
-                              ))}
-                            </select>
-                            <button
-                              className="secondary"
-                              type="button"
-                              onClick={() => mergeLifeEvent(event.id)}
-                              disabled={!eventMergeTargets[event.id] || isSavingLifeStructure}
-                            >
-                              Merge Event
-                            </button>
-                            <button
-                              className="ghost"
-                              type="button"
-                              title="Remove event wrapper only (keeps linked memory and assets)."
-                              onClick={() => deleteLifeEvent(event.id)}
-                              disabled={isSavingLifeStructure}
-                            >
-                              Remove Event
-                            </button>
-                          </div>
                           {activeEventAssets.length === 0 ? (
                             <p className="meta">No assets linked to this event yet.</p>
                           ) : (
                             <div className="lifeAssetList">
-                              <p className="entitySectionLabel">
+                              <div className="entitySectionLabel">
                                 <span className="entityPill entityPillAsset">Assets</span>
                                 Supporting files linked to this event
-                              </p>
+                              </div>
                               {activeEventAssets.map((asset) => (
                                 <div
                                   key={asset.id}
                                   id={`asset-row-${asset.id}`}
                                   className={`lifeAssetRow${highlightedElementId === `asset-row-${asset.id}` ? " focusPulse" : ""}`}
                                 >
-                                  <div>
-                                    <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                                  <div className="assetRowHeader">
+                                    <span style={{ flex: 1, minWidth: 0 }}>
+                                      <strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong>
+                                      <span className="meta"> · {asset.kind}{asset.size_bytes ? ` · ${formatBytes(asset.size_bytes)}` : ""}</span>
+                                    </span>
+                                    <button
+                                      className="secondary"
+                                      type="button"
+                                      style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
+                                      onClick={() => setExpandedAssetRowIds((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(asset.id)) next.delete(asset.id); else next.add(asset.id);
+                                        return next;
+                                      })}
+                                    >
+                                      {expandedAssetRowIds.has(asset.id) ? "Collapse" : "Expand"}
+                                    </button>
+                                  </div>
+                                  {expandedAssetRowIds.has(asset.id) && <div>
+                                    {editingAssetTitleId === asset.id ? (
+                                      <div className="controls" style={{ marginBottom: "0.35rem" }}>
+                                        <input
+                                          className="directoryInput"
+                                          type="text"
+                                          value={editingAssetTitleValue}
+                                          autoFocus
+                                          onChange={(e) => setEditingAssetTitleValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              void saveAssetTitle(asset.id, event.id);
+                                            }
+                                            if (e.key === "Escape") {
+                                              setEditingAssetTitleId(null);
+                                              setEditingAssetTitleValue("");
+                                            }
+                                          }}
+                                          style={{ flex: 1 }}
+                                        />
+                                        <button className="primary" type="button" onClick={() => void saveAssetTitle(asset.id, event.id)} disabled={assetTitleSavingId === asset.id}>Save</button>
+                                        <button className="secondary" type="button" onClick={() => { setEditingAssetTitleId(null); setEditingAssetTitleValue(""); }}>Cancel</button>
+                                      </div>
+                                    ) : (
+                                      <div className="assetNotesRow" style={{ marginTop: 0 }}>
+                                        <p><strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                                        <button
+                                          className="secondary"
+                                          type="button"
+                                          style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
+                                          onClick={() => {
+                                            setEditingAssetTitleId(asset.id);
+                                            setEditingAssetTitleValue(asset.title || "");
+                                          }}
+                                        >
+                                          Edit Title
+                                        </button>
+                                      </div>
+                                    )}
+                                    <p className="meta">Filename: {asset.original_filename || "none"}</p>
                                     {asset.kind === "photo" && (
                                       <img
                                         src={resolveApiUrl(`${asset.download_url}?download=false`)}
-                                        alt={asset.original_filename || `Asset ${asset.id}`}
+                                        alt={asset.title || asset.original_filename || `Asset ${asset.id}`}
                                         className="assetThumbnail"
                                       />
                                     )}
@@ -2442,8 +2582,8 @@ export default function HomePage() {
                                     {asset.text_excerpt && (
                                       <p className="meta assetTranscript">Transcript: {asset.text_excerpt}</p>
                                     )}
-                                  </div>
-                                  <div className="assetActions">
+                                  </div>}
+                                  {expandedAssetRowIds.has(asset.id) && <div className="assetActions">
                                     <a className="secondary linkButton" href={resolveApiUrl(`${asset.download_url}?download=false`)} target="_blank" rel="noreferrer">
                                       View
                                     </a>
@@ -2457,7 +2597,7 @@ export default function HomePage() {
                                     >
                                       Delete
                                     </button>
-                                  </div>
+                                  </div>}
                                 </div>
                               ))}
                             </div>
@@ -2481,12 +2621,68 @@ export default function HomePage() {
                         id={`asset-row-${asset.id}`}
                         className={`lifeAssetRow${highlightedElementId === `asset-row-${asset.id}` ? " focusPulse" : ""}`}
                       >
-                        <div>
-                          <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                        <div className="assetRowHeader">
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong>
+                            <span className="meta"> · {asset.kind}{asset.size_bytes ? ` · ${formatBytes(asset.size_bytes)}` : ""}</span>
+                          </span>
+                          <button
+                            className="secondary"
+                            type="button"
+                            style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
+                            onClick={() => setExpandedAssetRowIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(asset.id)) next.delete(asset.id); else next.add(asset.id);
+                              return next;
+                            })}
+                          >
+                            {expandedAssetRowIds.has(asset.id) ? "Collapse" : "Expand"}
+                          </button>
+                        </div>
+                        {expandedAssetRowIds.has(asset.id) && <div>
+                          {editingAssetTitleId === asset.id ? (
+                            <div className="controls" style={{ marginBottom: "0.35rem" }}>
+                              <input
+                                className="directoryInput"
+                                type="text"
+                                value={editingAssetTitleValue}
+                                autoFocus
+                                onChange={(e) => setEditingAssetTitleValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    void saveAssetTitle(asset.id);
+                                  }
+                                  if (e.key === "Escape") {
+                                    setEditingAssetTitleId(null);
+                                    setEditingAssetTitleValue("");
+                                  }
+                                }}
+                                style={{ flex: 1 }}
+                              />
+                              <button className="primary" type="button" onClick={() => void saveAssetTitle(asset.id)} disabled={assetTitleSavingId === asset.id}>Save</button>
+                              <button className="secondary" type="button" onClick={() => { setEditingAssetTitleId(null); setEditingAssetTitleValue(""); }}>Cancel</button>
+                            </div>
+                          ) : (
+                            <div className="assetNotesRow" style={{ marginTop: 0 }}>
+                              <p><strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                              <button
+                                className="secondary"
+                                type="button"
+                                style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
+                                onClick={() => {
+                                  setEditingAssetTitleId(asset.id);
+                                  setEditingAssetTitleValue(asset.title || "");
+                                }}
+                              >
+                                Edit Title
+                              </button>
+                            </div>
+                          )}
+                          <p className="meta">Filename: {asset.original_filename || "none"}</p>
                           {asset.kind === "photo" && (
                             <img
                               src={resolveApiUrl(`${asset.download_url}?download=false`)}
-                              alt={asset.original_filename || `Asset ${asset.id}`}
+                              alt={asset.title || asset.original_filename || `Asset ${asset.id}`}
                               className="assetThumbnail"
                             />
                           )}
@@ -2542,8 +2738,8 @@ export default function HomePage() {
                               </button>
                             </div>
                           )}
-                        </div>
-                        <div className="lifeAssetLinkControls">
+                        </div>}
+                        {expandedAssetRowIds.has(asset.id) && <div className="lifeAssetLinkControls">
                           <select
                             className="directoryInput"
                             value={assetLinkTargets[asset.id] || ""}
@@ -2576,7 +2772,7 @@ export default function HomePage() {
                           >
                             Delete
                           </button>
-                        </div>
+                        </div>}
                       </div>
                     ))}
                   </div>

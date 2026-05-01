@@ -152,6 +152,7 @@ class AssetResponse(BaseModel):
     id: int
     period_id: Optional[int]
     kind: str
+    title: Optional[str]
     original_filename: Optional[str]
     content_type: Optional[str]
     size_bytes: Optional[int]
@@ -178,6 +179,7 @@ class LinkAssetToEventRequest(BaseModel):
 
 
 class UpdateAssetRequest(BaseModel):
+    title: Optional[str] = None
     notes: Optional[str] = None
 
 

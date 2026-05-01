@@ -166,6 +166,7 @@ def ensure_schema_migrations() -> None:
                 id INTEGER PRIMARY KEY,
                 period_id INTEGER,
                 kind VARCHAR(20) NOT NULL DEFAULT 'document',
+                title VARCHAR(180),
                 storage_filename VARCHAR(255) NOT NULL UNIQUE,
                 original_filename VARCHAR(255),
                 content_type VARCHAR(100),
@@ -198,6 +199,8 @@ def ensure_schema_migrations() -> None:
             row[1]
             for row in connection.execute(text("PRAGMA table_info(assets)")).fetchall()
         }
+        if "title" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN title VARCHAR(180)"))
         if "captured_at" not in asset_columns:
             connection.execute(text("ALTER TABLE assets ADD COLUMN captured_at DATETIME"))
         if "captured_at_text" not in asset_columns:

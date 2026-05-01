@@ -139,6 +139,14 @@ def root() -> dict:
     return {"service": "memoir-api", "health": "/api/health"}
 
 
+def derive_asset_title(filename: Optional[str]) -> Optional[str]:
+    candidate = (filename or "").strip()
+    if not candidate:
+        return None
+    stem = Path(candidate).stem.strip() or candidate
+    return stem[:180]
+
+
 @app.get("/api/periods", response_model=list[LifePeriodResponse])
 def list_periods(db: Session = Depends(get_db)) -> list[LifePeriodResponse]:
     periods = db.query(LifePeriod).order_by(LifePeriod.start_sort.asc().nulls_last(), LifePeriod.created_at.asc()).all()
@@ -477,6 +485,7 @@ async def upload_asset(
     asset = Asset(
         period_id=period_id,
         kind=normalized_kind,
+        title=derive_asset_title(original_filename),
         storage_filename=storage_filename,
         original_filename=original_filename,
         content_type=content_type,
@@ -541,6 +550,10 @@ def update_asset(asset_id: int, body: UpdateAssetRequest, db: Session = Depends(
     asset = db.get(Asset, asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
+
+    if "title" in body.model_fields_set:
+        clean_title = body.title.strip() if body.title is not None else None
+        asset.title = (clean_title or None)
 
     if "notes" in body.model_fields_set:
         clean_notes = body.notes.strip() if body.notes is not None else None
@@ -996,6 +1009,7 @@ async def create_memory(
                 audio_asset = Asset(
                     period_id=target_event.period_id,
                     kind="audio",
+                    title=derive_asset_title(audio_filename),
                     storage_filename=audio_filename,
                     original_filename=audio_filename,
                     content_type=audio_content_type,

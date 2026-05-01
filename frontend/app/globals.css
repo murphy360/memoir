@@ -1044,14 +1044,19 @@ button.ghost:hover:not(:disabled) {
 
 .lifeAssetRow {
   display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: #fff;
+}
+
+.assetRowHeader {
+  display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  gap: 0.6rem;
+  min-width: 0;
 }
 
 .assetActions {

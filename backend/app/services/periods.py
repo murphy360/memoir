@@ -396,6 +396,7 @@ def build_asset_response(asset: Asset) -> AssetResponse:
         id=asset.id,
         period_id=asset.period_id,
         kind=asset.kind,
+        title=asset.title,
         original_filename=asset.original_filename,
         content_type=asset.content_type,
         size_bytes=asset.size_bytes,

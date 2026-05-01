@@ -212,6 +212,7 @@ class Asset(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     period_id: Mapped[Optional[int]] = mapped_column(ForeignKey("life_periods.id", ondelete="SET NULL"), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(20), nullable=False, default="document", index=True)
+    title: Mapped[Optional[str]] = mapped_column(String(180), nullable=True)
     storage_filename: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     original_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     content_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
