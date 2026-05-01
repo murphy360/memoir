@@ -33,6 +33,7 @@ from app.schemas import (
     MemoryResponse,
     MergePersonRequest,
     QuestionResponse,
+    UpdateAssetRequest,
     UpdateLifeEventRequest,
     UpdateLifePeriodRequest,
     MergePeriodsRequest,
@@ -532,6 +533,21 @@ def link_asset_to_event(
         db.commit()
         db.refresh(asset)
 
+    return build_asset_response(asset)
+
+
+@app.patch("/api/assets/{asset_id}", response_model=AssetResponse)
+def update_asset(asset_id: int, body: UpdateAssetRequest, db: Session = Depends(get_db)) -> AssetResponse:
+    asset = db.get(Asset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    if "notes" in body.model_fields_set:
+        clean_notes = body.notes.strip() if body.notes is not None else None
+        asset.notes = clean_notes or None
+
+    db.commit()
+    db.refresh(asset)
     return build_asset_response(asset)
 
 

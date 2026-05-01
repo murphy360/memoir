@@ -38,6 +38,7 @@ import {
   saveMainCharacterName as saveMainCharacterNameRequest,
   splitPersonEntry as splitPersonEntryRequest,
   addPersonAlias as addPersonAliasRequest,
+  updateAssetNotes as updateAssetNotesById,
   uploadAsset,
 } from "./lib/memoirApi";
 import {
@@ -139,7 +140,9 @@ export default function HomePage() {
   const [newEventDateText, setNewEventDateText] = useState("");
   const [newEventDescription, setNewEventDescription] = useState("");
   const [newEventPeriodId, setNewEventPeriodId] = useState("");
-  const [assetUploadNotes, setAssetUploadNotes] = useState("");
+  const [editingAssetNotesId, setEditingAssetNotesId] = useState<number | null>(null);
+  const [editingAssetNotesValue, setEditingAssetNotesValue] = useState("");
+  const [assetNotesSavingId, setAssetNotesSavingId] = useState<number | null>(null);
   const [peopleDirectory, setPeopleDirectory] = useState<DirectoryEntry[]>([]);
   const [placesDirectory, setPlacesDirectory] = useState<DirectoryEntry[]>([]);
   const [pendingRecording, setPendingRecording] = useState<PendingRecording | null>(null);
@@ -460,12 +463,8 @@ export default function HomePage() {
       formData.append("file", file, file.name);
       formData.append("kind", kind);
       formData.append("event_id", `${activeEventId}`);
-      if (assetUploadNotes.trim()) {
-        formData.append("notes", assetUploadNotes.trim());
-      }
       const uploaded = await uploadAsset(formData);
 
-      setAssetUploadNotes("");
       if (eventAssetInputRef.current) {
         eventAssetInputRef.current.value = "";
       }
@@ -670,6 +669,25 @@ export default function HomePage() {
       setStatus("Asset deleted.");
     } catch {
       setStatus("Failed to delete asset.");
+    }
+  }
+
+  async function saveAssetNotes(assetId: number, eventId?: number) {
+    setAssetNotesSavingId(assetId);
+    setStatus("Saving asset notes...");
+    try {
+      await updateAssetNotesById(assetId, editingAssetNotesValue.trim() || null);
+      setEditingAssetNotesId(null);
+      setEditingAssetNotesValue("");
+      if (eventId !== undefined) {
+        await loadAssetsForEvent(eventId);
+      }
+      await loadTimeline();
+      setStatus("Asset notes updated.");
+    } catch {
+      setStatus("Failed to update asset notes.");
+    } finally {
+      setAssetNotesSavingId(null);
     }
   }
 
@@ -1892,14 +1910,6 @@ export default function HomePage() {
                                           }
                                         }}
                                       />
-                                      <input
-                                        className="directoryInput"
-                                        type="text"
-                                        placeholder="Optional notes for this asset"
-                                        value={assetUploadNotes}
-                                        onChange={(e) => setAssetUploadNotes(e.target.value)}
-                                        disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
-                                      />
                                     </div>
                                     <div className="lifeFormFields">
                                       {recordingForEventId === event.id ? (
@@ -2017,6 +2027,44 @@ export default function HomePage() {
                                               )}
                                               {(asset.camera_make || asset.camera_model) && (
                                                 <p className="meta">Camera: {[asset.camera_make, asset.camera_model].filter(Boolean).join(" ")}</p>
+                                              )}
+                                              {editingAssetNotesId === asset.id ? (
+                                                <div className="controls" style={{ marginTop: "0.35rem" }}>
+                                                  <input
+                                                    className="directoryInput"
+                                                    type="text"
+                                                    value={editingAssetNotesValue}
+                                                    autoFocus
+                                                    onChange={(e) => setEditingAssetNotesValue(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === "Enter") {
+                                                        void saveAssetNotes(asset.id, event.id);
+                                                      }
+                                                      if (e.key === "Escape") {
+                                                        setEditingAssetNotesId(null);
+                                                        setEditingAssetNotesValue("");
+                                                      }
+                                                    }}
+                                                    style={{ flex: 1 }}
+                                                  />
+                                                  <button className="primary" type="button" onClick={() => void saveAssetNotes(asset.id, event.id)} disabled={assetNotesSavingId === asset.id}>Save</button>
+                                                  <button className="secondary" type="button" onClick={() => { setEditingAssetNotesId(null); setEditingAssetNotesValue(""); }}>Cancel</button>
+                                                </div>
+                                              ) : (
+                                                <div className="assetNotesRow">
+                                                  <p className="meta">Notes: {asset.notes || "none"}</p>
+                                                  <button
+                                                    className="secondary"
+                                                    type="button"
+                                                    style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
+                                                    onClick={() => {
+                                                      setEditingAssetNotesId(asset.id);
+                                                      setEditingAssetNotesValue(asset.notes || "");
+                                                    }}
+                                                  >
+                                                    Edit Notes
+                                                  </button>
+                                                </div>
                                               )}
                                               {asset.playback_url && (
                                                 <audio
@@ -2227,14 +2275,6 @@ export default function HomePage() {
                                 }
                               }}
                             />
-                            <input
-                              className="directoryInput"
-                              type="text"
-                              placeholder="Optional notes for this asset"
-                              value={assetUploadNotes}
-                              onChange={(e) => setAssetUploadNotes(e.target.value)}
-                              disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
-                            />
                           </div>
                           <div className="lifeFormFields">
                             {recordingForEventId === event.id ? (
@@ -2353,6 +2393,44 @@ export default function HomePage() {
                                     {(asset.camera_make || asset.camera_model) && (
                                       <p className="meta">Camera: {[asset.camera_make, asset.camera_model].filter(Boolean).join(" ")}</p>
                                     )}
+                                    {editingAssetNotesId === asset.id ? (
+                                      <div className="controls" style={{ marginTop: "0.35rem" }}>
+                                        <input
+                                          className="directoryInput"
+                                          type="text"
+                                          value={editingAssetNotesValue}
+                                          autoFocus
+                                          onChange={(e) => setEditingAssetNotesValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              void saveAssetNotes(asset.id, event.id);
+                                            }
+                                            if (e.key === "Escape") {
+                                              setEditingAssetNotesId(null);
+                                              setEditingAssetNotesValue("");
+                                            }
+                                          }}
+                                          style={{ flex: 1 }}
+                                        />
+                                        <button className="primary" type="button" onClick={() => void saveAssetNotes(asset.id, event.id)} disabled={assetNotesSavingId === asset.id}>Save</button>
+                                        <button className="secondary" type="button" onClick={() => { setEditingAssetNotesId(null); setEditingAssetNotesValue(""); }}>Cancel</button>
+                                      </div>
+                                    ) : (
+                                      <div className="assetNotesRow">
+                                        <p className="meta">Notes: {asset.notes || "none"}</p>
+                                        <button
+                                          className="secondary"
+                                          type="button"
+                                          style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
+                                          onClick={() => {
+                                            setEditingAssetNotesId(asset.id);
+                                            setEditingAssetNotesValue(asset.notes || "");
+                                          }}
+                                        >
+                                          Edit Notes
+                                        </button>
+                                      </div>
+                                    )}
                                     {asset.playback_url && (
                                       <audio
                                         controls
@@ -2425,6 +2503,44 @@ export default function HomePage() {
                           )}
                           {(asset.camera_make || asset.camera_model) && (
                             <p className="meta">Camera: {[asset.camera_make, asset.camera_model].filter(Boolean).join(" ")}</p>
+                          )}
+                          {editingAssetNotesId === asset.id ? (
+                            <div className="controls" style={{ marginTop: "0.35rem" }}>
+                              <input
+                                className="directoryInput"
+                                type="text"
+                                value={editingAssetNotesValue}
+                                autoFocus
+                                onChange={(e) => setEditingAssetNotesValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    void saveAssetNotes(asset.id);
+                                  }
+                                  if (e.key === "Escape") {
+                                    setEditingAssetNotesId(null);
+                                    setEditingAssetNotesValue("");
+                                  }
+                                }}
+                                style={{ flex: 1 }}
+                              />
+                              <button className="primary" type="button" onClick={() => void saveAssetNotes(asset.id)} disabled={assetNotesSavingId === asset.id}>Save</button>
+                              <button className="secondary" type="button" onClick={() => { setEditingAssetNotesId(null); setEditingAssetNotesValue(""); }}>Cancel</button>
+                            </div>
+                          ) : (
+                            <div className="assetNotesRow">
+                              <p className="meta">Notes: {asset.notes || "none"}</p>
+                              <button
+                                className="secondary"
+                                type="button"
+                                style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
+                                onClick={() => {
+                                  setEditingAssetNotesId(asset.id);
+                                  setEditingAssetNotesValue(asset.notes || "");
+                                }}
+                              >
+                                Edit Notes
+                              </button>
+                            </div>
                           )}
                         </div>
                         <div className="lifeAssetLinkControls">

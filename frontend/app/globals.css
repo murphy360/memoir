@@ -1061,6 +1061,14 @@ button.ghost:hover:not(:disabled) {
   flex-shrink: 0;
 }
 
+.assetNotesRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+  flex-wrap: wrap;
+}
+
 .assetTranscript {
   margin-top: 0.45rem;
   max-width: 60ch;

@@ -177,6 +177,10 @@ class LinkAssetToEventRequest(BaseModel):
     relation_type: Optional[str] = "evidence"
 
 
+class UpdateAssetRequest(BaseModel):
+    notes: Optional[str] = None
+
+
 class QuestionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

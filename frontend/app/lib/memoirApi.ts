@@ -188,6 +188,15 @@ export async function deleteAsset(assetId: number): Promise<void> {
   await expectOk(response, "Delete asset failed");
 }
 
+export async function updateAssetNotes(assetId: number, notes: string | null): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/assets/${assetId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ notes }),
+  });
+  await expectOk(response, "Update asset notes failed");
+}
+
 export async function linkAssetToEvent(
   assetId: number,
   eventId: number,
