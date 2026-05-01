@@ -144,32 +144,8 @@ export function MemoryCard({
         </div>
       )}
 
-      {isExpanded && memory.audio_size_bytes !== null && (
-        <p className="meta">Stored audio size: {formatBytes(memory.audio_size_bytes)}</p>
-      )}
       {isExpanded && memory.audio_url && (
         <audio controls preload="metadata" src={resolveApiUrl(memory.audio_url)} style={{ width: "100%" }} />
-      )}
-      {isExpanded && memory.document_size_bytes !== null && (
-        <p className="meta">Stored document size: {formatBytes(memory.document_size_bytes)}</p>
-      )}
-      {isExpanded && memory.document_url && (
-        <div className="memoryDocumentActions">
-          <a
-            className="secondary linkButton"
-            href={resolveApiUrl(memory.document_url)}
-            target="_blank"
-            rel="noreferrer"
-          >
-            View Document
-          </a>
-          <a
-            className="secondary linkButton"
-            href={resolveApiUrl(`${memory.document_url}?download=true`)}
-          >
-            Download Document
-          </a>
-        </div>
       )}
       {isExpanded && <p>{memory.transcript}</p>}
       {isExpanded && memory.research_summary && (

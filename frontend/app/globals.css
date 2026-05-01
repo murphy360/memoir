@@ -986,6 +986,18 @@ button.ghost:hover:not(:disabled) {
   margin-top: 0.25rem;
 }
 
+.assetThumbnail {
+  display: block;
+  max-width: 120px;
+  max-height: 120px;
+  width: auto;
+  height: auto;
+  border-radius: 6px;
+  margin: 0.4rem 0;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
 .lifePeriodList {
   display: grid;
   gap: 0.75rem;
@@ -1040,6 +1052,13 @@ button.ghost:hover:not(:disabled) {
   background: #fff;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.assetActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
 
 .assetTranscript {

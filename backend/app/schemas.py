@@ -142,6 +142,10 @@ class MergeLifeEventRequest(BaseModel):
     into_event_id: int
 
 
+class UpdateLifeEventRequest(BaseModel):
+    title: Optional[str] = None
+
+
 class AssetResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

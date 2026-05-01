@@ -140,6 +140,15 @@ export async function analyzeLifePeriod(
   return response.json();
 }
 
+export async function renameEventTitle(eventId: number, title: string): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  await expectOk(response, "Failed to rename event");
+}
+
 export async function renamePeriodTitle(periodId: number, title: string): Promise<void> {
   const response = await fetch(toAbsoluteApiUrl(`/api/periods/${periodId}`), {
     method: "PATCH",
@@ -170,6 +179,13 @@ export async function uploadAsset(formData: FormData): Promise<AssetEntry> {
   });
   await expectOk(response, "Upload asset failed");
   return response.json();
+}
+
+export async function deleteAsset(assetId: number): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/assets/${assetId}`), {
+    method: "DELETE",
+  });
+  await expectOk(response, "Delete asset failed");
 }
 
 export async function linkAssetToEvent(

@@ -33,6 +33,7 @@ from app.schemas import (
     MemoryResponse,
     MergePersonRequest,
     QuestionResponse,
+    UpdateLifeEventRequest,
     UpdateLifePeriodRequest,
     MergePeriodsRequest,
     SettingsResponse,
@@ -339,6 +340,23 @@ def list_events(period_id: Optional[int] = None, db: Session = Depends(get_db)) 
     return [build_event_response(event) for event in events]
 
 
+@app.patch("/api/events/{event_id}", response_model=LifeEventResponse)
+def update_event(event_id: int, body: UpdateLifeEventRequest, db: Session = Depends(get_db)) -> LifeEventResponse:
+    event = db.get(LifeEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if body.title is not None:
+        clean_title = body.title.strip()
+        if not clean_title:
+            raise HTTPException(status_code=400, detail="Event title cannot be empty")
+        event.title = clean_title
+
+    db.commit()
+    db.refresh(event)
+    return build_event_response(event)
+
+
 @app.post("/api/events/{event_id}/merge", response_model=LifeEventResponse)
 def merge_event(
     event_id: int,
@@ -515,6 +533,25 @@ def link_asset_to_event(
         db.refresh(asset)
 
     return build_asset_response(asset)
+
+
+@app.delete("/api/assets/{asset_id}", status_code=204)
+def delete_asset(asset_id: int, db: Session = Depends(get_db)) -> None:
+    asset = db.get(Asset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    storage_dir = AUDIO_STORAGE_DIR if asset.kind == "audio" else DOCUMENT_STORAGE_DIR
+    file_path = storage_dir / asset.storage_filename if asset.storage_filename else None
+
+    db.delete(asset)
+    db.commit()
+
+    if file_path and file_path.exists():
+        try:
+            file_path.unlink()
+        except OSError:
+            logger.warning("Could not delete file for asset %s", asset_id)
 
 
 @app.get("/api/assets/{asset_id}/download")
@@ -927,10 +964,11 @@ async def create_memory(
     assign_recorder_person(db, entry, metadata.recorder_name)
     sync_memory_people(db, entry, metadata.people)
     sync_memory_places(db, entry, metadata.locations)
-    sync_life_hierarchy_for_memory(db, entry)
 
-    # If the caller specified a target event, explicitly link the audio asset to it.
     if event_id is not None:
+        # Narration is being recorded directly for a specific event.
+        # Skip sync_life_hierarchy_for_memory (which would create an unwanted
+        # second event) and instead create the audio asset + link it manually.
         target_event = db.query(LifeEvent).filter(LifeEvent.id == event_id).first()
         if target_event:
             audio_asset = (
@@ -938,8 +976,23 @@ async def create_memory(
                 .filter(Asset.legacy_memory_id == entry.id, Asset.kind == "audio")
                 .first()
             )
-            if audio_asset:
-                ensure_event_asset_link(db, target_event, audio_asset, relation_type="recording")
+            if not audio_asset:
+                audio_asset = Asset(
+                    period_id=target_event.period_id,
+                    kind="audio",
+                    storage_filename=audio_filename,
+                    original_filename=audio_filename,
+                    content_type=audio_content_type,
+                    size_bytes=audio_size_bytes,
+                    text_excerpt=(transcript or "").strip()[:1200] or None,
+                    notes=f"Audio narration for event: {target_event.title}",
+                    legacy_memory_id=entry.id,
+                )
+                db.add(audio_asset)
+                db.flush()
+            ensure_event_asset_link(db, target_event, audio_asset, relation_type="recording")
+    else:
+        sync_life_hierarchy_for_memory(db, entry)
 
     db.commit()
     db.refresh(entry)

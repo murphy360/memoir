@@ -15,6 +15,7 @@ import {
   createMemoryFromAudioBlob,
   createMemoryFromDocument,
   createPeriod,
+  deleteAsset as deleteAssetById,
   deleteDirectoryEntry as deleteDirectoryEntryRequest,
   deleteEventById,
   deleteMemoryById,
@@ -31,6 +32,7 @@ import {
   removePersonAlias as removePersonAliasRequest,
   renameDirectoryEntry as renameDirectoryEntryRequest,
   renamePeriodTitle,
+  renameEventTitle,
   resolveApiUrl,
   researchMemoryById,
   saveMainCharacterName as saveMainCharacterNameRequest,
@@ -159,6 +161,8 @@ export default function HomePage() {
   const [periodAnalysisBusyId, setPeriodAnalysisBusyId] = useState<number | null>(null);
   const [editingPeriodTitleId, setEditingPeriodTitleId] = useState<number | null>(null);
   const [editingPeriodTitleValue, setEditingPeriodTitleValue] = useState("");
+  const [editingEventTitleId, setEditingEventTitleId] = useState<number | null>(null);
+  const [editingEventTitleValue, setEditingEventTitleValue] = useState("");
   const [mergingPeriodId, setMergingPeriodId] = useState<number | null>(null);
 
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -402,6 +406,21 @@ export default function HomePage() {
     }
   }
 
+  async function renameEvent(eventId: number, newTitle: string) {
+    const trimmed = newTitle.trim();
+    if (!trimmed) return;
+    setStatus("Saving event title...");
+    try {
+      await renameEventTitle(eventId, trimmed);
+      setEditingEventTitleId(null);
+      setEditingEventTitleValue("");
+      await loadTimeline();
+      setStatus("Event title updated.");
+    } catch {
+      setStatus("Failed to rename event.");
+    }
+  }
+
   async function deletePeriod(periodId: number, periodTitle: string) {
     if (!confirm(`Delete "${periodTitle}"? Its events and assets will be unlinked but not deleted.`)) return;
     setStatus("Deleting period...");
@@ -633,6 +652,26 @@ export default function HomePage() {
       setMemoryActionId(null);
     }
   }
+
+  async function deleteAsset(assetId: number, eventId?: number) {
+    if (!window.confirm("Delete this asset permanently? This cannot be undone.")) {
+      return;
+    }
+
+    setStatus("Deleting asset...");
+    try {
+      await deleteAssetById(assetId);
+      if (eventId !== undefined) {
+        await loadAssetsForEvent(eventId);
+      } else {
+        setUnlinkedAssets((current) => current.filter((a) => a.id !== assetId));
+      }
+      setStatus("Asset deleted.");
+    } catch {
+      setStatus("Failed to delete asset.");
+    }
+  }
+
 
   async function assignRecorder(memoryId: number, personId: number) {
     setMemoryActionId(memoryId);
@@ -1706,7 +1745,37 @@ export default function HomePage() {
                                       <span className="entityFlowArrow">+</span>
                                       <span className="entityPill entityPillAsset">Assets</span>
                                     </p>
-                                    <p style={{ margin: 0, fontWeight: 700 }}>{event.title}</p>
+                                    {editingEventTitleId === event.id ? (
+                                      <div className="controls" style={{ marginBottom: "0.35rem" }}>
+                                        <input
+                                          className="directoryInput"
+                                          type="text"
+                                          value={editingEventTitleValue}
+                                          autoFocus
+                                          onChange={(e) => setEditingEventTitleValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") renameEvent(event.id, editingEventTitleValue);
+                                            if (e.key === "Escape") { setEditingEventTitleId(null); setEditingEventTitleValue(""); }
+                                          }}
+                                          style={{ flex: 1 }}
+                                        />
+                                        <button className="primary" type="button" onClick={() => renameEvent(event.id, editingEventTitleValue)} disabled={!editingEventTitleValue.trim()}>Save</button>
+                                        <button className="secondary" type="button" onClick={() => { setEditingEventTitleId(null); setEditingEventTitleValue(""); }}>Cancel</button>
+                                      </div>
+                                    ) : (
+                                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                        <p style={{ margin: 0, fontWeight: 700 }}>{event.title}</p>
+                                        <button
+                                          className="secondary"
+                                          type="button"
+                                          title="Edit title"
+                                          style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem" }}
+                                          onClick={() => { setEditingEventTitleId(event.id); setEditingEventTitleValue(event.title); }}
+                                        >
+                                          ✏️
+                                        </button>
+                                      </div>
+                                    )}
                                     <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}</p>
                                   </div>
                                   <button
@@ -1912,6 +1981,13 @@ export default function HomePage() {
                                           >
                                             <div>
                                               <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                                              {asset.kind === "photo" && (
+                                                <img
+                                                  src={resolveApiUrl(`${asset.download_url}?download=false`)}
+                                                  alt={asset.original_filename || `Asset ${asset.id}`}
+                                                  className="assetThumbnail"
+                                                />
+                                              )}
                                               <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
                                               {renderImageMetadataBadges(asset)}
                                               {(asset.image_width !== null || asset.image_height !== null) && (
@@ -1938,9 +2014,21 @@ export default function HomePage() {
                                                 <p className="meta assetTranscript">Transcript: {asset.text_excerpt}</p>
                                               )}
                                             </div>
-                                            <a className="secondary linkButton" href={resolveApiUrl(asset.download_url)} target="_blank" rel="noreferrer">
-                                              Open
-                                            </a>
+                                            <div className="assetActions">
+                                              <a className="secondary linkButton" href={resolveApiUrl(`${asset.download_url}?download=false`)} target="_blank" rel="noreferrer">
+                                                View
+                                              </a>
+                                              <a className="secondary linkButton" href={resolveApiUrl(`${asset.download_url}?download=true`)}>
+                                                Download
+                                              </a>
+                                              <button
+                                                className="ghost"
+                                                type="button"
+                                                onClick={() => deleteAsset(asset.id, activeEventId ?? undefined)}
+                                              >
+                                                Delete
+                                              </button>
+                                            </div>
                                           </div>
                                         ))}
                                       </div>
@@ -1977,7 +2065,37 @@ export default function HomePage() {
                             <span className="entityFlowArrow">+</span>
                             <span className="entityPill entityPillAsset">Assets</span>
                           </p>
-                          <p style={{ margin: 0, fontWeight: 700 }}>{event.title}</p>
+                          {editingEventTitleId === event.id ? (
+                            <div className="controls" style={{ marginBottom: "0.35rem" }}>
+                              <input
+                                className="directoryInput"
+                                type="text"
+                                value={editingEventTitleValue}
+                                autoFocus
+                                onChange={(e) => setEditingEventTitleValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") renameEvent(event.id, editingEventTitleValue);
+                                  if (e.key === "Escape") { setEditingEventTitleId(null); setEditingEventTitleValue(""); }
+                                }}
+                                style={{ flex: 1 }}
+                              />
+                              <button className="primary" type="button" onClick={() => renameEvent(event.id, editingEventTitleValue)} disabled={!editingEventTitleValue.trim()}>Save</button>
+                              <button className="secondary" type="button" onClick={() => { setEditingEventTitleId(null); setEditingEventTitleValue(""); }}>Cancel</button>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              <p style={{ margin: 0, fontWeight: 700 }}>{event.title}</p>
+                              <button
+                                className="secondary"
+                                type="button"
+                                title="Edit title"
+                                style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem" }}
+                                onClick={() => { setEditingEventTitleId(event.id); setEditingEventTitleValue(event.title); }}
+                              >
+                                ✏️
+                              </button>
+                            </div>
+                          )}
                           <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}</p>
                         </div>
                         <button
@@ -2183,6 +2301,13 @@ export default function HomePage() {
                                 >
                                   <div>
                                     <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                                    {asset.kind === "photo" && (
+                                      <img
+                                        src={resolveApiUrl(`${asset.download_url}?download=false`)}
+                                        alt={asset.original_filename || `Asset ${asset.id}`}
+                                        className="assetThumbnail"
+                                      />
+                                    )}
                                     <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
                                     {renderImageMetadataBadges(asset)}
                                     {(asset.image_width !== null || asset.image_height !== null) && (
@@ -2209,9 +2334,21 @@ export default function HomePage() {
                                       <p className="meta assetTranscript">Transcript: {asset.text_excerpt}</p>
                                     )}
                                   </div>
-                                  <a className="secondary linkButton" href={resolveApiUrl(asset.download_url)} target="_blank" rel="noreferrer">
-                                    Open
-                                  </a>
+                                  <div className="assetActions">
+                                    <a className="secondary linkButton" href={resolveApiUrl(`${asset.download_url}?download=false`)} target="_blank" rel="noreferrer">
+                                      View
+                                    </a>
+                                    <a className="secondary linkButton" href={resolveApiUrl(`${asset.download_url}?download=true`)}>
+                                      Download
+                                    </a>
+                                    <button
+                                      className="ghost"
+                                      type="button"
+                                      onClick={() => deleteAsset(asset.id, activeEventId ?? undefined)}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -2237,6 +2374,13 @@ export default function HomePage() {
                       >
                         <div>
                           <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                          {asset.kind === "photo" && (
+                            <img
+                              src={resolveApiUrl(`${asset.download_url}?download=false`)}
+                              alt={asset.original_filename || `Asset ${asset.id}`}
+                              className="assetThumbnail"
+                            />
+                          )}
                           <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
                           {renderImageMetadataBadges(asset)}
                           {(asset.image_width !== null || asset.image_height !== null) && (
@@ -2272,9 +2416,19 @@ export default function HomePage() {
                           >
                             Link
                           </button>
-                          <a className="ghost linkButton" href={resolveApiUrl(asset.download_url)} target="_blank" rel="noreferrer">
+                          <a className="ghost linkButton" href={resolveApiUrl(`${asset.download_url}?download=false`)} target="_blank" rel="noreferrer">
                             View
                           </a>
+                          <a className="ghost linkButton" href={resolveApiUrl(`${asset.download_url}?download=true`)}>
+                            Download
+                          </a>
+                          <button
+                            className="ghost"
+                            type="button"
+                            onClick={() => deleteAsset(asset.id)}
+                          >
+                            Delete
+                          </button>
                         </div>
                       </div>
                     ))}
