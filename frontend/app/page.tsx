@@ -62,6 +62,10 @@ function dedupeQuestions(items: Question[]): Question[] {
 }
 
 export default function HomePage() {
+  const [activeView, setActiveView] = useState<"explore" | "capture">("explore");
+  const [isDirectoryDrawerOpen, setIsDirectoryDrawerOpen] = useState(false);
+  const [activeDirectoryTab, setActiveDirectoryTab] = useState<"people" | "places">("people");
+  const [directorySearch, setDirectorySearch] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState("Ready to record a memory.");
   const [timeline, setTimeline] = useState<MemoryEntry[]>([]);
@@ -92,6 +96,11 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [memoryActionId, setMemoryActionId] = useState<number | null>(null);
   const [directoryBusyKey, setDirectoryBusyKey] = useState<string | null>(null);
+  const [isPeriodComposerOpen, setIsPeriodComposerOpen] = useState(false);
+  const [expandedPeriods, setExpandedPeriods] = useState<Record<number, boolean>>({});
+  const [eventDraftsByPeriod, setEventDraftsByPeriod] = useState<
+    Record<number, { title: string; dateText: string; description: string }>
+  >({});
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
@@ -223,8 +232,19 @@ export default function HomePage() {
     }
   }
 
-  async function createLifeEvent() {
-    if (!newEventTitle.trim()) {
+  async function createLifeEvent(options?: {
+    title?: string;
+    eventDateText?: string;
+    description?: string;
+    periodId?: number | null;
+    resetPeriodDraftId?: number;
+  }) {
+    const title = options?.title ?? newEventTitle;
+    const periodId = options?.periodId ?? (newEventPeriodId ? Number(newEventPeriodId) : null);
+    const eventDateText = options?.eventDateText ?? newEventDateText;
+    const description = options?.description ?? newEventDescription;
+
+    if (!title.trim()) {
       return;
     }
     setIsSavingLifeStructure(true);
@@ -234,10 +254,10 @@ export default function HomePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: newEventTitle.trim(),
-          period_id: newEventPeriodId ? Number(newEventPeriodId) : null,
-          description: newEventDescription.trim() || null,
-          event_date_text: newEventDateText.trim() || null,
+          title: title.trim(),
+          period_id: periodId,
+          description: description.trim() || null,
+          event_date_text: eventDateText.trim() || null,
         }),
       });
       if (!response.ok) {
@@ -246,6 +266,16 @@ export default function HomePage() {
       setNewEventTitle("");
       setNewEventDateText("");
       setNewEventDescription("");
+      if (options?.resetPeriodDraftId !== undefined) {
+        setEventDraftsByPeriod((current) => ({
+          ...current,
+          [options.resetPeriodDraftId!]: {
+            title: "",
+            dateText: "",
+            description: "",
+          },
+        }));
+      }
       await loadTimeline();
       setStatus("Event created.");
     } catch {
@@ -253,6 +283,25 @@ export default function HomePage() {
     } finally {
       setIsSavingLifeStructure(false);
     }
+  }
+
+  function togglePeriodExpanded(periodId: number) {
+    setExpandedPeriods((current) => ({ ...current, [periodId]: !current[periodId] }));
+  }
+
+  function updateEventDraftForPeriod(
+    periodId: number,
+    patch: Partial<{ title: string; dateText: string; description: string }>,
+  ) {
+    setEventDraftsByPeriod((current) => ({
+      ...current,
+      [periodId]: {
+        title: current[periodId]?.title || "",
+        dateText: current[periodId]?.dateText || "",
+        description: current[periodId]?.description || "",
+        ...patch,
+      },
+    }));
   }
 
   async function uploadAssetToActiveEvent(file: File) {
@@ -1103,462 +1152,677 @@ export default function HomePage() {
     }
   }
 
+  const normalizedDirectorySearch = directorySearch.trim().toLowerCase();
+  const filteredPeopleDirectory = peopleDirectory.filter((entry) => {
+    if (!normalizedDirectorySearch) {
+      return true;
+    }
+    if (entry.name.toLowerCase().includes(normalizedDirectorySearch)) {
+      return true;
+    }
+    return entry.aliases.some((alias) => alias.toLowerCase().includes(normalizedDirectorySearch));
+  });
+  const filteredPlacesDirectory = placesDirectory.filter((entry) => {
+    if (!normalizedDirectorySearch) {
+      return true;
+    }
+    return entry.name.toLowerCase().includes(normalizedDirectorySearch);
+  });
+  const activeDirectoryCount = activeDirectoryTab === "people"
+    ? filteredPeopleDirectory.length
+    : filteredPlacesDirectory.length;
+  const activeDirectoryTotal = activeDirectoryTab === "people"
+    ? peopleDirectory.length
+    : placesDirectory.length;
+  const lifeEventMemoryIds = new Set(
+    lifeEvents
+      .map((event) => event.legacy_memory_id)
+      .filter((memoryId): memoryId is number => memoryId !== null),
+  );
+  const timelineStandaloneMemories = timeline.filter((memory) => !lifeEventMemoryIds.has(memory.id));
+
   return (
-    <main>
-      <section className="hero">
-        <h1>{mainCharacterName ? `${mainCharacterName}'s Memoir` : "Memoir MVP"}</h1>
-        <p>Record a memory, extract a timeline clue, and get one follow-up question.</p>
-        <p className="meta">Tip: start each recording with your name, where this memory happened, and when it happened (even if you only remember the year or decade).</p>
-      </section>
+    <main className="appShell">
+      <button
+        type="button"
+        className="secondary directoryToggle"
+        onClick={() => setIsDirectoryDrawerOpen(true)}
+      >
+        People & Places
+      </button>
 
-      <section className="panel">
-        <div className="inputSection">
-          <label className="meta" htmlFor="mic-select">Input device</label>
-          <select
-            id="mic-select"
-            className="micSelect"
-            value={selectedDeviceId}
-            onChange={(event) => {
-              const nextDeviceId = event.target.value;
-              setSelectedDeviceId(nextDeviceId);
-              if (nextDeviceId) {
-                localStorage.setItem(AUDIO_DEVICE_STORAGE_KEY, nextDeviceId);
-              } else {
-                localStorage.removeItem(AUDIO_DEVICE_STORAGE_KEY);
-              }
-            }}
-            disabled={isRecording || isLoading || audioDevices.length === 0}
-          >
-            {audioDevices.length === 0 && <option value="">No microphones found</option>}
-            {audioDevices.map((device) => (
-              <option key={device.deviceId} value={device.deviceId}>
-                {device.label}
-              </option>
-            ))}
-          </select>
+      {isDirectoryDrawerOpen && (
+        <button
+          type="button"
+          className="directoryBackdrop"
+          aria-label="Close directory panel"
+          onClick={() => setIsDirectoryDrawerOpen(false)}
+        />
+      )}
 
-          <div className="levelWrap" aria-label="audio input level">
-            <div className="levelTrack">
-              <div className="levelFill" style={{ width: `${Math.round(audioLevel * 100)}%` }} />
-            </div>
-            <span className="meta levelText">Input level: {Math.round(audioLevel * 100)}%</span>
+      <aside className={`directorySidebar ${isDirectoryDrawerOpen ? "isOpen" : ""}`}>
+        <div className="directorySidebarHeader">
+          <div>
+            <h2>Directories</h2>
+            <p className="meta directoryMeta">{activeDirectoryCount} shown of {activeDirectoryTotal}</p>
           </div>
+          <button
+            type="button"
+            className="ghost directoryClose"
+            onClick={() => setIsDirectoryDrawerOpen(false)}
+          >
+            Close
+          </button>
         </div>
 
-        {activeQuestion && (
-          <div className="activePrompt">
-            <div className="activePromptBody">
-              <p className="activePromptLabel">Answering:</p>
-              <p className="activePromptText">{activeQuestion.text}</p>
-            </div>
+        <div className="directoryTabRow" role="tablist" aria-label="Directory tabs">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeDirectoryTab === "people"}
+            className={activeDirectoryTab === "people" ? "primary" : "secondary"}
+            onClick={() => setActiveDirectoryTab("people")}
+          >
+            People
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeDirectoryTab === "places"}
+            className={activeDirectoryTab === "places" ? "primary" : "secondary"}
+            onClick={() => setActiveDirectoryTab("places")}
+          >
+            Places
+          </button>
+        </div>
+
+        <div className="directoryFilterHeaderRow">
+          <label className="directoryFilterLabel" htmlFor="directory-filter-input">
+            Search {activeDirectoryTab === "people" ? "people" : "places"}
+          </label>
+          <button
+            type="button"
+            className="ghost directoryFilterClear"
+            onClick={() => setDirectorySearch("")}
+            disabled={!directorySearch}
+          >
+            Clear
+          </button>
+        </div>
+        <input
+          id="directory-filter-input"
+          type="search"
+          className="directoryInput"
+          placeholder={activeDirectoryTab === "people" ? "Type a name or alias" : "Type a place name"}
+          value={directorySearch}
+          onChange={(event) => setDirectorySearch(event.target.value)}
+          autoComplete="off"
+        />
+
+        {activeDirectoryTab === "people" ? (
+          <DirectoryManager
+            title="People Directory"
+            addLabel="Add a person"
+            emptyLabel={normalizedDirectorySearch ? "No matching people for this search." : "No people have been added yet."}
+            items={filteredPeopleDirectory}
+            isBusy={directoryBusyKey !== null || isLoading || isRecording}
+            onCreate={(name) => createDirectoryEntry("people", name)}
+            onRename={(itemId, name) => renameDirectoryEntry("people", itemId, name)}
+            onDelete={(itemId) => deleteDirectoryEntry("people", itemId)}
+            onMerge={mergePersonEntry}
+            onSplit={splitPersonEntry}
+            onAddAlias={addPersonAlias}
+            onRemoveAlias={removePersonAlias}
+          />
+        ) : (
+          <DirectoryManager
+            title="Places Directory"
+            addLabel="Add a place"
+            emptyLabel={normalizedDirectorySearch ? "No matching places for this search." : "No places have been added yet."}
+            items={filteredPlacesDirectory}
+            isBusy={directoryBusyKey !== null || isLoading || isRecording}
+            onCreate={(name) => createDirectoryEntry("places", name)}
+            onRename={(itemId, name) => renameDirectoryEntry("places", itemId, name)}
+            onDelete={(itemId) => deleteDirectoryEntry("places", itemId)}
+          />
+        )}
+      </aside>
+
+      <div className="workspaceColumn">
+        <section className="hero">
+          <h1>{mainCharacterName ? `${mainCharacterName}'s Memoir` : "Memoir MVP"}</h1>
+          <p>Explore your timeline first, then capture new memories in seconds.</p>
+          <p className="meta">Tip: start each recording with your name, where this memory happened, and when it happened.</p>
+          <div className="viewTabs">
+            <button
+              type="button"
+              className={activeView === "explore" ? "primary" : "secondary"}
+              onClick={() => setActiveView("explore")}
+            >
+              Explore
+            </button>
+            <button
+              type="button"
+              className={activeView === "capture" ? "primary" : "secondary"}
+              onClick={() => setActiveView("capture")}
+            >
+              Capture
+            </button>
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="capturePanelHeader">
+            <h2>Quick Capture</h2>
             <button
               className="ghost"
               type="button"
-              onClick={() => setActiveQuestion(null)}
-              disabled={isRecording}
+              onClick={() => setActiveView("capture")}
             >
-              Cancel
+              Open full capture tools
             </button>
           </div>
-        )}
-
-        <div className="controls">
-          <button
-            className="primary"
-            onClick={startRecording}
-            disabled={isRecording || isLoading || audioDevices.length === 0}
-            type="button"
-          >
-            Start Recording
-          </button>
-          <button
-            className="secondary"
-            onClick={stopRecording}
-            disabled={!isRecording || isLoading}
-            type="button"
-          >
-            Stop & Process
-          </button>
-          <button
-            className="ghost"
-            onClick={cancelRecording}
-            disabled={!isRecording || isLoading}
-            type="button"
-          >
-            Cancel Recording
-          </button>
-        </div>
-        <p className="status">{status}</p>
-      </section>
-
-      <section className="panel">
-        <h2>Upload a Document</h2>
-        <p className="meta">Upload a PDF, image, or text file, or paste a screen clipping — Gemini will analyze it and save it as a memory entry.</p>
-        <div className="controls">
-          <input
-            ref={documentFileInputRef}
-            type="file"
-            accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt"
-            disabled={isUploadingDocument || isReadingClipboard || isRecording || isLoading}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                uploadDocument(file);
-              }
-            }}
-            style={{ flex: 1 }}
-          />
-          <button
-            className="secondary"
-            type="button"
-            onClick={pasteImageFromClipboard}
-            disabled={isUploadingDocument || isReadingClipboard || isRecording || isLoading}
-          >
-            Paste from Clipboard
-          </button>
-        </div>
-        <div
-          className={`pasteTarget ${isDragOverDocumentTarget ? "dragOver" : ""}`}
-          role="button"
-          tabIndex={0}
-          onPaste={onDocumentPasteZonePaste}
-          onDragEnter={onDocumentDragEnter}
-          onDragOver={onDocumentDragOver}
-          onDragLeave={onDocumentDragLeave}
-          onDrop={onDocumentDrop}
-          aria-label="Paste image from clipboard"
-        >
-          <p className="pasteTargetTitle">Paste or Drop a File</p>
-          <p className="meta">Click this area and press Ctrl+V (or Cmd+V on Mac), or drag and drop a PDF, image, or text file here.</p>
-        </div>
-        {(isUploadingDocument || isReadingClipboard) && <p className="status">Analyzing document with Gemini...</p>}
-        {documentUploadError && <p className="status" style={{ color: "var(--error, #c00)" }}>{documentUploadError}</p>}
-      </section>
-
-      <section className="directoryGrid">
-        <DirectoryManager
-          title="People Directory"
-          addLabel="Add a person"
-          emptyLabel="No people have been added yet."
-          items={peopleDirectory}
-          isBusy={directoryBusyKey !== null || isLoading || isRecording}
-          onCreate={(name) => createDirectoryEntry("people", name)}
-          onRename={(itemId, name) => renameDirectoryEntry("people", itemId, name)}
-          onDelete={(itemId) => deleteDirectoryEntry("people", itemId)}
-          onMerge={mergePersonEntry}
-          onSplit={splitPersonEntry}
-          onAddAlias={addPersonAlias}
-          onRemoveAlias={removePersonAlias}
-        />
-        <DirectoryManager
-          title="Places Directory"
-          addLabel="Add a place"
-          emptyLabel="No places have been added yet."
-          items={placesDirectory}
-          isBusy={directoryBusyKey !== null || isLoading || isRecording}
-          onCreate={(name) => createDirectoryEntry("places", name)}
-          onRename={(itemId, name) => renameDirectoryEntry("places", itemId, name)}
-          onDelete={(itemId) => deleteDirectoryEntry("places", itemId)}
-        />
-      </section>
-
-      <section className="panel" style={{ marginTop: "1rem" }}>
-        <h2>Life Periods (beta)</h2>
-        <p className="meta">Create periods and events, then attach files directly to an event or link unlinked assets from the inbox.</p>
-
-        <div className="lifeFormGrid">
-          <article className="memory">
-            <h3>Create Period</h3>
-            <div className="lifeFormFields">
-              <input
-                className="directoryInput"
-                type="text"
-                placeholder="Period title (e.g. Bahrain Deployment)"
-                value={newPeriodTitle}
-                onChange={(e) => setNewPeriodTitle(e.target.value)}
-                disabled={isSavingLifeStructure || isRecording || isLoading}
-              />
-              <input
-                className="directoryInput"
-                type="text"
-                placeholder="Start text (e.g. 2021)"
-                value={newPeriodStart}
-                onChange={(e) => setNewPeriodStart(e.target.value)}
-                disabled={isSavingLifeStructure || isRecording || isLoading}
-              />
-              <input
-                className="directoryInput"
-                type="text"
-                placeholder="End text (e.g. 2022)"
-                value={newPeriodEnd}
-                onChange={(e) => setNewPeriodEnd(e.target.value)}
-                disabled={isSavingLifeStructure || isRecording || isLoading}
-              />
-              <textarea
-                className="directoryInput"
-                placeholder="Summary"
-                value={newPeriodSummary}
-                onChange={(e) => setNewPeriodSummary(e.target.value)}
-                disabled={isSavingLifeStructure || isRecording || isLoading}
-                rows={3}
-              />
-            </div>
-            <div className="controls">
-              <button
-                className="primary"
-                type="button"
-                onClick={createLifePeriod}
-                disabled={!newPeriodTitle.trim() || isSavingLifeStructure || isRecording || isLoading}
-              >
-                Create Period
-              </button>
-            </div>
-          </article>
-
-          <article className="memory">
-            <h3>Create Event</h3>
-            <div className="lifeFormFields">
-              <input
-                className="directoryInput"
-                type="text"
-                placeholder="Event title (e.g. Earned FMS pin)"
-                value={newEventTitle}
-                onChange={(e) => setNewEventTitle(e.target.value)}
-                disabled={isSavingLifeStructure || isRecording || isLoading}
-              />
-              <select
-                className="directoryInput"
-                value={newEventPeriodId}
-                onChange={(e) => setNewEventPeriodId(e.target.value)}
-                disabled={isSavingLifeStructure || isRecording || isLoading}
-              >
-                <option value="">No period</option>
-                {lifePeriods.map((period) => (
-                  <option key={period.id} value={period.id}>{period.title}</option>
-                ))}
-              </select>
-              <input
-                className="directoryInput"
-                type="text"
-                placeholder="Event date text (e.g. 2022)"
-                value={newEventDateText}
-                onChange={(e) => setNewEventDateText(e.target.value)}
-                disabled={isSavingLifeStructure || isRecording || isLoading}
-              />
-              <textarea
-                className="directoryInput"
-                placeholder="Event description"
-                value={newEventDescription}
-                onChange={(e) => setNewEventDescription(e.target.value)}
-                disabled={isSavingLifeStructure || isRecording || isLoading}
-                rows={3}
-              />
-            </div>
-            <div className="controls">
-              <button
-                className="primary"
-                type="button"
-                onClick={createLifeEvent}
-                disabled={!newEventTitle.trim() || isSavingLifeStructure || isRecording || isLoading}
-              >
-                Create Event
-              </button>
-            </div>
-          </article>
-        </div>
-
-        <div className="lifePeriodList">
-          {lifePeriods.length === 0 && <p className="meta">No periods created yet.</p>}
-          {lifePeriods.map((period) => {
-            const eventsForPeriod = lifeEvents.filter((event) => event.period_id === period.id);
-            return (
-              <article key={period.id} className="memory">
-                <h3>{period.title}</h3>
-                <p className="meta">
-                  Range: <span className="badge">{period.start_date_text || "unknown"}</span> to{" "}
-                  <span className="badge">{period.end_date_text || "unknown"}</span>
-                </p>
-                <p className="meta">
-                  Events: <span className="badge">{eventsForPeriod.length}</span> Assets: <span className="badge">{period.asset_count}</span>
-                </p>
-                {period.summary && <p>{period.summary}</p>}
-                <div className="lifeEventList">
-                  {eventsForPeriod.length === 0 && <p className="meta">No events in this period yet.</p>}
-                  {eventsForPeriod.map((event) => (
-                    <div key={event.id} className="lifeEventCard">
-                      <div
-                        className={`lifeEventRow ${activeEventId === event.id ? "isActive" : ""}`}
-                        role="button"
-                        tabIndex={0}
-                        onClick={async () => {
-                          if (activeEventId === event.id) {
-                            setActiveEventId(null);
-                            setActiveEventAssets([]);
-                            return;
-                          }
-                          setActiveEventId(event.id);
-                          await loadAssetsForEvent(event.id);
-                        }}
-                        onKeyDown={async (e) => {
-                          if (e.key !== "Enter" && e.key !== " ") {
-                            return;
-                          }
-                          e.preventDefault();
-                          if (activeEventId === event.id) {
-                            setActiveEventId(null);
-                            setActiveEventAssets([]);
-                            return;
-                          }
-                          setActiveEventId(event.id);
-                          await loadAssetsForEvent(event.id);
-                        }}
-                      >
-                        <div>
-                          <p><strong>{event.title}</strong></p>
-                          <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}</p>
-                        </div>
-                        <span className="badge">{activeEventId === event.id ? "Hide details" : "View details"}</span>
-                      </div>
-
-                      {activeEventId === event.id && (
-                        <div className="activeEventPanel inlineEventDetails">
-                          <p className="meta">
-                            Managing event: <span className="badge">{event.title}</span>
-                          </p>
-                          <div className="lifeFormFields">
-                            <input
-                              ref={eventAssetInputRef}
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt,.mp3,.wav,.m4a,.ogg,.webm,audio/*"
-                              disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  uploadAssetToActiveEvent(file);
-                                }
-                              }}
-                            />
-                            <input
-                              className="directoryInput"
-                              type="text"
-                              placeholder="Optional notes for this asset"
-                              value={assetUploadNotes}
-                              onChange={(e) => setAssetUploadNotes(e.target.value)}
-                              disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
-                            />
-                          </div>
-                          <div className="lifeEventManagementRow">
-                            <select
-                              className="directoryInput"
-                              value={eventMergeTargets[event.id] || ""}
-                              onChange={(e) => setEventMergeTargets((current) => ({ ...current, [event.id]: e.target.value }))}
-                              disabled={isSavingLifeStructure}
-                            >
-                              <option value="">Merge into another event</option>
-                              {eventsForPeriod.filter((candidate) => candidate.id !== event.id).map((candidate) => (
-                                <option key={candidate.id} value={candidate.id}>{candidate.title}</option>
-                              ))}
-                            </select>
-                            <button
-                              className="secondary"
-                              type="button"
-                              onClick={() => mergeLifeEvent(event.id)}
-                              disabled={!eventMergeTargets[event.id] || isSavingLifeStructure}
-                            >
-                              Merge Event
-                            </button>
-                            <button
-                              className="ghost"
-                              type="button"
-                              onClick={() => deleteLifeEvent(event.id)}
-                              disabled={isSavingLifeStructure}
-                            >
-                              Delete Event
-                            </button>
-                          </div>
-                          {activeEventAssets.length === 0 ? (
-                            <p className="meta">No assets linked to this event yet.</p>
-                          ) : (
-                            <div className="lifeAssetList">
-                              {activeEventAssets.map((asset) => (
-                                <div key={asset.id} className="lifeAssetRow">
-                                  <div>
-                                    <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
-                                    <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
-                                    {asset.playback_url && (
-                                      <audio
-                                        controls
-                                        preload="metadata"
-                                        src={resolveApiUrl(asset.playback_url)}
-                                        style={{ width: "100%", marginTop: "0.45rem" }}
-                                      />
-                                    )}
-                                    {asset.text_excerpt && (
-                                      <p className="meta assetTranscript">Transcript: {asset.text_excerpt}</p>
-                                    )}
-                                  </div>
-                                  <a className="secondary linkButton" href={resolveApiUrl(asset.download_url)} target="_blank" rel="noreferrer">
-                                    Open
-                                  </a>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-
-        <article className="memory" style={{ marginTop: "0.75rem" }}>
-          <h3>Unlinked Assets Inbox</h3>
-          {unlinkedAssets.length === 0 ? (
-            <p className="meta">No unlinked assets. Great job keeping context connected.</p>
-          ) : (
-            <div className="lifeAssetList">
-              {unlinkedAssets.map((asset) => (
-                <div key={asset.id} className="lifeAssetRow">
-                  <div>
-                    <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
-                    <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
-                  </div>
-                  <div className="lifeAssetLinkControls">
-                    <select
-                      className="directoryInput"
-                      value={assetLinkTargets[asset.id] || ""}
-                      onChange={(e) => setAssetLinkTargets((current) => ({ ...current, [asset.id]: e.target.value }))}
-                      disabled={isSavingLifeStructure || lifeEvents.length === 0}
-                    >
-                      <option value="">Select event</option>
-                      {lifeEvents.map((event) => (
-                        <option key={event.id} value={event.id}>{event.title}</option>
-                      ))}
-                    </select>
-                    <button
-                      className="secondary"
-                      type="button"
-                      onClick={() => linkUnlinkedAssetToEvent(asset.id)}
-                      disabled={!assetLinkTargets[asset.id] || isSavingLifeStructure}
-                    >
-                      Link
-                    </button>
-                    <a className="ghost linkButton" href={resolveApiUrl(asset.download_url)} target="_blank" rel="noreferrer">
-                      View
-                    </a>
-                  </div>
-                </div>
+          <div className="inputSection">
+            <label className="meta" htmlFor="mic-select">Input device</label>
+            <select
+              id="mic-select"
+              className="micSelect"
+              value={selectedDeviceId}
+              onChange={(event) => {
+                const nextDeviceId = event.target.value;
+                setSelectedDeviceId(nextDeviceId);
+                if (nextDeviceId) {
+                  localStorage.setItem(AUDIO_DEVICE_STORAGE_KEY, nextDeviceId);
+                } else {
+                  localStorage.removeItem(AUDIO_DEVICE_STORAGE_KEY);
+                }
+              }}
+              disabled={isRecording || isLoading || audioDevices.length === 0}
+            >
+              {audioDevices.length === 0 && <option value="">No microphones found</option>}
+              {audioDevices.map((device) => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  {device.label}
+                </option>
               ))}
+            </select>
+
+            <div className="levelWrap" aria-label="audio input level">
+              <div className="levelTrack">
+                <div className="levelFill" style={{ width: `${Math.round(audioLevel * 100)}%` }} />
+              </div>
+              <span className="meta levelText">Input level: {Math.round(audioLevel * 100)}%</span>
+            </div>
+          </div>
+
+          {activeQuestion && (
+            <div className="activePrompt">
+              <div className="activePromptBody">
+                <p className="activePromptLabel">Answering:</p>
+                <p className="activePromptText">{activeQuestion.text}</p>
+              </div>
+              <button
+                className="ghost"
+                type="button"
+                onClick={() => setActiveQuestion(null)}
+                disabled={isRecording}
+              >
+                Cancel
+              </button>
             </div>
           )}
-        </article>
-      </section>
 
-      <section className="timeline">
-        {mainCharacterName === null && (
+          <div className="controls">
+            <button
+              className="primary"
+              onClick={startRecording}
+              disabled={isRecording || isLoading || audioDevices.length === 0}
+              type="button"
+            >
+              Start Recording
+            </button>
+            <button
+              className="secondary"
+              onClick={stopRecording}
+              disabled={!isRecording || isLoading}
+              type="button"
+            >
+              Stop & Process
+            </button>
+            <button
+              className="ghost"
+              onClick={cancelRecording}
+              disabled={!isRecording || isLoading}
+              type="button"
+            >
+              Cancel Recording
+            </button>
+          </div>
+          <p className="status">{status}</p>
+        </section>
+
+        {activeView === "capture" && (
+          <>
+            <section className="panel" style={{ marginTop: "1rem" }}>
+              <h2>Upload a Document</h2>
+              <p className="meta">Upload a PDF, image, or text file, or paste a screen clipping. Gemini will analyze it and save it as a memory entry.</p>
+              <div className="controls">
+                <input
+                  ref={documentFileInputRef}
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt"
+                  disabled={isUploadingDocument || isReadingClipboard || isRecording || isLoading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      uploadDocument(file);
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={pasteImageFromClipboard}
+                  disabled={isUploadingDocument || isReadingClipboard || isRecording || isLoading}
+                >
+                  Paste from Clipboard
+                </button>
+              </div>
+              <div
+                className={`pasteTarget ${isDragOverDocumentTarget ? "dragOver" : ""}`}
+                role="button"
+                tabIndex={0}
+                onPaste={onDocumentPasteZonePaste}
+                onDragEnter={onDocumentDragEnter}
+                onDragOver={onDocumentDragOver}
+                onDragLeave={onDocumentDragLeave}
+                onDrop={onDocumentDrop}
+                aria-label="Paste image from clipboard"
+              >
+                <p className="pasteTargetTitle">Paste or Drop a File</p>
+                <p className="meta">Click this area and press Ctrl+V, or drag and drop a PDF, image, or text file here.</p>
+              </div>
+              {(isUploadingDocument || isReadingClipboard) && <p className="status">Analyzing document with Gemini...</p>}
+              {documentUploadError && <p className="status" style={{ color: "var(--error, #c00)" }}>{documentUploadError}</p>}
+            </section>
+
+            {pendingRecording && (
+              <section className="panel" style={{ marginTop: "1rem" }}>
+                <h2>Latest Recording Preview</h2>
+                <p className="meta">
+                  Status: <span className="badge">{pendingRecording.status}</span>
+                </p>
+                <p className="meta">File size: {formatBytes(pendingRecording.sizeBytes)}</p>
+                <audio controls preload="metadata" src={pendingRecording.audioUrl} style={{ width: "100%" }} />
+                {pendingRecording.sizeBytes === 0 && (
+                  <p className="meta">This recording is empty (0 B), which explains silent playback.</p>
+                )}
+                {pendingRecording.error && <p className="meta">{pendingRecording.error}</p>}
+              </section>
+            )}
+          </>
+        )}
+
+        {activeView === "explore" && (
+          <>
+            <section className="panel" style={{ marginTop: "1rem" }}>
+              <div className="periodsHeader">
+                <div>
+                  <h2>Life Periods</h2>
+                  <p className="meta">Start with periods, expand only the one you want, and add events inside that period.</p>
+                </div>
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => setIsPeriodComposerOpen((current) => !current)}
+                >
+                  {isPeriodComposerOpen ? "Hide period form" : "New period"}
+                </button>
+              </div>
+
+              {isPeriodComposerOpen && (
+                <article className="memory" style={{ marginTop: "0.75rem" }}>
+                  <h3>Create Period</h3>
+                  <div className="lifeFormFields">
+                    <input
+                      className="directoryInput"
+                      type="text"
+                      placeholder="Period title (e.g. Birth and Early Childhood)"
+                      value={newPeriodTitle}
+                      onChange={(e) => setNewPeriodTitle(e.target.value)}
+                      disabled={isSavingLifeStructure || isRecording || isLoading}
+                    />
+                    <input
+                      className="directoryInput"
+                      type="text"
+                      placeholder="Start text (e.g. 1948)"
+                      value={newPeriodStart}
+                      onChange={(e) => setNewPeriodStart(e.target.value)}
+                      disabled={isSavingLifeStructure || isRecording || isLoading}
+                    />
+                    <input
+                      className="directoryInput"
+                      type="text"
+                      placeholder="End text (e.g. 1960)"
+                      value={newPeriodEnd}
+                      onChange={(e) => setNewPeriodEnd(e.target.value)}
+                      disabled={isSavingLifeStructure || isRecording || isLoading}
+                    />
+                    <textarea
+                      className="directoryInput"
+                      placeholder="Summary"
+                      value={newPeriodSummary}
+                      onChange={(e) => setNewPeriodSummary(e.target.value)}
+                      disabled={isSavingLifeStructure || isRecording || isLoading}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="controls">
+                    <button
+                      className="primary"
+                      type="button"
+                      onClick={async () => {
+                        await createLifePeriod();
+                        setIsPeriodComposerOpen(false);
+                      }}
+                      disabled={!newPeriodTitle.trim() || isSavingLifeStructure || isRecording || isLoading}
+                    >
+                      Create Period
+                    </button>
+                  </div>
+                </article>
+              )}
+
+              <div className="lifePeriodList">
+                {lifePeriods.length === 0 && <p className="meta">No periods created yet.</p>}
+                {lifePeriods.map((period) => {
+                  const eventsForPeriod = lifeEvents.filter((event) => event.period_id === period.id);
+                  const isExpanded = Boolean(expandedPeriods[period.id]);
+                  const draft = eventDraftsByPeriod[period.id] || {
+                    title: "",
+                    dateText: "",
+                    description: "",
+                  };
+
+                  return (
+                    <article key={period.id} className="memory">
+                      <div className="periodSummaryRow">
+                        <div>
+                          <h3>{period.title}</h3>
+                          <p className="meta">
+                            Range: <span className="badge">{period.start_date_text || "unknown"}</span> to{" "}
+                            <span className="badge">{period.end_date_text || "unknown"}</span>
+                          </p>
+                          <p className="meta">
+                            Events: <span className="badge">{eventsForPeriod.length}</span> Assets: <span className="badge">{period.asset_count}</span>
+                          </p>
+                        </div>
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={() => togglePeriodExpanded(period.id)}
+                        >
+                          {isExpanded ? "Hide" : "Open"}
+                        </button>
+                      </div>
+
+                      {isExpanded && (
+                        <>
+                          {period.summary && <p>{period.summary}</p>}
+
+                          <article className="memory" style={{ marginBottom: "0.65rem" }}>
+                            <h3>Add Event to {period.title}</h3>
+                            <div className="lifeFormFields">
+                              <input
+                                className="directoryInput"
+                                type="text"
+                                placeholder="Event title"
+                                value={draft.title}
+                                onChange={(e) => updateEventDraftForPeriod(period.id, { title: e.target.value })}
+                                disabled={isSavingLifeStructure || isRecording || isLoading}
+                              />
+                              <input
+                                className="directoryInput"
+                                type="text"
+                                placeholder="Event date text"
+                                value={draft.dateText}
+                                onChange={(e) => updateEventDraftForPeriod(period.id, { dateText: e.target.value })}
+                                disabled={isSavingLifeStructure || isRecording || isLoading}
+                              />
+                              <textarea
+                                className="directoryInput"
+                                placeholder="Event description"
+                                value={draft.description}
+                                onChange={(e) => updateEventDraftForPeriod(period.id, { description: e.target.value })}
+                                disabled={isSavingLifeStructure || isRecording || isLoading}
+                                rows={3}
+                              />
+                            </div>
+                            <div className="controls">
+                              <button
+                                className="primary"
+                                type="button"
+                                onClick={() =>
+                                  createLifeEvent({
+                                    title: draft.title,
+                                    eventDateText: draft.dateText,
+                                    description: draft.description,
+                                    periodId: period.id,
+                                    resetPeriodDraftId: period.id,
+                                  })
+                                }
+                                disabled={!draft.title.trim() || isSavingLifeStructure || isRecording || isLoading}
+                              >
+                                Create Event
+                              </button>
+                            </div>
+                          </article>
+
+                          <div className="lifeEventList">
+                            {eventsForPeriod.length === 0 && <p className="meta">No events in this period yet.</p>}
+                            {eventsForPeriod.map((event) => (
+                              <div key={event.id} className="lifeEventCard">
+                                {/** Existing event row controls period/event management while legacy memory tools live below when expanded. */}
+                                <div
+                                  className={`lifeEventRow ${activeEventId === event.id ? "isActive" : ""}`}
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={async () => {
+                                    if (activeEventId === event.id) {
+                                      setActiveEventId(null);
+                                      setActiveEventAssets([]);
+                                      return;
+                                    }
+                                    setActiveEventId(event.id);
+                                    await loadAssetsForEvent(event.id);
+                                  }}
+                                  onKeyDown={async (e) => {
+                                    if (e.key !== "Enter" && e.key !== " ") {
+                                      return;
+                                    }
+                                    e.preventDefault();
+                                    if (activeEventId === event.id) {
+                                      setActiveEventId(null);
+                                      setActiveEventAssets([]);
+                                      return;
+                                    }
+                                    setActiveEventId(event.id);
+                                    await loadAssetsForEvent(event.id);
+                                  }}
+                                >
+                                  <div>
+                                    <p><strong>{event.title}</strong></p>
+                                    <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}</p>
+                                  </div>
+                                  <span className="badge">{activeEventId === event.id ? "Hide details" : "View details"}</span>
+                                </div>
+
+                                {activeEventId === event.id && (
+                                  <div className="activeEventPanel inlineEventDetails">
+                                    {event.legacy_memory_id && (() => {
+                                      const linkedMemory = timeline.find((memory) => memory.id === event.legacy_memory_id);
+                                      if (!linkedMemory) {
+                                        return null;
+                                      }
+                                      return (
+                                        <MemoryCard
+                                          key={`event-memory-${linkedMemory.id}`}
+                                          memory={linkedMemory}
+                                          linkedQuestions={questions.filter((q) => q.source_memory_id === linkedMemory.id)}
+                                          peopleOptions={peopleDirectory}
+                                          formatBytes={formatBytes}
+                                          resolveApiUrl={resolveApiUrl}
+                                          onResearch={researchMemory}
+                                          onAcceptSuggestion={acceptResearchSuggestion}
+                                          onDismissSuggestion={dismissResearchSuggestion}
+                                          onReanalyze={reanalyzeMemory}
+                                          onDelete={deleteMemory}
+                                          onAssignRecorder={assignRecorder}
+                                          isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
+                                          defaultExpanded
+                                        />
+                                      );
+                                    })()}
+                                    <p className="meta">
+                                      Managing event: <span className="badge">{event.title}</span>
+                                    </p>
+                                    <div className="lifeFormFields">
+                                      <input
+                                        ref={eventAssetInputRef}
+                                        type="file"
+                                        accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt,.mp3,.wav,.m4a,.ogg,.webm,audio/*"
+                                        disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) {
+                                            uploadAssetToActiveEvent(file);
+                                          }
+                                        }}
+                                      />
+                                      <input
+                                        className="directoryInput"
+                                        type="text"
+                                        placeholder="Optional notes for this asset"
+                                        value={assetUploadNotes}
+                                        onChange={(e) => setAssetUploadNotes(e.target.value)}
+                                        disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
+                                      />
+                                    </div>
+                                    <div className="lifeEventManagementRow">
+                                      <select
+                                        className="directoryInput"
+                                        value={eventMergeTargets[event.id] || ""}
+                                        onChange={(e) => setEventMergeTargets((current) => ({ ...current, [event.id]: e.target.value }))}
+                                        disabled={isSavingLifeStructure}
+                                      >
+                                        <option value="">Merge into another event</option>
+                                        {eventsForPeriod.filter((candidate) => candidate.id !== event.id).map((candidate) => (
+                                          <option key={candidate.id} value={candidate.id}>{candidate.title}</option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        className="secondary"
+                                        type="button"
+                                        onClick={() => mergeLifeEvent(event.id)}
+                                        disabled={!eventMergeTargets[event.id] || isSavingLifeStructure}
+                                      >
+                                        Merge Event
+                                      </button>
+                                      <button
+                                        className="ghost"
+                                        type="button"
+                                        onClick={() => deleteLifeEvent(event.id)}
+                                        disabled={isSavingLifeStructure}
+                                      >
+                                        Delete Event
+                                      </button>
+                                    </div>
+                                    {activeEventAssets.length === 0 ? (
+                                      <p className="meta">No assets linked to this event yet.</p>
+                                    ) : (
+                                      <div className="lifeAssetList">
+                                        {activeEventAssets.map((asset) => (
+                                          <div key={asset.id} className="lifeAssetRow">
+                                            <div>
+                                              <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                                              <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
+                                              {asset.playback_url && (
+                                                <audio
+                                                  controls
+                                                  preload="metadata"
+                                                  src={resolveApiUrl(asset.playback_url)}
+                                                  style={{ width: "100%", marginTop: "0.45rem" }}
+                                                />
+                                              )}
+                                              {asset.text_excerpt && (
+                                                <p className="meta assetTranscript">Transcript: {asset.text_excerpt}</p>
+                                              )}
+                                            </div>
+                                            <a className="secondary linkButton" href={resolveApiUrl(asset.download_url)} target="_blank" rel="noreferrer">
+                                              Open
+                                            </a>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+
+              <article className="memory" style={{ marginTop: "0.75rem" }}>
+                <h3>Unlinked Assets Inbox</h3>
+                {unlinkedAssets.length === 0 ? (
+                  <p className="meta">No unlinked assets. Great job keeping context connected.</p>
+                ) : (
+                  <div className="lifeAssetList">
+                    {unlinkedAssets.map((asset) => (
+                      <div key={asset.id} className="lifeAssetRow">
+                        <div>
+                          <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                          <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
+                        </div>
+                        <div className="lifeAssetLinkControls">
+                          <select
+                            className="directoryInput"
+                            value={assetLinkTargets[asset.id] || ""}
+                            onChange={(e) => setAssetLinkTargets((current) => ({ ...current, [asset.id]: e.target.value }))}
+                            disabled={isSavingLifeStructure || lifeEvents.length === 0}
+                          >
+                            <option value="">Select event</option>
+                            {lifeEvents.map((event) => (
+                              <option key={event.id} value={event.id}>{event.title}</option>
+                            ))}
+                          </select>
+                          <button
+                            className="secondary"
+                            type="button"
+                            onClick={() => linkUnlinkedAssetToEvent(asset.id)}
+                            disabled={!assetLinkTargets[asset.id] || isSavingLifeStructure}
+                          >
+                            Link
+                          </button>
+                          <a className="ghost linkButton" href={resolveApiUrl(asset.download_url)} target="_blank" rel="noreferrer">
+                            View
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+            </section>
+
+            <section className="timeline">
+              {mainCharacterName === null && (
           <article className="questionCard characterPromptCard">
             <p className="questionText">Before we continue, what should we call you on your memory cards?</p>
             {showCharacterInput ? (
@@ -1621,8 +1885,8 @@ export default function HomePage() {
             )}
           </article>
         )}
-        {questions.length > 0 && (
-          <div className="questionsSection">
+              {questions.length > 0 && (
+                <div className="questionsSection">
             {questions.map((q) => {
               const sourceMemory = q.source_memory_id
                 ? timeline.find((m) => m.id === q.source_memory_id)
@@ -1659,41 +1923,33 @@ export default function HomePage() {
               </article>
               );
             })}
-          </div>
+                </div>
+              )}
+              {timelineStandaloneMemories.map((memory) => (
+                <MemoryCard
+                  key={memory.id}
+                  memory={memory}
+                  linkedQuestions={questions.filter((q) => q.source_memory_id === memory.id)}
+                  peopleOptions={peopleDirectory}
+                  formatBytes={formatBytes}
+                  resolveApiUrl={resolveApiUrl}
+                  onResearch={researchMemory}
+                  onAcceptSuggestion={acceptResearchSuggestion}
+                  onDismissSuggestion={dismissResearchSuggestion}
+                  onReanalyze={reanalyzeMemory}
+                  onDelete={deleteMemory}
+                  onAssignRecorder={assignRecorder}
+                  isBusy={isLoading || memoryActionId === memory.id || isRecording}
+                />
+              ))}
+              {timeline.length === 0 && <p className="meta">No memories yet. Record your first one.</p>}
+              {timeline.length > 0 && timelineStandaloneMemories.length === 0 && (
+                <p className="meta">All captured memories are organized in Life Periods above.</p>
+              )}
+            </section>
+          </>
         )}
-        {pendingRecording && (
-          <article className="memory">
-            <h3>Latest Recording Preview</h3>
-            <p className="meta">
-              Status: <span className="badge">{pendingRecording.status}</span>
-            </p>
-            <p className="meta">File size: {formatBytes(pendingRecording.sizeBytes)}</p>
-            <audio controls preload="metadata" src={pendingRecording.audioUrl} style={{ width: "100%" }} />
-            {pendingRecording.sizeBytes === 0 && (
-              <p className="meta">This recording is empty (0 B), which explains silent playback.</p>
-            )}
-            {pendingRecording.error && <p className="meta">{pendingRecording.error}</p>}
-          </article>
-        )}
-        {timeline.map((memory) => (
-          <MemoryCard
-            key={memory.id}
-            memory={memory}
-            linkedQuestions={questions.filter((q) => q.source_memory_id === memory.id)}
-            peopleOptions={peopleDirectory}
-            formatBytes={formatBytes}
-            resolveApiUrl={resolveApiUrl}
-            onResearch={researchMemory}
-            onAcceptSuggestion={acceptResearchSuggestion}
-            onDismissSuggestion={dismissResearchSuggestion}
-            onReanalyze={reanalyzeMemory}
-            onDelete={deleteMemory}
-            onAssignRecorder={assignRecorder}
-            isBusy={isLoading || memoryActionId === memory.id || isRecording}
-          />
-        ))}
-        {timeline.length === 0 && <p className="meta">No memories yet. Record your first one.</p>}
-      </section>
+      </div>
     </main>
   );
 }

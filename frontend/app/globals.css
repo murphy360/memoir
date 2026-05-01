@@ -26,9 +26,83 @@ body {
 }
 
 main {
-  max-width: 960px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 1.25rem;
+}
+
+.appShell {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  position: relative;
+}
+
+.workspaceColumn {
+  display: grid;
+  gap: 1rem;
+}
+
+.directoryToggle {
+  display: none;
+}
+
+.directoryBackdrop {
+  display: none;
+}
+
+.directorySidebar {
+  display: grid;
+  gap: 0.85rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.directorySidebarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+}
+
+.directorySidebarHeader h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.directoryMeta {
+  margin: 0.2rem 0 0;
+}
+
+.directoryTabRow {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.directoryFilterLabel {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.directoryFilterHeaderRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.directoryFilterClear {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.78rem;
+}
+
+.directoryClose {
+  display: none;
 }
 
 .hero {
@@ -44,6 +118,27 @@ main {
 .hero p {
   margin: 0.5rem 0 0;
   color: var(--muted);
+}
+
+.viewTabs {
+  margin-top: 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.capturePanelHeader,
+.periodsHeader,
+.periodSummaryRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.periodsHeader h2 {
+  margin: 0 0 0.25rem;
 }
 
 .panel {
@@ -530,6 +625,52 @@ button:disabled {
 @media (max-width: 640px) {
   main {
     padding: 0.9rem;
+  }
+}
+
+@media (max-width: 1024px) {
+  .appShell {
+    grid-template-columns: 1fr;
+  }
+
+  .directoryToggle {
+    display: inline-flex;
+    width: fit-content;
+    margin-bottom: 0.2rem;
+  }
+
+  .directoryBackdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    border: none;
+    margin: 0;
+    padding: 0;
+    background: rgba(17, 23, 36, 0.3);
+  }
+
+  .directorySidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: min(92vw, 380px);
+    overflow-y: auto;
+    background: var(--bg);
+    padding: 0.9rem;
+    z-index: 25;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+    box-shadow: 10px 0 24px rgba(20, 20, 20, 0.18);
+  }
+
+  .directorySidebar.isOpen {
+    transform: translateX(0);
+  }
+
+  .directoryClose {
+    display: inline-flex;
   }
 }
 

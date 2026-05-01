@@ -71,6 +71,29 @@ class CreateLifePeriodRequest(BaseModel):
     summary: Optional[str] = None
 
 
+class AnalyzeLifePeriodRequest(BaseModel):
+    apply_dates: bool = False
+    apply_title: bool = False
+    regenerate_summary: bool = False
+
+
+class LifePeriodAnalysisResponse(BaseModel):
+    period_id: int
+    event_count: int
+    asset_count: int
+    coverage_ok: bool
+    coverage_reasoning: str
+    current_title: str
+    recommended_title: Optional[str] = None
+    title_reasoning: str
+    current_start_date_text: Optional[str] = None
+    current_end_date_text: Optional[str] = None
+    recommended_start_date_text: Optional[str] = None
+    recommended_end_date_text: Optional[str] = None
+    generated_summary: Optional[str] = None
+    summary_reasoning: str
+
+
 class LifeEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -84,6 +107,7 @@ class LifeEventResponse(BaseModel):
     date_month: Optional[int]
     date_day: Optional[int]
     date_decade: Optional[int]
+    legacy_memory_id: Optional[int]
     legacy_audio_url: Optional[str]
     legacy_audio_size_bytes: Optional[int]
     linked_asset_count: int = 0

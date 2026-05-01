@@ -16,6 +16,7 @@ type MemoryCardProps = {
   onDelete: (memoryId: number) => Promise<void>;
   onAssignRecorder: (memoryId: number, personId: number) => Promise<void>;
   isBusy: boolean;
+  defaultExpanded?: boolean;
 };
 
 function asLabelList(items: string[]): string {
@@ -38,9 +39,14 @@ export function MemoryCard({
   onDelete,
   onAssignRecorder,
   isBusy,
+  defaultExpanded = false,
 }: MemoryCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [selectedRecorder, setSelectedRecorder] = useState("");
+
+  useEffect(() => {
+    setIsExpanded(defaultExpanded);
+  }, [memory.id, defaultExpanded]);
 
   useEffect(() => {
     setSelectedRecorder(memory.recorder_person_id ? `${memory.recorder_person_id}` : "");

@@ -107,6 +107,24 @@ def seed_initial_questions(db: Session) -> None:
         for q_text in SEED_QUESTIONS:
             db.add(Question(text=q_text, status="pending"))
         db.commit()
+    # Ensure default starter period
+    ensure_default_starter_period(db)
+
+def ensure_default_starter_period(db: Session) -> None:
+    """Create a friendly starter period for fresh memoirs with no structure yet."""
+    if db.query(LifePeriod).first() is not None:
+        return
+
+    title = "Birth and Early Childhood"
+    starter = LifePeriod(
+        title=title,
+        slug=unique_period_slug(db, title),
+        start_date_text="Birth",
+        end_date_text="Early years",
+        summary="A starter period for first memories. You can rename or delete it anytime.",
+    )
+    db.add(starter)
+    db.commit()
 
 
 def normalize_question_text(value: Optional[str]) -> str:
@@ -194,6 +212,7 @@ def build_event_response(event: LifeEvent) -> LifeEventResponse:
         date_month=event.date_month,
         date_day=event.date_day,
         date_decade=event.date_decade,
+        legacy_memory_id=event.legacy_memory_id,
         legacy_audio_url=(legacy_memory.audio_url if legacy_memory else None),
         legacy_audio_size_bytes=(legacy_memory.audio_size_bytes if legacy_memory else None),
         linked_asset_count=len(event.linked_assets),
