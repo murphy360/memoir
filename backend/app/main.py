@@ -975,11 +975,47 @@ def reanalyze_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEnt
     return memory
 
 
+def _extract_questions_from_research(summary: str) -> list[str]:
+    """Extract bullet-point questions from the 'Questions worth exploring' section."""
+    import re
+    lines = summary.splitlines()
+    in_section = False
+    questions: list[str] = []
+    section_headers = re.compile(r"^#{1,3}\s*questions worth exploring", re.IGNORECASE)
+    next_section = re.compile(r"^#{1,3}\s+\w", re.IGNORECASE)
+    bullet = re.compile(r"^[\*\-]\s+(.+)")
+
+    for line in lines:
+        stripped = line.strip()
+        if section_headers.match(stripped):
+            in_section = True
+            continue
+        if in_section:
+            if next_section.match(stripped) and not section_headers.match(stripped):
+                break
+            m = bullet.match(stripped)
+            if m:
+                text = m.group(1).strip()
+                if text.endswith("?"):
+                    questions.append(text)
+    return questions[:5]
+
+
 @app.post("/api/memories/{memory_id}/research", response_model=MemoryResponse)
 def research_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEntry:
     memory = db.get(MemoryEntry, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
+
+    # If memory has a document, read it to pass to research
+    document_bytes = None
+    document_mime_type = None
+    if memory.document_filename:
+        doc_path = DOCUMENT_STORAGE_DIR / memory.document_filename
+        if doc_path.exists():
+            with open(doc_path, "rb") as f:
+                document_bytes = f.read()
+            document_mime_type = memory.document_content_type or "application/octet-stream"
 
     research = research_memory_details(
         transcript=memory.transcript,
@@ -987,6 +1023,8 @@ def research_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEntr
         estimated_date_text=memory.estimated_date_text,
         referenced_locations=memory.referenced_locations,
         referenced_people=memory.referenced_people,
+        document_bytes=document_bytes,
+        document_mime_type=document_mime_type,
     )
     memory.research_summary = research.summary
     memory.research_queries_json = json.dumps(research.queries)
@@ -1007,18 +1045,13 @@ def research_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEntr
     db.commit()
     db.refresh(memory)
 
-    # Generate and store follow-up research questions
-    logger.info("About to generate research questions for memory %s", memory_id)
-    follow_up_questions = generate_research_questions(
-        research_summary=research.summary,
-        event_description=memory.event_description,
-        referenced_people=memory.referenced_people,
-    )
-    logger.info("Generated %d research questions: %s", len(follow_up_questions), follow_up_questions)
+    # Extract follow-up questions from the 'Questions worth exploring' section
+    # already present in the research summary, rather than making a redundant Gemini call
+    follow_up_questions = _extract_questions_from_research(research.summary)
+    logger.info("Extracted %d questions from research summary", len(follow_up_questions))
     for question_text in follow_up_questions:
-        logger.info("Adding question: %s", question_text)
+        logger.info("Adding question: %s", question_text[:80])
         db.add(Question(text=question_text, source_memory_id=memory_id, status="pending"))
-    logger.info("Committing %d new questions", len(follow_up_questions))
     db.commit()
 
     return memory

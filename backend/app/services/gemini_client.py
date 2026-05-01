@@ -235,6 +235,8 @@ def research_memory_details(
     estimated_date_text: Optional[str],
     referenced_locations: list[str],
     referenced_people: list[str],
+    document_bytes: Optional[bytes] = None,
+    document_mime_type: Optional[str] = None,
 ) -> ResearchResult:
     gemini_key = os.getenv("GEMINI_API_KEY")
     gemini_model = os.getenv("GEMINI_RESEARCH_MODEL") or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
@@ -244,38 +246,55 @@ def research_memory_details(
 
     if gemini_key:
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
+        
+        parts = [
+            {
+                "text": (
+                    "Research this personal memory by exploring the broader context and implications beyond what the document explicitly states.\n\n"
+                    "Your goal is to help understand: What was the bigger picture? What were the consequences? What related things happened? "
+                    "Think of this as investigative research that expands the story, not just confirms facts already in the document.\n\n"
+                    "PRIORITY 1 - Explore broader context and implications:\n"
+                    "- If a decision/order is documented, research: What were its likely effects? What was happening before/after? How did it matter?\n"
+                    "- If a time/place is mentioned, research: What was the geopolitical/social/historical situation? What crises existed? What were people experiencing?\n"
+                    "- Search for cause-and-effect: Why did this happen? What led to it? What consequences followed?\n\n"
+                    "PRIORITY 2 - Ask exploratory leading questions:\n"
+                    "- If a deployment is mentioned: What were conditions in that location? What challenges would personnel face? What was the strategic importance?\n"
+                    "- If a transition/change occurred: What were the career implications? How would this have affected the person's trajectory? What opportunities or obstacles emerged?\n"
+                    "- If a crisis context exists (pandemic, conflict, economic): How did that specific crisis manifest in the relevant domain? What were the ripple effects?\n\n"
+                    "PRIORITY 3 - Expand with related research:\n"
+                    "- Search for related policies, precedents, or similar situations: Were there other people/units experiencing the same thing? What was standard vs. unusual?\n"
+                    "- Look for historical patterns: Has this type of situation happened before? What were the long-term outcomes in similar cases?\n\n"
+                    "Structure your response with these sections:\n"
+                    "- 'What this likely meant': Implications and consequences beyond the document's explicit content\n"
+                    "- 'The bigger picture': Broader context that shaped this experience (political climate, operational situation, institutional changes, etc.)\n"
+                    "- 'Related developments': Similar events, policies, or situations happening concurrently or as follow-ups\n"
+                    "- 'Questions worth exploring': What aspects remain unclear or warrant further investigation?\n\n"
+                    "Use search results to support exploratory answers, not just to corroborate what's already stated. "
+                    "Flag areas where research reveals new dimensions or implications of the documented event.\n\n"
+                    f"Event description: {event_description}\n"
+                    f"Estimated date: {estimated_date_text or 'Unknown'}\n"
+                    f"Referenced locations: {location_text}\n"
+                    f"Referenced people: {people_text}\n"
+                    f"Transcript:\n{transcript}"
+                    + ("\n\nThe original document is attached below." if document_bytes else "")
+                )
+            }
+        ]
+        
+        if document_bytes and document_mime_type:
+            encoded_doc = base64.b64encode(document_bytes).decode("utf-8")
+            parts.append({
+                "inline_data": {
+                    "mime_type": document_mime_type,
+                    "data": encoded_doc,
+                }
+            })
+        
         payload = {
             "contents": [
                 {
                     "role": "user",
-                    "parts": [
-                        {
-                            "text": (
-                                "Research this personal memory using multiple targeted Google Search queries to uncover details. "
-                                "Conduct systematic searches for: people named/implied, organizations/units, locations, and events at that date/place.\n\n"
-                                "For EACH person, organization, or entity mentioned:\n"
-                                "1. Search them individually (e.g., 'John Smith military' or 'USS Lake Erie 2014')\n"
-                                "2. Look for leadership changes, departures, or notable incidents\n"
-                                "3. Find biographical/organizational details that might corroborate the memory\n\n"
-                                "For the DATE + LOCATION combination:\n"
-                                "- Search for major events, operations, news at that specific time/place\n"
-                                "- Look for organizational deployments or maintenance schedules\n"
-                                "- Find historical patterns or recurring events (if repeating annually, etc.)\n\n"
-                                "Structure your response with these sections:\n"
-                                "- 'Key findings': The most significant corroborating or contextual details discovered\n"
-                                "- 'People/organizations involved': Names, roles, and any notable history found\n"
-                                "- 'Historical context': What was happening at that time/place more broadly\n"
-                                "- 'Unknowns to verify': What still needs confirmation\n\n"
-                                "Only claim facts that can be supported by search results. If information is incomplete, say so explicitly. "
-                                "Flag any claims that could queue up follow-up memories or additional research.\n\n"
-                                f"Event description: {event_description}\n"
-                                f"Estimated date: {estimated_date_text or 'Unknown'}\n"
-                                f"Referenced locations: {location_text}\n"
-                                f"Referenced people: {people_text}\n"
-                                f"Transcript:\n{transcript}"
-                            )
-                        }
-                    ]
+                    "parts": parts
                 }
             ],
             "tools": [
@@ -289,13 +308,13 @@ def research_memory_details(
             ],
             "generationConfig": {
                 "temperature": 0.15,
-                "maxOutputTokens": 1200,
+                "maxOutputTokens": 3000,
                 "responseMimeType": "text/plain"
             }
         }
 
         try:
-            response = requests.post(endpoint, params={"key": gemini_key}, json=payload, timeout=30)
+            response = requests.post(endpoint, params={"key": gemini_key}, json=payload, timeout=90)
             if response.ok:
                 data = response.json()
                 candidate = data.get("candidates", [{}])[0]
@@ -305,76 +324,17 @@ def research_memory_details(
                     grounding = candidate.get("groundingMetadata", {})
                     queries = _extract_grounding_queries(grounding)
                     sources = _extract_grounding_sources(grounding)
-                    return ResearchResult(summary=text[:4000], queries=queries, sources=sources)
+                    return ResearchResult(summary=text[:10000], queries=queries, sources=sources)
             else:
                 logger.warning("Gemini research request failed: %s", response.text[:300])
         except Exception as exc:
             logger.warning("Gemini research request exception: %s", exc)
 
-    lead = event_description.strip() or "This memory"
-    bullets: list[str] = [
-        "Key findings",
-        f"- {lead} occurred around {estimated_date_text or 'an unknown date'}.",
-    ]
-    if referenced_people:
-        bullets.append(
-            f"- Key people mentioned: {', '.join(referenced_people)}. Search each individually to find biographical details, military records, employment history, or public mentions around that timeframe."
-        )
-    if referenced_locations:
-        bullets.append(
-            f"- Locations to research: {', '.join(referenced_locations)}. Look for local archives, newspapers from that era, town/county historical societies, and institutional records."
-        )
-    
-    bullets.extend(
-        [
-            "",
-            "People/organizations involved",
-            "- Any named individuals should be researched individually (name + relevant context like military, school, company, etc.)",
-            "- Organizations or units mentioned (military units, companies, agencies, schools) benefit from dedicated searches on their history and leadership during that period.",
-        ]
+    return ResearchResult(
+        summary="Research could not be completed at this time. Try running research again.",
+        queries=[],
+        sources=[],
     )
-    
-    bullets.extend(
-        [
-            "",
-            "Historical context",
-            f"- Events in {estimated_date_text or 'that era'} at {', '.join(referenced_locations) or 'those locations'} may have been tied to larger historical events, deployments, policy changes, or public incidents.",
-            "- Consider what was happening more broadly (nationally, locally, in that organization) at that exact time.",
-            "",
-            "Unknowns to verify",
-            "- Specific dates, names, and organizational details can help narrow down corroborating sources.",
-            "- Any named person or organizational unit warrants a targeted search.",
-        ]
-    )
-    fallback_sources: list[ResearchSource] = []
-    if referenced_locations:
-        fallback_sources.append(
-            ResearchSource(
-                title="Local records and archives",
-                url="https://www.google.com/search?q=" + requests.utils.quote(f"{' '.join(referenced_locations)} history {estimated_date_text or ''}"),
-            )
-        )
-    if referenced_people:
-        fallback_sources.append(
-            ResearchSource(
-                title="People search",
-                url="https://www.google.com/search?q=" + requests.utils.quote(f"{' '.join(referenced_people)} {estimated_date_text or ''}"),
-            )
-        )
-    fallback_sources.append(
-        ResearchSource(
-            title="General event search",
-            url="https://www.google.com/search?q=" + requests.utils.quote(f"{event_description} {estimated_date_text or ''}"),
-        )
-    )
-    if "scout" in transcript.lower() or "pack" in transcript.lower() or "troop" in transcript.lower():
-        fallback_sources.append(
-            ResearchSource(
-                title="Scouting organization records",
-                url="https://www.google.com/search?q=" + requests.utils.quote("scouting history council troops packs"),
-            )
-        )
-    return ResearchResult(summary="\n".join(bullets)[:4000], sources=fallback_sources)
 
 
 def _extract_grounding_queries(grounding: object) -> list[str]:
