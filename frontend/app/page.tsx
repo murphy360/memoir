@@ -163,7 +163,8 @@ export default function HomePage() {
   const [editingPeriodTitleValue, setEditingPeriodTitleValue] = useState("");
   const [editingEventTitleId, setEditingEventTitleId] = useState<number | null>(null);
   const [editingEventTitleValue, setEditingEventTitleValue] = useState("");
-  const [mergingPeriodId, setMergingPeriodId] = useState<number | null>(null);
+    const [collapsedMemoryEventIds, setCollapsedMemoryEventIds] = useState<Set<number>>(new Set());
+    const [mergingPeriodId, setMergingPeriodId] = useState<number | null>(null);
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
@@ -1804,11 +1805,25 @@ export default function HomePage() {
                                       }
                                       return (
                                         <>
-                                          <p className="entitySectionLabel">
-                                            <span className="entityPill entityPillMemory">Memory</span>
-                                            Narrative, transcript, and extracted context
-                                          </p>
-                                          <MemoryCard
+                                          <div className="entitySectionLabel" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                            <div>
+                                              <span className="entityPill entityPillMemory">Memory</span>
+                                              Narrative, transcript, and extracted context
+                                            </div>
+                                            <button
+                                              className="secondary"
+                                              type="button"
+                                              style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
+                                              onClick={() => setCollapsedMemoryEventIds((prev) => {
+                                                const next = new Set(prev);
+                                                if (next.has(event.id)) next.delete(event.id); else next.add(event.id);
+                                                return next;
+                                              })}
+                                            >
+                                              {collapsedMemoryEventIds.has(event.id) ? "Show Memory" : "Hide"}
+                                            </button>
+                                          </div>
+                                          {!collapsedMemoryEventIds.has(event.id) && <MemoryCard
                                           key={`event-memory-${linkedMemory.id}`}
                                           containerId={`memory-card-${linkedMemory.id}`}
                                           isHighlighted={highlightedElementId === `memory-card-${linkedMemory.id}`}
@@ -1826,6 +1841,7 @@ export default function HomePage() {
                                           isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
                                           hideHeader
                                         />
+                                          }
                                       </>
                                       );
                                     })()}
@@ -2124,11 +2140,25 @@ export default function HomePage() {
                             }
                             return (
                               <>
-                                <p className="entitySectionLabel">
-                                  <span className="entityPill entityPillMemory">Memory</span>
-                                  Narrative, transcript, and extracted context
-                                </p>
-                                <MemoryCard
+                                <div className="entitySectionLabel" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                  <div>
+                                    <span className="entityPill entityPillMemory">Memory</span>
+                                    Narrative, transcript, and extracted context
+                                  </div>
+                                  <button
+                                    className="secondary"
+                                    type="button"
+                                    style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
+                                    onClick={() => setCollapsedMemoryEventIds((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(event.id)) next.delete(event.id); else next.add(event.id);
+                                      return next;
+                                    })}
+                                  >
+                                    {collapsedMemoryEventIds.has(event.id) ? "Show Memory" : "Hide"}
+                                  </button>
+                                </div>
+                                {!collapsedMemoryEventIds.has(event.id) && <MemoryCard
                                   key={`event-memory-${linkedMemory.id}`}
                                   containerId={`memory-card-${linkedMemory.id}`}
                                   isHighlighted={highlightedElementId === `memory-card-${linkedMemory.id}`}
@@ -2146,6 +2176,7 @@ export default function HomePage() {
                                   isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
                                   hideHeader
                                 />
+                                }
                               </>
                             );
                           })()}
