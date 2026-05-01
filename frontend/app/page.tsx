@@ -2195,21 +2195,32 @@ export default function HomePage() {
                                       </div>
                                     )}
                                   </div>
-                                  <button
-                                    className="secondary"
-                                    type="button"
-                                    onClick={async () => {
-                                      if (activeEventId === event.id) {
-                                        setActiveEventId(null);
-                                        setActiveEventAssets([]);
-                                        return;
-                                      }
-                                      setActiveEventId(event.id);
-                                      await loadAssetsForEvent(event.id);
-                                    }}
-                                  >
-                                    {activeEventId === event.id ? "Hide" : "Open"}
-                                  </button>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", alignItems: "stretch" }}>
+                                    <button
+                                      className="secondary"
+                                      type="button"
+                                      onClick={async () => {
+                                        if (activeEventId === event.id) {
+                                          setActiveEventId(null);
+                                          setActiveEventAssets([]);
+                                          return;
+                                        }
+                                        setActiveEventId(event.id);
+                                        await loadAssetsForEvent(event.id);
+                                      }}
+                                    >
+                                      {activeEventId === event.id ? "Hide" : "Open"}
+                                    </button>
+                                    <button
+                                      className="secondary"
+                                      type="button"
+                                      style={{ color: "var(--danger, #c0392b)" }}
+                                      onClick={() => deleteLifeEvent(event.id)}
+                                      disabled={isSavingLifeStructure || isRecording || isLoading}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
                                 </div>
 
                                 {activeEventId === event.id && (
@@ -2829,21 +2840,32 @@ export default function HomePage() {
                             </div>
                           )}
                         </div>
-                        <button
-                          className="secondary"
-                          type="button"
-                          onClick={async () => {
-                            if (activeEventId === event.id) {
-                              setActiveEventId(null);
-                              setActiveEventAssets([]);
-                              return;
-                            }
-                            setActiveEventId(event.id);
-                            await loadAssetsForEvent(event.id);
-                          }}
-                        >
-                          {activeEventId === event.id ? "Hide" : "Open"}
-                        </button>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", alignItems: "stretch" }}>
+                          <button
+                            className="secondary"
+                            type="button"
+                            onClick={async () => {
+                              if (activeEventId === event.id) {
+                                setActiveEventId(null);
+                                setActiveEventAssets([]);
+                                return;
+                              }
+                              setActiveEventId(event.id);
+                              await loadAssetsForEvent(event.id);
+                            }}
+                          >
+                            {activeEventId === event.id ? "Hide" : "Open"}
+                          </button>
+                          <button
+                            className="secondary"
+                            type="button"
+                            style={{ color: "var(--danger, #c0392b)" }}
+                            onClick={() => deleteLifeEvent(event.id)}
+                            disabled={isSavingLifeStructure || isRecording || isLoading}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
 
                       {activeEventId === event.id && (
