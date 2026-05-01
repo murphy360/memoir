@@ -1068,6 +1068,41 @@ export default function HomePage() {
       .map((event) => event.legacy_memory_id)
       .filter((memoryId): memoryId is number => memoryId !== null),
   );
+  const questionsWithContext = questions.map((question) => {
+    const sourceMemory = question.source_memory_id
+      ? timeline.find((memory) => memory.id === question.source_memory_id) ?? null
+      : null;
+    const sourceEvent = sourceMemory
+      ? lifeEvents.find((event) => event.legacy_memory_id === sourceMemory.id) ?? null
+      : null;
+    const sourcePeriod = sourceEvent && sourceEvent.period_id !== null
+      ? lifePeriods.find((period) => period.id === sourceEvent.period_id) ?? null
+      : null;
+
+    return {
+      question,
+      sourceMemory,
+      sourceEvent,
+      sourcePeriod,
+    };
+  });
+  const questionsByEventId = new Map<number, typeof questionsWithContext>();
+  const questionsByPeriodNoEvent = new Map<number, typeof questionsWithContext>();
+  const questionsWithNoContext: typeof questionsWithContext = [];
+  for (const item of questionsWithContext) {
+    if (item.sourceEvent) {
+      const list = questionsByEventId.get(item.sourceEvent.id) ?? [];
+      list.push(item);
+      questionsByEventId.set(item.sourceEvent.id, list);
+    } else if (item.sourcePeriod) {
+      const list = questionsByPeriodNoEvent.get(item.sourcePeriod.id) ?? [];
+      list.push(item);
+      questionsByPeriodNoEvent.set(item.sourcePeriod.id, list);
+    } else {
+      questionsWithNoContext.push(item);
+    }
+  }
+  const unassignedEvents = lifeEvents.filter((event) => event.period_id === null);
   const timelineStandaloneMemories = timeline.filter((memory) => !lifeEventMemoryIds.has(memory.id));
 
   return (
@@ -1427,6 +1462,12 @@ export default function HomePage() {
                 {lifePeriods.length === 0 && <p className="meta">No periods created yet.</p>}
                 {lifePeriods.map((period) => {
                   const eventsForPeriod = lifeEvents.filter((event) => event.period_id === period.id);
+                  const eventsForPeriodIds = new Set(eventsForPeriod.map((e) => e.id));
+                  const periodQuestionCount =
+                    (questionsByPeriodNoEvent.get(period.id)?.length ?? 0) +
+                    questionsWithContext.filter(
+                      (item) => item.sourceEvent !== null && eventsForPeriodIds.has(item.sourceEvent.id),
+                    ).length;
                   const isExpanded = Boolean(expandedPeriods[period.id]);
                   const draft = eventDraftsByPeriod[period.id] || {
                     title: "",
@@ -1475,7 +1516,7 @@ export default function HomePage() {
                             <span className="badge">{period.end_date_text || "unknown"}</span>
                           </p>
                           <p className="meta">
-                            Events: <span className="badge">{eventsForPeriod.length}</span> Assets: <span className="badge">{period.asset_count}</span>
+                            Events: <span className="badge">{eventsForPeriod.length}</span> Assets: <span className="badge">{period.asset_count}</span>{periodQuestionCount > 0 && <> Questions: <span className="badge">{periodQuestionCount}</span></>}
                           </p>
                         </div>
                         <button
@@ -1648,6 +1689,38 @@ export default function HomePage() {
                             </div>
                           </article>
 
+                          {(questionsByPeriodNoEvent.get(period.id)?.length ?? 0) > 0 && (
+                            <div className="inlineQuestionList">
+                              <p className="inlineQuestionListLabel">Open questions for this period</p>
+                              {questionsByPeriodNoEvent.get(period.id)!.map(({ question, sourceMemory }) => (
+                                <article key={question.id} className="questionCard inlineQuestionCard">
+                                  <p className="questionText">{question.text}</p>
+                                  {sourceMemory && (
+                                    <p className="questionSource">From: <em>{sourceMemory.event_description}</em></p>
+                                  )}
+                                  <div className="questionActions">
+                                    <button
+                                      className="primary"
+                                      type="button"
+                                      onClick={() => { setActiveQuestion(question); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                                      disabled={isRecording || isLoading}
+                                    >
+                                      Answer this
+                                    </button>
+                                    <button
+                                      className="ghost"
+                                      type="button"
+                                      onClick={() => dismissQuestion(question.id)}
+                                      disabled={isRecording || isLoading}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                </article>
+                              ))}
+                            </div>
+                          )}
+
                           <div className="lifeEventList">
                             {eventsForPeriod.length === 0 && <p className="meta">No events in this period yet.</p>}
                             {eventsForPeriod.map((event) => (
@@ -1682,7 +1755,7 @@ export default function HomePage() {
                                 >
                                   <div>
                                     <p><strong>{event.title}</strong></p>
-                                    <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}</p>
+                                    <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}</p>
                                   </div>
                                   <span className="badge">{activeEventId === event.id ? "Hide details" : "View details"}</span>
                                 </div>
@@ -1713,6 +1786,37 @@ export default function HomePage() {
                                         />
                                       );
                                     })()}
+                                    {(questionsByEventId.get(event.id)?.length ?? 0) > 0 && (
+                                      <div className="inlineQuestionList">
+                                        <p className="inlineQuestionListLabel">Open questions for this event</p>
+                                        {questionsByEventId.get(event.id)!.map(({ question, sourceMemory }) => (
+                                          <article key={question.id} className="questionCard inlineQuestionCard">
+                                            <p className="questionText">{question.text}</p>
+                                            {sourceMemory && (
+                                              <p className="questionSource">From: <em>{sourceMemory.event_description}</em></p>
+                                            )}
+                                            <div className="questionActions">
+                                              <button
+                                                className="primary"
+                                                type="button"
+                                                onClick={() => { setActiveQuestion(question); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                                                disabled={isRecording || isLoading}
+                                              >
+                                                Answer this
+                                              </button>
+                                              <button
+                                                className="ghost"
+                                                type="button"
+                                                onClick={() => dismissQuestion(question.id)}
+                                                disabled={isRecording || isLoading}
+                                              >
+                                                Remove
+                                              </button>
+                                            </div>
+                                          </article>
+                                        ))}
+                                      </div>
+                                    )}
                                     <p className="meta">
                                       Managing event: <span className="badge">{event.title}</span>
                                     </p>
@@ -1806,6 +1910,193 @@ export default function HomePage() {
                   );
                 })}
               </div>
+
+              <article className="memory" style={{ marginTop: "0.75rem" }}>
+                <h3>Unassigned Events</h3>
+                <p className="meta">Events with no period assignment appear here so they never disappear from view.</p>
+                <div className="lifeEventList">
+                  {unassignedEvents.length === 0 && <p className="meta">No unassigned events.</p>}
+                  {unassignedEvents.map((event) => (
+                    <div key={event.id} className="lifeEventCard">
+                      <div
+                        className={`lifeEventRow ${activeEventId === event.id ? "isActive" : ""}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={async () => {
+                          if (activeEventId === event.id) {
+                            setActiveEventId(null);
+                            setActiveEventAssets([]);
+                            return;
+                          }
+                          setActiveEventId(event.id);
+                          await loadAssetsForEvent(event.id);
+                        }}
+                        onKeyDown={async (e) => {
+                          if (e.key !== "Enter" && e.key !== " ") {
+                            return;
+                          }
+                          e.preventDefault();
+                          if (activeEventId === event.id) {
+                            setActiveEventId(null);
+                            setActiveEventAssets([]);
+                            return;
+                          }
+                          setActiveEventId(event.id);
+                          await loadAssetsForEvent(event.id);
+                        }}
+                      >
+                        <div>
+                          <p><strong>{event.title}</strong></p>
+                          <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}</p>
+                        </div>
+                        <span className="badge">{activeEventId === event.id ? "Hide details" : "View details"}</span>
+                      </div>
+
+                      {activeEventId === event.id && (
+                        <div className="activeEventPanel inlineEventDetails">
+                          {event.legacy_memory_id && (() => {
+                            const linkedMemory = timeline.find((memory) => memory.id === event.legacy_memory_id);
+                            if (!linkedMemory) {
+                              return null;
+                            }
+                            return (
+                              <MemoryCard
+                                key={`event-memory-${linkedMemory.id}`}
+                                memory={linkedMemory}
+                                linkedQuestions={questions.filter((q) => q.source_memory_id === linkedMemory.id)}
+                                peopleOptions={peopleDirectory}
+                                formatBytes={formatBytes}
+                                resolveApiUrl={resolveApiUrl}
+                                onResearch={researchMemory}
+                                onAcceptSuggestion={acceptResearchSuggestion}
+                                onDismissSuggestion={dismissResearchSuggestion}
+                                onReanalyze={reanalyzeMemory}
+                                onDelete={deleteMemory}
+                                onAssignRecorder={assignRecorder}
+                                isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
+                                defaultExpanded
+                              />
+                            );
+                          })()}
+                          {(questionsByEventId.get(event.id)?.length ?? 0) > 0 && (
+                            <div className="inlineQuestionList">
+                              <p className="inlineQuestionListLabel">Open questions for this event</p>
+                              {questionsByEventId.get(event.id)!.map(({ question, sourceMemory }) => (
+                                <article key={question.id} className="questionCard inlineQuestionCard">
+                                  <p className="questionText">{question.text}</p>
+                                  {sourceMemory && (
+                                    <p className="questionSource">From: <em>{sourceMemory.event_description}</em></p>
+                                  )}
+                                  <div className="questionActions">
+                                    <button
+                                      className="primary"
+                                      type="button"
+                                      onClick={() => { setActiveQuestion(question); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                                      disabled={isRecording || isLoading}
+                                    >
+                                      Answer this
+                                    </button>
+                                    <button
+                                      className="ghost"
+                                      type="button"
+                                      onClick={() => dismissQuestion(question.id)}
+                                      disabled={isRecording || isLoading}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                </article>
+                              ))}
+                            </div>
+                          )}
+                          <p className="meta">
+                            Managing event: <span className="badge">{event.title}</span>
+                          </p>
+                          <div className="lifeFormFields">
+                            <input
+                              ref={eventAssetInputRef}
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt,.mp3,.wav,.m4a,.ogg,.webm,audio/*"
+                              disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  uploadAssetToActiveEvent(file);
+                                }
+                              }}
+                            />
+                            <input
+                              className="directoryInput"
+                              type="text"
+                              placeholder="Optional notes for this asset"
+                              value={assetUploadNotes}
+                              onChange={(e) => setAssetUploadNotes(e.target.value)}
+                              disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
+                            />
+                          </div>
+                          <div className="lifeEventManagementRow">
+                            <select
+                              className="directoryInput"
+                              value={eventMergeTargets[event.id] || ""}
+                              onChange={(e) => setEventMergeTargets((current) => ({ ...current, [event.id]: e.target.value }))}
+                              disabled={isSavingLifeStructure}
+                            >
+                              <option value="">Merge into another event</option>
+                              {lifeEvents.filter((candidate) => candidate.id !== event.id).map((candidate) => (
+                                <option key={candidate.id} value={candidate.id}>{candidate.title}</option>
+                              ))}
+                            </select>
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => mergeLifeEvent(event.id)}
+                              disabled={!eventMergeTargets[event.id] || isSavingLifeStructure}
+                            >
+                              Merge Event
+                            </button>
+                            <button
+                              className="ghost"
+                              type="button"
+                              onClick={() => deleteLifeEvent(event.id)}
+                              disabled={isSavingLifeStructure}
+                            >
+                              Delete Event
+                            </button>
+                          </div>
+                          {activeEventAssets.length === 0 ? (
+                            <p className="meta">No assets linked to this event yet.</p>
+                          ) : (
+                            <div className="lifeAssetList">
+                              {activeEventAssets.map((asset) => (
+                                <div key={asset.id} className="lifeAssetRow">
+                                  <div>
+                                    <p><strong>{asset.original_filename || `Asset ${asset.id}`}</strong></p>
+                                    <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
+                                    {asset.playback_url && (
+                                      <audio
+                                        controls
+                                        preload="metadata"
+                                        src={resolveApiUrl(asset.playback_url)}
+                                        style={{ width: "100%", marginTop: "0.45rem" }}
+                                      />
+                                    )}
+                                    {asset.text_excerpt && (
+                                      <p className="meta assetTranscript">Transcript: {asset.text_excerpt}</p>
+                                    )}
+                                  </div>
+                                  <a className="secondary linkButton" href={resolveApiUrl(asset.download_url)} target="_blank" rel="noreferrer">
+                                    Open
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </article>
 
               <article className="memory" style={{ marginTop: "0.75rem" }}>
                 <h3>Unlinked Assets Inbox</h3>
@@ -1914,44 +2205,35 @@ export default function HomePage() {
             )}
           </article>
         )}
-              {questions.length > 0 && (
+              {questionsWithNoContext.length > 0 && (
                 <div className="questionsSection">
-            {questions.map((q) => {
-              const sourceMemory = q.source_memory_id
-                ? timeline.find((m) => m.id === q.source_memory_id)
-                : null;
-              return (
-              <article key={q.id} className="questionCard">
-                <p className="questionText">{q.text}</p>
-                {sourceMemory && (
-                  <p className="questionSource">
-                    From research on: <em>{sourceMemory.event_description}</em>
-                  </p>
-                )}
-                <div className="questionActions">
-                  <button
-                    className="primary"
-                    type="button"
-                    onClick={() => {
-                      setActiveQuestion(q);
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
-                    disabled={isRecording || isLoading}
-                  >
-                    Answer this
-                  </button>
-                  <button
-                    className="ghost"
-                    type="button"
-                    onClick={() => dismissQuestion(q.id)}
-                    disabled={isRecording || isLoading}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </article>
-              );
-            })}
+                  <p className="inlineQuestionListLabel" style={{ marginBottom: "0.5rem" }}>General open questions</p>
+                  {questionsWithNoContext.map(({ question }) => (
+                    <article key={question.id} className="questionCard">
+                      <p className="questionText">{question.text}</p>
+                      <div className="questionActions">
+                        <button
+                          className="primary"
+                          type="button"
+                          onClick={() => {
+                            setActiveQuestion(question);
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                          }}
+                          disabled={isRecording || isLoading}
+                        >
+                          Answer this
+                        </button>
+                        <button
+                          className="ghost"
+                          type="button"
+                          onClick={() => dismissQuestion(question.id)}
+                          disabled={isRecording || isLoading}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </article>
+                  ))}
                 </div>
               )}
               {timelineStandaloneMemories.map((memory) => (

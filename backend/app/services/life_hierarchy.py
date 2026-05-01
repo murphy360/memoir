@@ -1,19 +1,20 @@
 from sqlalchemy.orm import Session
 
-from app.models import Asset, LifeEvent, MemoryEntry
+from app.models import Asset, LifeEvent, LifePeriod, MemoryEntry
 from app.services.directory import assign_recorder_person, sync_memory_people, sync_memory_places
 from app.services.periods import ensure_event_asset_link, get_or_create_period_for_memory
 
 
 def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
-    period = get_or_create_period_for_memory(db, memory)
-
     event = (
         db.query(LifeEvent)
         .filter(LifeEvent.legacy_memory_id == memory.id)
         .first()
     )
+    period = None
+
     if not event:
+        period = get_or_create_period_for_memory(db, memory)
         event_title = (memory.event_description or "").strip() or f"Memory {memory.id}"
         if len(event_title) > 180:
             event_title = event_title[:180].rstrip()
@@ -33,8 +34,18 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
         )
         db.add(event)
         db.flush()
-    elif event.period_id is None:
-        event.period_id = period.id
+    elif event.period_id is not None:
+        period = event.period
+    else:
+        # Recovery path: if all periods were removed, repopulate inferred structure
+        # so legacy events remain visible in the timeline after restart.
+        has_any_period = db.query(LifePeriod.id).first() is not None
+        if not has_any_period:
+            period = get_or_create_period_for_memory(db, memory)
+            event.period_id = period.id
+
+    # If a legacy-linked event exists with period_id=None, keep it unassigned
+    # unless there are no periods at all (startup recovery case handled above).
 
     if memory.audio_filename:
         audio_asset = (
@@ -44,7 +55,7 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
         )
         if not audio_asset:
             audio_asset = Asset(
-                period_id=period.id,
+                period_id=(period.id if period else None),
                 kind="audio",
                 storage_filename=memory.audio_filename,
                 original_filename=memory.audio_filename,
@@ -57,7 +68,7 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
             db.add(audio_asset)
             db.flush()
         else:
-            if audio_asset.period_id is None:
+            if audio_asset.period_id is None and period is not None:
                 audio_asset.period_id = period.id
             if not audio_asset.text_excerpt and memory.transcript:
                 audio_asset.text_excerpt = memory.transcript[:1200]
@@ -73,7 +84,7 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
         )
         if not document_asset:
             document_asset = Asset(
-                period_id=period.id,
+                period_id=(period.id if period else None),
                 kind=asset_kind,
                 storage_filename=memory.document_filename,
                 original_filename=memory.document_original_filename,
@@ -85,7 +96,7 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
             )
             db.add(document_asset)
             db.flush()
-        elif document_asset.period_id is None:
+        elif document_asset.period_id is None and period is not None:
             document_asset.period_id = period.id
 
         ensure_event_asset_link(db, event, document_asset)
