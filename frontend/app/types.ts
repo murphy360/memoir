@@ -72,6 +72,23 @@ export type LifePeriod = {
   updated_at: string;
 };
 
+export type LifePeriodAnalysis = {
+  period_id: number;
+  event_count: number;
+  asset_count: number;
+  coverage_ok: boolean;
+  coverage_reasoning: string;
+  current_title: string;
+  recommended_titles: string[];
+  title_reasoning: string;
+  current_start_date_text: string | null;
+  current_end_date_text: string | null;
+  recommended_start_date_text: string | null;
+  recommended_end_date_text: string | null;
+  generated_summary: string | null;
+  summary_reasoning: string;
+};
+
 export type LifeEvent = {
   id: number;
   period_id: number | null;

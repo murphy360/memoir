@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+from collections import Counter
 from pathlib import Path
 from datetime import date, datetime
 from typing import Optional
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine, ensure_schema_migrations, get_db
 from app.models import Asset, Base, EventAsset, LifeEvent, LifePeriod, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place, Question, Setting
 from app.schemas import (
+    AnalyzeLifePeriodRequest,
     AssetResponse,
     AddAliasRequest,
     AnswerQuestionRequest,
@@ -24,12 +26,15 @@ from app.schemas import (
     CreateDirectoryEntryRequest,
     DirectoryEntryResponse,
     LifeEventResponse,
+    LifePeriodAnalysisResponse,
     LifePeriodResponse,
     MergeLifeEventRequest,
     LinkAssetToEventRequest,
     MemoryResponse,
     MergePersonRequest,
     QuestionResponse,
+    UpdateLifePeriodRequest,
+    MergePeriodsRequest,
     SettingsResponse,
     SplitPersonRequest,
     UpdateDirectoryEntryRequest,
@@ -40,6 +45,7 @@ from app.services.audio_storage import save_audio_file
 from app.services.document_storage import save_document_file
 from app.services.gemini_client import (
     extract_metadata_with_gemini_function_call,
+    generate_period_biography,
     generate_research_questions,
     research_memory_details,
     suggest_date_from_research,
@@ -218,6 +224,332 @@ def build_event_response(event: LifeEvent) -> LifeEventResponse:
         linked_asset_count=len(event.linked_assets),
         created_at=event.created_at,
         updated_at=event.updated_at,
+    )
+
+
+def _extract_year_hint(text: Optional[str]) -> Optional[int]:
+    if not text:
+        return None
+    match = re.search(r"\b(19\d{2}|20\d{2})\b", text)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _extract_year_hints(text: Optional[str]) -> list[int]:
+    if not text:
+        return []
+    return [int(value) for value in re.findall(r"\b(19\d{2}|20\d{2})\b", text)]
+
+
+def _period_bounds_in_years(period: LifePeriod) -> tuple[Optional[int], Optional[int]]:
+    start_year = period.start_sort.year if period.start_sort else _extract_year_hint(period.start_date_text)
+    end_year = period.end_sort.year if period.end_sort else _extract_year_hint(period.end_date_text)
+    return start_year, end_year
+
+
+def _event_year_bounds(events: list[LifeEvent]) -> tuple[Optional[int], Optional[int]]:
+    years: list[int] = []
+    for event in events:
+        text_years = _extract_year_hints(event.event_date_text)
+        if text_years:
+            years.extend(text_years)
+
+        if event.date_year:
+            years.append(event.date_year)
+            continue
+        if event.date_decade:
+            years.extend([event.date_decade, event.date_decade + 9])
+            continue
+        if event.event_date_sort:
+            years.append(event.event_date_sort.year)
+            continue
+
+    if not years:
+        return None, None
+    return min(years), max(years)
+
+
+def _recommended_period_dates_from_events(events: list[LifeEvent]) -> tuple[Optional[str], Optional[str], Optional[date], Optional[date]]:
+    min_year, max_year = _event_year_bounds(events)
+    if min_year is None or max_year is None:
+        return None, None, None, None
+
+    recommended_start_text = str(min_year)
+    recommended_end_text = str(max_year)
+    recommended_start_sort = date(min_year, 1, 1)
+    recommended_end_sort = date(max_year, 12, 31)
+    return recommended_start_text, recommended_end_text, recommended_start_sort, recommended_end_sort
+
+
+def _is_generic_period_title(title: str) -> bool:
+    normalized = (title or "").strip().lower()
+    if not normalized:
+        return True
+    if normalized == "undated":
+        return True
+    if re.fullmatch(r"\d{4}", normalized):
+        return True
+    if re.fullmatch(r"\d{4}s", normalized):
+        return True
+    return False
+
+
+
+# Common narrative openers to strip when deriving a title from an event title.
+_NARRATIVE_OPENERS = re.compile(
+    r"^(i\s+)?(attended|went\s+to|started\s+(at|attending)?|enrolled\s+at|graduated\s+from|"
+    r"transferred\s+to|moved\s+to|joined|was\s+(born|raised|stationed|deployed|assigned)\s+(in|at|to)?|"
+    r"began\s+(working\s+at|at)?|took\s+a\s+job\s+at|worked\s+at|lived\s+(in|at)?|"
+    r"returned\s+to|retired\s+from|left)\s+",
+    re.IGNORECASE,
+)
+
+# Words to strip from the end of a derived title (prepositions / fragments).
+_TITLE_TAIL_STRIP = re.compile(r"\s+(in|at|to|from|for|and|the|a|an)$", re.IGNORECASE)
+
+
+def _event_title_to_period_candidate(event_title: str, year_suffix: str) -> str | None:
+    """Strip narrative openers and boilerplate from an event title to get a clean period-title candidate."""
+    cleaned = _NARRATIVE_OPENERS.sub("", event_title.strip())
+    # Strip trailing date fragments like "from 1998 to 2002" or "in September 1999"
+    cleaned = re.sub(
+        r"\s+(from\s+\d{4}.*|in\s+(january|february|march|april|may|june|july|august|september|october|november|december|\d{4}).*|"
+        r"during\s+\d{4}.*|until\s+\d{4}.*)$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    ).strip()
+    cleaned = _TITLE_TAIL_STRIP.sub("", cleaned).strip()
+    # Reject if too short, unchanged, or just a sentence fragment starting lowercase
+    if len(cleaned) < 4 or cleaned == event_title.strip():
+        return None
+    # Title-case the result
+    cleaned = cleaned[:80]
+    return f"{cleaned} {year_suffix}".strip()
+
+
+def _suggest_period_titles(period: LifePeriod, events: list[LifeEvent]) -> tuple[list[str], str]:
+    """Return up to 5 candidate titles for a period, ordered from most specific to most generic."""
+    if not events:
+        return [], "No events in this period yet, so there is no evidence to suggest a better title."
+
+    min_year, max_year = _event_year_bounds(events)
+    if min_year is None or max_year is None:
+        return [], "Event dates are too uncertain to suggest a stronger period title."
+
+    if min_year == max_year:
+        year_suffix = f"({min_year})"
+        decade_label = f"the {(min_year // 10) * 10}s"
+    else:
+        year_suffix = f"({min_year}\u2013{max_year})"
+        if (min_year // 10) == (max_year // 10):
+            decade_label = f"the {(min_year // 10) * 10}s"
+        else:
+            decade_label = f"the {(min_year // 10) * 10}s\u2013{(max_year // 10) * 10}s"
+
+    haystack = " ".join(
+        f"{event.title or ''} {event.description or ''}".lower()
+        for event in events
+    )
+
+    candidates: list[str] = []
+
+    # ── 1. Event-title-derived candidates (most specific) ─────────────────────
+    # Use the top 3 events and try to extract a clean noun phrase from each title.
+    for event in events[:3]:
+        raw = (event.title or "").strip()
+        if not raw:
+            continue
+        derived = _event_title_to_period_candidate(raw, year_suffix)
+        if derived:
+            candidates.append(derived)
+
+    # ── 2. Known-institution lookups (catch common schools, bases, etc.) ───────
+    institution_hits: list[str] = []
+    for keyword, label in [
+        ("cathedral prep", "Cathedral Prep"),
+        ("bishop mccort", "Bishop McCort"),
+        ("central catholic", "Central Catholic"),
+        ("north catholic", "North Catholic"),
+        ("duquesne", "Duquesne University"),
+        ("university of pittsburgh", "University of Pittsburgh"),
+        ("pitt", "University of Pittsburgh"),
+        ("carnegie mellon", "Carnegie Mellon"),
+        ("penn state", "Penn State"),
+        ("temple university", "Temple University"),
+        ("ohio state", "Ohio State"),
+        ("community college", "Community College"),
+        ("bahrain", "Bahrain"),
+        ("norfolk", "Norfolk Naval Station"),
+        ("fort bragg", "Fort Bragg"),
+        ("fort campbell", "Fort Campbell"),
+    ]:
+        if keyword in haystack:
+            institution_hits.append(f"{label} {year_suffix}")
+    candidates.extend(institution_hits)
+
+    # ── 3. Theme-based fallbacks ───────────────────────────────────────────────
+    if any(tok in haystack for tok in ["elementary", "grade school", "primary school", "first grade", "second grade", "third grade", "fourth grade", "fifth grade"]):
+        candidates.append(f"Elementary School Years {year_suffix}")
+    if any(tok in haystack for tok in ["middle school", "junior high", "sixth grade", "seventh grade", "eighth grade"]):
+        candidates.append(f"Middle School Years {year_suffix}")
+    if any(tok in haystack for tok in ["high school", "ninth grade", "tenth grade", "eleventh grade", "twelfth grade", "prep school", "senior year", "prom", "homecoming"]):
+        candidates.append(f"High School Years {year_suffix}")
+    if any(tok in haystack for tok in ["university", "college", "undergraduate", "campus", "fraternity", "sorority"]):
+        candidates.append(f"College Years {year_suffix}")
+    if any(tok in haystack for tok in ["graduate school", "master", "phd", "doctorate", "dissertation", "thesis"]):
+        candidates.append(f"Graduate Studies {year_suffix}")
+    if any(tok in haystack for tok in ["deployment", "deployed", "mobilized", "mobilization"]):
+        candidates.append(f"Overseas Deployment {year_suffix}")
+    if any(tok in haystack for tok in ["navy", "army", "marine", "air force", "coast guard", "military", "enlisted"]):
+        candidates.append(f"Military Service {year_suffix}")
+    if any(tok in haystack for tok in ["married", "wedding", "engagement", "honeymoon"]):
+        candidates.append(f"Marriage and Early Family {year_suffix}")
+    if any(tok in haystack for tok in ["daughter", "son", "newborn", "baby", "pregnancy"]):
+        candidates.append(f"Growing Our Family {year_suffix}")
+    if any(tok in haystack for tok in ["scout", "troop", "eagle", "cub scout", "boy scout"]):
+        candidates.append(f"Scouting Years {year_suffix}")
+    if any(tok in haystack for tok in ["job", "career", "hired", "promotion", "manager", "engineer", "developer"]):
+        candidates.append(f"Career Years {year_suffix}")
+    if any(tok in haystack for tok in ["childhood", "born", "growing up", "playground"]):
+        candidates.append(f"Early Childhood {year_suffix}")
+
+    # ── 4. Decade-voice option ─────────────────────────────────────────────────
+    candidates.append(f"A Chapter from {decade_label}")
+
+    # ── Deduplicate, exclude current title, cap at 5 ──────────────────────────
+    current = period.title.strip()
+    seen: set[str] = set()
+    unique: list[str] = []
+    for c in candidates:
+        if c not in seen and c.lower() != current.lower():
+            seen.add(c)
+            unique.append(c)
+
+    if not unique:
+        return [], "The current title already reflects the events in this period."
+
+    reasoning = (
+        "The current title is generic. These candidates reflect the specific events and date range in this period."
+        if _is_generic_period_title(period.title)
+        else "These alternatives capture the themes and timeframe of events in this period."
+    )
+    return unique[:5], reasoning
+
+
+def _generate_period_summary(period: LifePeriod, events: list[LifeEvent], asset_count: int) -> tuple[str, str]:
+    if not events:
+        return (
+            "Auto-generated biography: This chapter is waiting for its first memory. As new moments and supporting materials are added, this biography-style summary will grow into a fuller life story.",
+            "Summary generated from period structure because there are no events yet.",
+        )
+
+    min_year, max_year = _event_year_bounds(events)
+    if min_year is None or max_year is None:
+        range_text = "those years"
+    elif min_year == max_year:
+        range_text = str(min_year)
+    else:
+        range_text = f"{min_year} to {max_year}"
+
+    event_titles = [(e.title or "").strip() for e in events if (e.title or "").strip()]
+    event_descriptions = [(e.description or "").strip() for e in events]
+
+    # Try Gemini first for a proper narrative paragraph
+    ai_text = generate_period_biography(
+        period_title=period.title,
+        year_range=range_text,
+        event_titles=event_titles,
+        event_descriptions=event_descriptions,
+        asset_count=asset_count,
+    )
+    if ai_text:
+        return f"Auto-generated biography: {ai_text}", "Summary written by AI from current events and linked assets."
+
+    # Fallback: clean template that avoids splicing first-person event titles mid-sentence
+    count = len(event_titles)
+    if count == 0:
+        event_line = "No events have been recorded for this period yet."
+    elif count == 1:
+        event_line = f"This chapter contains one recorded moment from {range_text}."
+    else:
+        event_line = f"This chapter covers {count} recorded moments spanning {range_text}."
+
+    if asset_count == 0:
+        asset_line = "No supporting photos or documents are linked yet."
+    elif asset_count == 1:
+        asset_line = "One supporting asset is linked to help tell the story."
+    else:
+        asset_line = f"{asset_count} supporting assets are linked to help tell the story."
+
+    summary = f"Auto-generated biography: {event_line} {asset_line}"
+    return summary[:1200], "Summary generated from current events and linked assets."
+
+
+def _should_auto_update_period_summary(period: LifePeriod) -> bool:
+    if not period.summary:
+        return True
+    return period.summary.startswith("Auto-generated summary:") or period.summary.startswith("Auto-generated biography:")
+
+
+def refresh_period_summary(db: Session, period: Optional[LifePeriod], force: bool = False) -> Optional[str]:
+    if not period:
+        return None
+
+    if not force and not _should_auto_update_period_summary(period):
+        return period.summary
+
+    events = (
+        db.query(LifeEvent)
+        .filter(LifeEvent.period_id == period.id)
+        .order_by(LifeEvent.event_date_sort.is_(None), LifeEvent.event_date_sort.asc(), LifeEvent.created_at.asc())
+        .all()
+    )
+    summary_text, _ = _generate_period_summary(period, events, len(period.assets))
+    period.summary = summary_text
+    return summary_text
+
+
+def analyze_period(period: LifePeriod, events: list[LifeEvent], asset_count: int) -> LifePeriodAnalysisResponse:
+    period_start_year, period_end_year = _period_bounds_in_years(period)
+    event_min_year, event_max_year = _event_year_bounds(events)
+
+    coverage_ok = True
+    coverage_gaps: list[str] = []
+    if event_min_year is not None and (period_start_year is None or period_start_year > event_min_year):
+        coverage_ok = False
+        coverage_gaps.append(f"start should be {event_min_year}")
+    if event_max_year is not None and (period_end_year is None or period_end_year < event_max_year):
+        coverage_ok = False
+        coverage_gaps.append(f"end should be {event_max_year}")
+
+    if coverage_ok:
+        coverage_reasoning = "Current period dates cover the known event date range."
+    elif coverage_gaps:
+        coverage_reasoning = "Period date coverage can improve: " + ", ".join(coverage_gaps) + "."
+    else:
+        coverage_reasoning = "Event dates are too uncertain to assess period coverage."
+
+    rec_start_text, rec_end_text, _, _ = _recommended_period_dates_from_events(events)
+    recommended_titles, title_reasoning = _suggest_period_titles(period, events)
+    generated_summary, summary_reasoning = _generate_period_summary(period, events, asset_count)
+
+    return LifePeriodAnalysisResponse(
+        period_id=period.id,
+        event_count=len(events),
+        asset_count=asset_count,
+        coverage_ok=coverage_ok,
+        coverage_reasoning=coverage_reasoning,
+        current_title=period.title,
+        recommended_titles=recommended_titles,
+        title_reasoning=title_reasoning,
+        current_start_date_text=period.start_date_text,
+        current_end_date_text=period.end_date_text,
+        recommended_start_date_text=rec_start_text,
+        recommended_end_date_text=rec_end_text,
+        generated_summary=generated_summary,
+        summary_reasoning=summary_reasoning,
     )
 
 
@@ -623,6 +955,65 @@ def list_periods(db: Session = Depends(get_db)) -> list[LifePeriodResponse]:
     return [build_period_response(period) for period in periods]
 
 
+@app.patch("/api/periods/{period_id}", response_model=LifePeriodResponse)
+def update_period(period_id: int, body: UpdateLifePeriodRequest, db: Session = Depends(get_db)) -> LifePeriodResponse:
+    period = db.get(LifePeriod, period_id)
+    if not period:
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    if body.title is not None:
+        clean_title = normalize_period_title(body.title)
+        if not clean_title:
+            raise HTTPException(status_code=400, detail="Period title cannot be empty")
+        period.title = clean_title
+        period.slug = unique_period_slug(db, clean_title, existing_id=period.id)
+
+    if body.start_date_text is not None:
+        period.start_date_text = body.start_date_text.strip() or None
+
+    if body.end_date_text is not None:
+        period.end_date_text = body.end_date_text.strip() or None
+
+    db.commit()
+    db.refresh(period)
+    return build_period_response(period)
+
+
+@app.delete("/api/periods/{period_id}", status_code=204)
+def delete_period(period_id: int, db: Session = Depends(get_db)) -> None:
+    period = db.get(LifePeriod, period_id)
+    if not period:
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    # Detach events and assets from the period before deleting
+    db.query(LifeEvent).filter(LifeEvent.period_id == period_id).update({"period_id": None})
+    db.query(Asset).filter(Asset.period_id == period_id).update({"period_id": None})
+    db.delete(period)
+    db.commit()
+
+
+@app.post("/api/periods/{period_id}/merge", status_code=204)
+def merge_period(period_id: int, body: MergePeriodsRequest, db: Session = Depends(get_db)) -> None:
+    source = db.get(LifePeriod, period_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source period not found")
+    target = db.get(LifePeriod, body.into_period_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Target period not found")
+    if source.id == target.id:
+        raise HTTPException(status_code=400, detail="Cannot merge a period into itself")
+
+    # Move events and assets from source → target
+    db.query(LifeEvent).filter(LifeEvent.period_id == source.id).update({"period_id": target.id})
+    db.query(Asset).filter(Asset.period_id == source.id).update({"period_id": target.id})
+    db.delete(source)
+    db.commit()
+    # Refresh the target summary now that it has more content
+    db.refresh(target)
+    refresh_period_summary(db, target, force=False)
+    db.commit()
+
+
 @app.post("/api/periods", response_model=LifePeriodResponse)
 def create_period(body: CreateLifePeriodRequest, db: Session = Depends(get_db)) -> LifePeriodResponse:
     title = normalize_period_title(body.title)
@@ -657,6 +1048,64 @@ def list_period_events(period_id: int, db: Session = Depends(get_db)) -> list[Li
     return [build_event_response(event) for event in events]
 
 
+@app.post("/api/periods/{period_id}/analyze", response_model=LifePeriodAnalysisResponse)
+def analyze_life_period(
+    period_id: int,
+    body: AnalyzeLifePeriodRequest = Body(default=AnalyzeLifePeriodRequest()),
+    db: Session = Depends(get_db),
+) -> LifePeriodAnalysisResponse:
+    period = db.get(LifePeriod, period_id)
+    if not period:
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    events = (
+        db.query(LifeEvent)
+        .filter(LifeEvent.period_id == period.id)
+        .order_by(LifeEvent.event_date_sort.is_(None), LifeEvent.event_date_sort.asc(), LifeEvent.created_at.asc())
+        .all()
+    )
+
+    analysis = analyze_period(period, events, len(period.assets))
+
+    if body.apply_dates and analysis.recommended_start_date_text and analysis.recommended_end_date_text:
+        try:
+            start_year = int(analysis.recommended_start_date_text)
+            end_year = int(analysis.recommended_end_date_text)
+            period.start_date_text = analysis.recommended_start_date_text
+            period.end_date_text = analysis.recommended_end_date_text
+            period.start_sort = date(start_year, 1, 1)
+            period.end_sort = date(end_year, 12, 31)
+        except ValueError:
+            # Keep textual recommendations without applying sort dates.
+            period.start_date_text = analysis.recommended_start_date_text
+            period.end_date_text = analysis.recommended_end_date_text
+
+    if body.apply_title and analysis.recommended_titles:
+        period.title = analysis.recommended_titles[0]
+        period.slug = unique_period_slug(db, analysis.recommended_titles[0], existing_id=period.id)
+
+    if body.apply_title_text:
+        clean = body.apply_title_text.strip()[:160]
+        if clean:
+            period.title = clean
+            period.slug = unique_period_slug(db, clean, existing_id=period.id)
+
+    if body.regenerate_summary:
+        refresh_period_summary(db, period, force=True)
+
+    if body.apply_dates or body.apply_title or body.regenerate_summary:
+        db.commit()
+        db.refresh(period)
+        events = (
+            db.query(LifeEvent)
+            .filter(LifeEvent.period_id == period.id)
+            .order_by(LifeEvent.event_date_sort.is_(None), LifeEvent.event_date_sort.asc(), LifeEvent.created_at.asc())
+            .all()
+        )
+
+    return analyze_period(period, events, len(period.assets))
+
+
 @app.post("/api/events", response_model=LifeEventResponse)
 def create_event(body: CreateLifeEventRequest, db: Session = Depends(get_db)) -> LifeEventResponse:
     title = normalize_directory_name(body.title)
@@ -685,6 +1134,9 @@ def create_event(body: CreateLifeEventRequest, db: Session = Depends(get_db)) ->
         ),
     )
     db.add(event)
+    if body.period_id is not None:
+        period = db.get(LifePeriod, body.period_id)
+        refresh_period_summary(db, period)
     db.commit()
     db.refresh(event)
     return build_event_response(event)
@@ -736,6 +1188,12 @@ def merge_event(
     if target.legacy_memory_id is None and source.legacy_memory_id is not None:
         target.legacy_memory_id = source.legacy_memory_id
 
+    target_period = db.get(LifePeriod, target.period_id) if target.period_id else None
+    source_period = db.get(LifePeriod, source.period_id) if source.period_id else None
+    refresh_period_summary(db, target_period)
+    if source_period and (not target_period or source_period.id != target_period.id):
+        refresh_period_summary(db, source_period)
+
     db.delete(source)
     db.commit()
     db.refresh(target)
@@ -748,7 +1206,9 @@ def delete_event(event_id: int, db: Session = Depends(get_db)) -> dict:
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
+    period = db.get(LifePeriod, event.period_id) if event.period_id else None
     db.delete(event)
+    refresh_period_summary(db, period)
     db.commit()
     return {"status": "deleted", "event_id": event_id}
 
@@ -823,6 +1283,14 @@ async def upload_asset(
     if event:
         db.add(EventAsset(event_id=event.id, asset_id=asset.id, relation_type="evidence"))
 
+    period_for_summary: Optional[LifePeriod] = None
+    if period_id is not None:
+        period_for_summary = db.get(LifePeriod, period_id)
+    elif event and event.period_id is not None:
+        period_for_summary = db.get(LifePeriod, event.period_id)
+
+    refresh_period_summary(db, period_for_summary)
+
     db.commit()
     db.refresh(asset)
     return build_asset_response(asset)
@@ -850,6 +1318,8 @@ def link_asset_to_event(
     )
     if not existing:
         db.add(EventAsset(event_id=event_id, asset_id=asset_id, relation_type=(body.relation_type or "evidence")[:30]))
+        period = db.get(LifePeriod, event.period_id) if event.period_id else None
+        refresh_period_summary(db, period)
         db.commit()
         db.refresh(asset)
 

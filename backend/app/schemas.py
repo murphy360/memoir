@@ -74,7 +74,18 @@ class CreateLifePeriodRequest(BaseModel):
 class AnalyzeLifePeriodRequest(BaseModel):
     apply_dates: bool = False
     apply_title: bool = False
+    apply_title_text: Optional[str] = None
     regenerate_summary: bool = False
+
+
+class UpdateLifePeriodRequest(BaseModel):
+    title: Optional[str] = None
+    start_date_text: Optional[str] = None
+    end_date_text: Optional[str] = None
+
+
+class MergePeriodsRequest(BaseModel):
+    into_period_id: int  # events/assets from the deleted period move here
 
 
 class LifePeriodAnalysisResponse(BaseModel):
@@ -84,7 +95,7 @@ class LifePeriodAnalysisResponse(BaseModel):
     coverage_ok: bool
     coverage_reasoning: str
     current_title: str
-    recommended_title: Optional[str] = None
+    recommended_titles: list[str] = []
     title_reasoning: str
     current_start_date_text: Optional[str] = None
     current_end_date_text: Optional[str] = None

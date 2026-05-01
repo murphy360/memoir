@@ -3,7 +3,7 @@
 import { ClipboardEventHandler, DragEventHandler, useEffect, useRef, useState } from "react";
 import { DirectoryManager } from "./components/DirectoryManager";
 import { MemoryCard } from "./components/MemoryCard";
-import { AssetEntry, DirectoryEntry, LifeEvent, MemoryEntry, Question, AppSettings, LifePeriod } from "./types";
+import { AssetEntry, DirectoryEntry, LifeEvent, MemoryEntry, Question, AppSettings, LifePeriod, LifePeriodAnalysis } from "./types";
 
 type PendingRecording = {
   id: string;
@@ -61,6 +61,12 @@ function dedupeQuestions(items: Question[]): Question[] {
   });
 }
 
+function displayPeriodSummary(summary: string): string {
+  return summary
+    .replace(/^Auto-generated summary:\s*/i, "")
+    .replace(/^Auto-generated biography:\s*/i, "");
+}
+
 export default function HomePage() {
   const [activeView, setActiveView] = useState<"explore" | "capture">("explore");
   const [isDirectoryDrawerOpen, setIsDirectoryDrawerOpen] = useState(false);
@@ -101,6 +107,11 @@ export default function HomePage() {
   const [eventDraftsByPeriod, setEventDraftsByPeriod] = useState<
     Record<number, { title: string; dateText: string; description: string }>
   >({});
+  const [periodAnalysisById, setPeriodAnalysisById] = useState<Record<number, LifePeriodAnalysis | null>>({});
+  const [periodAnalysisBusyId, setPeriodAnalysisBusyId] = useState<number | null>(null);
+  const [editingPeriodTitleId, setEditingPeriodTitleId] = useState<number | null>(null);
+  const [editingPeriodTitleValue, setEditingPeriodTitleValue] = useState("");
+  const [mergingPeriodId, setMergingPeriodId] = useState<number | null>(null);
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
@@ -285,6 +296,42 @@ export default function HomePage() {
     }
   }
 
+  async function analyzePeriod(
+    periodId: number,
+    options?: { applyDates?: boolean; applyTitle?: boolean; regenerateSummary?: boolean },
+  ) {
+    setPeriodAnalysisBusyId(periodId);
+    setStatus("Analyzing period...");
+    try {
+      const response = await fetch(`${API_BASE}/api/periods/${periodId}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apply_dates: Boolean(options?.applyDates),
+          apply_title: Boolean(options?.applyTitle),
+          regenerate_summary: Boolean(options?.regenerateSummary),
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Analyze period failed");
+      }
+
+      const analysis: LifePeriodAnalysis = await response.json();
+      setPeriodAnalysisById((current) => ({ ...current, [periodId]: analysis }));
+
+      if (options?.applyDates || options?.applyTitle || options?.regenerateSummary) {
+        await loadTimeline();
+        setStatus("Period recommendations applied.");
+      } else {
+        setStatus("Period analysis ready.");
+      }
+    } catch {
+      setStatus("Failed to analyze period.");
+    } finally {
+      setPeriodAnalysisBusyId(null);
+    }
+  }
+
   function togglePeriodExpanded(periodId: number) {
     setExpandedPeriods((current) => ({ ...current, [periodId]: !current[periodId] }));
   }
@@ -302,6 +349,58 @@ export default function HomePage() {
         ...patch,
       },
     }));
+  }
+
+  async function renamePeriod(periodId: number, newTitle: string) {
+    const trimmed = newTitle.trim();
+    if (!trimmed) return;
+    setStatus("Saving period title...");
+    try {
+      const response = await fetch(`${API_BASE}/api/periods/${periodId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      if (!response.ok) throw new Error("Failed to rename period");
+      setEditingPeriodTitleId(null);
+      setEditingPeriodTitleValue("");
+      await loadTimeline();
+      setStatus("Period title updated.");
+    } catch {
+      setStatus("Failed to rename period.");
+    }
+  }
+
+  async function deletePeriod(periodId: number, periodTitle: string) {
+    if (!confirm(`Delete "${periodTitle}"? Its events and assets will be unlinked but not deleted.`)) return;
+    setStatus("Deleting period...");
+    try {
+      const response = await fetch(`${API_BASE}/api/periods/${periodId}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Failed to delete period");
+      setPeriodAnalysisById((current) => { const next = { ...current }; delete next[periodId]; return next; });
+      await loadTimeline();
+      setStatus("Period deleted.");
+    } catch {
+      setStatus("Failed to delete period.");
+    }
+  }
+
+  async function mergePeriod(fromPeriodId: number, intoPeriodId: number) {
+    setMergingPeriodId(null);
+    setStatus("Merging period...");
+    try {
+      const response = await fetch(`${API_BASE}/api/periods/${fromPeriodId}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ into_period_id: intoPeriodId }),
+      });
+      if (!response.ok) throw new Error("Failed to merge period");
+      setPeriodAnalysisById((current) => { const next = { ...current }; delete next[fromPeriodId]; return next; });
+      await loadTimeline();
+      setStatus("Period merged.");
+    } catch {
+      setStatus("Failed to merge period.");
+    }
   }
 
   async function uploadAssetToActiveEvent(file: File) {
@@ -1544,12 +1643,43 @@ export default function HomePage() {
                     dateText: "",
                     description: "",
                   };
+                  const periodAnalysis = periodAnalysisById[period.id] || null;
 
                   return (
                     <article key={period.id} className="memory">
                       <div className="periodSummaryRow">
-                        <div>
-                          <h3>{period.title}</h3>
+                        <div style={{ flex: 1 }}>
+                          {editingPeriodTitleId === period.id ? (
+                            <div className="controls" style={{ marginBottom: "0.35rem" }}>
+                              <input
+                                className="directoryInput"
+                                type="text"
+                                value={editingPeriodTitleValue}
+                                autoFocus
+                                onChange={(e) => setEditingPeriodTitleValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") renamePeriod(period.id, editingPeriodTitleValue);
+                                  if (e.key === "Escape") { setEditingPeriodTitleId(null); setEditingPeriodTitleValue(""); }
+                                }}
+                                style={{ flex: 1 }}
+                              />
+                              <button className="primary" type="button" onClick={() => renamePeriod(period.id, editingPeriodTitleValue)} disabled={!editingPeriodTitleValue.trim()}>Save</button>
+                              <button className="secondary" type="button" onClick={() => { setEditingPeriodTitleId(null); setEditingPeriodTitleValue(""); }}>Cancel</button>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              <h3 style={{ margin: 0 }}>{period.title}</h3>
+                              <button
+                                className="secondary"
+                                type="button"
+                                title="Edit title"
+                                style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem" }}
+                                onClick={() => { setEditingPeriodTitleId(period.id); setEditingPeriodTitleValue(period.title); }}
+                              >
+                                ✏️
+                              </button>
+                            </div>
+                          )}
                           <p className="meta">
                             Range: <span className="badge">{period.start_date_text || "unknown"}</span> to{" "}
                             <span className="badge">{period.end_date_text || "unknown"}</span>
@@ -1569,7 +1699,116 @@ export default function HomePage() {
 
                       {isExpanded && (
                         <>
-                          {period.summary && <p>{period.summary}</p>}
+                          {period.summary && <p>{displayPeriodSummary(period.summary)}</p>}
+
+                          <div className="controls" style={{ marginTop: "0.45rem" }}>
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => analyzePeriod(period.id)}
+                              disabled={periodAnalysisBusyId === period.id || isSavingLifeStructure || isRecording || isLoading}
+                            >
+                              Analyze Period
+                            </button>
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => analyzePeriod(period.id, { regenerateSummary: true })}
+                              disabled={periodAnalysisBusyId === period.id || isSavingLifeStructure || isRecording || isLoading}
+                            >
+                              Generate Summary
+                            </button>
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => setMergingPeriodId(mergingPeriodId === period.id ? null : period.id)}
+                              disabled={lifePeriods.length < 2 || isSavingLifeStructure || isRecording || isLoading}
+                            >
+                              Merge Into…
+                            </button>
+                            <button
+                              className="secondary"
+                              type="button"
+                              style={{ color: "var(--danger, #c0392b)" }}
+                              onClick={() => deletePeriod(period.id, period.title)}
+                              disabled={isSavingLifeStructure || isRecording || isLoading}
+                            >
+                              Delete Period
+                            </button>
+                          {periodAnalysis && (periodAnalysis.recommended_titles.length > 0 || !periodAnalysis.coverage_ok) && (
+                              <button
+                                className="primary"
+                                type="button"
+                                onClick={() => analyzePeriod(period.id, { applyDates: true, applyTitle: true, regenerateSummary: true })}
+                                disabled={periodAnalysisBusyId === period.id || isSavingLifeStructure || isRecording || isLoading}
+                              >
+                                Apply Top Recommendation
+                              </button>
+                            )}
+                          </div>
+
+                          {mergingPeriodId === period.id && (
+                            <div className="controls" style={{ marginTop: "0.35rem", flexWrap: "wrap" }}>
+                              <span className="meta" style={{ alignSelf: "center" }}>Move all events &amp; assets into:</span>
+                              {lifePeriods
+                                .filter((p) => p.id !== period.id)
+                                .map((p) => (
+                                  <button
+                                    key={p.id}
+                                    className="secondary"
+                                    type="button"
+                                    onClick={() => mergePeriod(period.id, p.id)}
+                                  >
+                                    {p.title}
+                                  </button>
+                                ))}
+                              <button className="secondary" type="button" onClick={() => setMergingPeriodId(null)}>Cancel</button>
+                            </div>
+                          )}
+
+                          {periodAnalysis && (
+                            <article className="memory" style={{ marginBottom: "0.65rem" }}>
+                              <h3>Period Analysis</h3>
+                              <p className="meta">
+                                Coverage: <span className="badge">{periodAnalysis.coverage_ok ? "Good" : "Needs update"}</span>
+                              </p>
+                              <p className="meta">{periodAnalysis.coverage_reasoning}</p>
+                              {periodAnalysis.recommended_start_date_text && periodAnalysis.recommended_end_date_text && (
+                                <p className="meta">
+                                  Recommended date range: <span className="badge">{periodAnalysis.recommended_start_date_text}</span> to <span className="badge">{periodAnalysis.recommended_end_date_text}</span>
+                                </p>
+                              )}
+                              {periodAnalysis.recommended_titles.length > 0 && (
+                                <div style={{ marginTop: "0.45rem" }}>
+                                  <p className="meta"><strong>Suggested titles</strong> — click one to apply it:</p>
+                                  <div className="controls" style={{ flexWrap: "wrap" }}>
+                                    {periodAnalysis.recommended_titles.map((title) => (
+                                      <button
+                                        key={title}
+                                        className="secondary"
+                                        type="button"
+                                        style={{ fontWeight: "normal" }}
+                                        onClick={async () => {
+                                          await renamePeriod(period.id, title);
+                                          setPeriodAnalysisById((current) => ({ ...current, [period.id]: null }));
+                                        }}
+                                      >
+                                        {title}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              <p className="meta">{periodAnalysis.title_reasoning}</p>
+                              {periodAnalysis.generated_summary && (
+                                <>
+                                  <p className="meta" style={{ marginTop: "0.55rem" }}><strong>Suggested summary</strong></p>
+                                  <p>{periodAnalysis.generated_summary}</p>
+                                  <p className="meta">{periodAnalysis.summary_reasoning}</p>
+                                </>
+                              )}
+                            </article>
+                          )}
 
                           <article className="memory" style={{ marginBottom: "0.65rem" }}>
                             <h3>Add Event to {period.title}</h3>

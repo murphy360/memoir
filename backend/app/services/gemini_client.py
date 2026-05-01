@@ -671,3 +671,74 @@ def extract_text_from_document(filename: str, file_bytes: bytes, mime_type: str)
             status_code=502,
             detail=f"Document analysis failed: {str(exc)}",
         )
+
+
+def generate_period_biography(
+    period_title: str,
+    year_range: str,
+    event_titles: list[str],
+    event_descriptions: list[str],
+    asset_count: int,
+) -> Optional[str]:
+    """Use Gemini to write a short biography-style narrative paragraph for a life period.
+
+    Returns None if Gemini is unavailable or fails, so the caller can fall back
+    to the template-based summary.
+    """
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        return None
+
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
+
+    # Build a concise bullet list of events for the prompt
+    event_lines = []
+    for i, (title, desc) in enumerate(zip(event_titles, event_descriptions)):
+        if desc and desc.strip():
+            event_lines.append(f"- {title}: {desc.strip()[:300]}")
+        else:
+            event_lines.append(f"- {title}")
+    events_block = "\n".join(event_lines) if event_lines else "(no events recorded yet)"
+
+    prompt = (
+        "You are writing a biography-style narrative for a chapter in a personal memoir.\n\n"
+        f"Chapter title: {period_title}\n"
+        f"Time period: {year_range}\n"
+        f"Number of supporting photos/documents: {asset_count}\n\n"
+        "Key events in this chapter:\n"
+        f"{events_block}\n\n"
+        "Write a rich, flowing narrative in the style of a warm personal biography. Rules:\n"
+        "- Write in third person (use 'he', 'she', or 'they' — infer from context, default to 'they' if unclear)\n"
+        "- Weave all the events into connected prose — do NOT list them as bullets\n"
+        "- Use the actual names of places, schools, organisations, and people mentioned in the events\n"
+        "- Write as many paragraphs as the material warrants — this may become a full memoir chapter\n"
+        "- Always end on a complete sentence\n"
+        "- Plain text only — no markdown, no asterisks, no bullet points, no headers"
+    )
+
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.7},
+    }
+
+    try:
+        response = requests.post(endpoint, params={"key": gemini_key}, json=payload, timeout=30)
+        if not response.ok:
+            logger.warning("Period biography request failed: %s", response.text[:200])
+            return None
+        data = response.json()
+        candidate = data.get("candidates", [{}])[0]
+        finish_reason = candidate.get("finishReason", "UNKNOWN")
+        if finish_reason not in ("STOP", "UNKNOWN"):
+            logger.warning("Period biography finish reason: %s — output may be truncated", finish_reason)
+        parts = candidate.get("content", {}).get("parts", [])
+        text = "\n".join(p.get("text", "").strip() for p in parts if p.get("text")).strip()
+        if not text:
+            return None
+        # Strip any accidental markdown bold/italic
+        text = text.replace("**", "").replace("*", "").replace("__", "")
+        return text
+    except Exception as exc:
+        logger.warning("Period biography generation failed: %s", exc)
+        return None
