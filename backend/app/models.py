@@ -180,6 +180,7 @@ class LifeEvent(Base):
     research_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     research_sources_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     research_queries_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    research_suggested_edit_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     event_date_text: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     event_date_sort: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
     date_precision: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
@@ -202,6 +203,16 @@ class LifeEvent(Base):
     @property
     def research_queries(self) -> list[str]:
         return _deserialize_list(self.research_queries_json)
+
+    @property
+    def research_suggested_edit(self) -> Optional[dict[str, Any]]:
+        if not self.research_suggested_edit_json:
+            return None
+        try:
+            value = json.loads(self.research_suggested_edit_json)
+            return value if isinstance(value, dict) else None
+        except json.JSONDecodeError:
+            return None
 
 
 class EventAsset(Base):

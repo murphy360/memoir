@@ -173,6 +173,8 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE life_events ADD COLUMN research_sources_json TEXT"))
         if "research_queries_json" not in event_columns:
             connection.execute(text("ALTER TABLE life_events ADD COLUMN research_queries_json TEXT"))
+        if "research_suggested_edit_json" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN research_suggested_edit_json TEXT"))
 
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS assets (

@@ -37,6 +37,14 @@ class DateSuggestion:
     reasoning: str
 
 
+@dataclass
+class EventEditSuggestion:
+    title: Optional[str]
+    event_date_text: Optional[str]
+    description: Optional[str]
+    reasoning: str
+
+
 def suggest_date_from_research(
     research_summary: str,
     current_date_text: Optional[str],
@@ -155,6 +163,111 @@ def _int_or_none(value: object) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def suggest_event_edit_from_context(
+    analysis_text: str,
+    current_title: str,
+    current_event_date_text: Optional[str],
+    current_description: Optional[str],
+) -> Optional[EventEditSuggestion]:
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        return None
+
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": (
+                            "You are reviewing an event summary/research result and deciding whether to suggest edits to event metadata. "
+                            "Only suggest changes if they are meaningfully better than current values and are grounded in the provided text. "
+                            "If no meaningful edit is warranted, call suggest_event_edit with no args.\n\n"
+                            f"Current title: {current_title}\n"
+                            f"Current event_date_text: {current_event_date_text or 'Unknown'}\n"
+                            f"Current description: {current_description or 'None'}\n\n"
+                            f"Summary/Research text:\n{analysis_text[:12000]}"
+                        )
+                    }
+                ]
+            }
+        ],
+        "tools": [
+            {
+                "functionDeclarations": [
+                    {
+                        "name": "suggest_event_edit",
+                        "description": "Suggest edits for event title/date/description if there is strong evidence. Use only fields that should change.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "event_date_text": {"type": "string"},
+                                "description": {"type": "string"},
+                                "reasoning": {"type": "string"},
+                            },
+                            "required": [],
+                        },
+                    }
+                ]
+            }
+        ],
+        "toolConfig": {
+            "functionCallingConfig": {
+                "mode": "ANY",
+                "allowedFunctionNames": ["suggest_event_edit"],
+            }
+        },
+    }
+
+    try:
+        response = requests.post(endpoint, params={"key": gemini_key}, json=payload, timeout=35)
+        if not response.ok:
+            logger.warning("Event edit suggestion request failed: %s", response.text[:200])
+            return None
+        data = response.json()
+    except Exception as exc:
+        logger.warning("Event edit suggestion exception: %s", exc)
+        return None
+
+    parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+    for part in parts:
+        function_call = part.get("functionCall")
+        if not function_call or function_call.get("name") != "suggest_event_edit":
+            continue
+
+        args = function_call.get("args", {})
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {}
+        if not isinstance(args, dict):
+            args = {}
+
+        suggested_title = str(args.get("title") or "").strip()
+        suggested_date = str(args.get("event_date_text") or "").strip()
+        suggested_description = str(args.get("description") or "").strip()
+        reasoning = str(args.get("reasoning") or "").strip()
+
+        changed_title = suggested_title and suggested_title != current_title
+        changed_date = suggested_date and suggested_date != (current_event_date_text or "")
+        changed_description = suggested_description and suggested_description != (current_description or "")
+        if not (changed_title or changed_date or changed_description):
+            return None
+
+        return EventEditSuggestion(
+            title=suggested_title[:180] if changed_title else None,
+            event_date_text=suggested_date[:100] if changed_date else None,
+            description=suggested_description[:1200] if changed_description else None,
+            reasoning=(reasoning or "Suggested from summary/research evidence.")[:500],
+        )
+
+    return None
 
 
 def generate_research_questions(

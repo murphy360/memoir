@@ -49,6 +49,7 @@ from app.services.document_storage import save_document_file
 from app.services.gemini_client import (
     extract_metadata_with_gemini_function_call,
     research_memory_details,
+    suggest_event_edit_from_context,
     summarize_event_details,
     suggest_date_from_research,
 )
@@ -363,6 +364,13 @@ def update_event(event_id: int, body: UpdateLifeEventRequest, db: Session = Depe
             raise HTTPException(status_code=400, detail="Event title cannot be empty")
         event.title = clean_title
 
+    if "description" in body.model_fields_set:
+        event.description = (body.description or "").strip()[:1200] or None
+
+    if "event_date_text" in body.model_fields_set:
+        next_date_text = (body.event_date_text or "").strip()[:100]
+        event.event_date_text = next_date_text or None
+
     db.commit()
     db.refresh(event)
     return build_event_response(event)
@@ -480,6 +488,13 @@ def summarize_event(event_id: int, db: Session = Depends(get_db)) -> LifeEventRe
         asset_points=asset_points,
     )
     event.summary = summary
+    suggestion = suggest_event_edit_from_context(
+        analysis_text=summary,
+        current_title=event.title,
+        current_event_date_text=event.event_date_text,
+        current_description=event.description,
+    )
+    event.research_suggested_edit_json = json.dumps(dataclasses.asdict(suggestion)) if suggestion else None
 
     db.commit()
     db.refresh(event)
@@ -532,6 +547,13 @@ def research_event(event_id: int, db: Session = Depends(get_db)) -> LifeEventRes
     event.research_sources_json = json.dumps(
         [{"title": source.title, "url": source.url} for source in research.sources]
     )
+    suggestion = suggest_event_edit_from_context(
+        analysis_text=research.summary,
+        current_title=event.title,
+        current_event_date_text=event.event_date_text,
+        current_description=event.description,
+    )
+    event.research_suggested_edit_json = json.dumps(dataclasses.asdict(suggestion)) if suggestion else None
 
     source_memory_id = _event_research_source_memory_id(event, memories)
     if source_memory_id is not None:
@@ -541,6 +563,44 @@ def research_event(event_id: int, db: Session = Depends(get_db)) -> LifeEventRes
             source_memory_id,
         )
 
+    db.commit()
+    db.refresh(event)
+    return build_event_response(event)
+
+
+@app.post("/api/events/{event_id}/apply-research-suggestion", response_model=LifeEventResponse)
+def apply_event_research_suggestion(event_id: int, db: Session = Depends(get_db)) -> LifeEventResponse:
+    event = db.get(LifeEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not event.research_suggested_edit_json:
+        raise HTTPException(status_code=404, detail="No pending suggestion")
+
+    suggestion = json.loads(event.research_suggested_edit_json)
+    if isinstance(suggestion, dict):
+        next_title = (suggestion.get("title") or "").strip()
+        next_date_text = (suggestion.get("event_date_text") or "").strip()
+        next_description = (suggestion.get("description") or "").strip()
+
+        if next_title:
+            event.title = next_title[:180]
+        if next_date_text:
+            event.event_date_text = next_date_text[:100]
+        if next_description:
+            event.description = next_description[:1200]
+
+    event.research_suggested_edit_json = None
+    db.commit()
+    db.refresh(event)
+    return build_event_response(event)
+
+
+@app.post("/api/events/{event_id}/dismiss-research-suggestion", response_model=LifeEventResponse)
+def dismiss_event_research_suggestion(event_id: int, db: Session = Depends(get_db)) -> LifeEventResponse:
+    event = db.get(LifeEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    event.research_suggested_edit_json = None
     db.commit()
     db.refresh(event)
     return build_event_response(event)

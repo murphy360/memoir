@@ -13,6 +13,13 @@ export type ResearchDateSuggestion = {
   reasoning: string;
 };
 
+export type EventEditSuggestion = {
+  title: string | null;
+  event_date_text: string | null;
+  description: string | null;
+  reasoning: string;
+};
+
 export type MemoryEntry = {
   id: number;
   transcript: string;
@@ -98,6 +105,7 @@ export type LifeEvent = {
   research_summary: string | null;
   research_queries: string[];
   research_sources: ResearchSource[];
+  research_suggested_edit: EventEditSuggestion | null;
   event_date_text: string | null;
   date_precision: string | null;
   date_year: number | null;

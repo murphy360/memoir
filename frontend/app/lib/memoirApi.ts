@@ -149,6 +149,19 @@ export async function renameEventTitle(eventId: number, title: string): Promise<
   await expectOk(response, "Failed to rename event");
 }
 
+export async function updateEventById(
+  eventId: number,
+  payload: { title?: string; event_date_text?: string | null; description?: string | null },
+): Promise<LifeEvent> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  await expectOk(response, "Failed to update event");
+  return response.json();
+}
+
 export async function renamePeriodTitle(periodId: number, title: string): Promise<void> {
   const response = await fetch(toAbsoluteApiUrl(`/api/periods/${periodId}`), {
     method: "PATCH",
@@ -249,6 +262,22 @@ export async function researchEventById(eventId: number): Promise<LifeEvent> {
     method: "POST",
   });
   await expectOk(response, "Event research failed");
+  return response.json();
+}
+
+export async function applyEventResearchSuggestionById(eventId: number): Promise<LifeEvent> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}/apply-research-suggestion`), {
+    method: "POST",
+  });
+  await expectOk(response, "Apply event suggestion failed");
+  return response.json();
+}
+
+export async function dismissEventResearchSuggestionById(eventId: number): Promise<LifeEvent> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}/dismiss-research-suggestion`), {
+    method: "POST",
+  });
+  await expectOk(response, "Dismiss event suggestion failed");
   return response.json();
 }
 

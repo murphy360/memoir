@@ -20,6 +20,13 @@ class ResearchDateSuggestion(BaseModel):
     reasoning: str
 
 
+class EventEditSuggestionResponse(BaseModel):
+    title: Optional[str] = None
+    event_date_text: Optional[str] = None
+    description: Optional[str] = None
+    reasoning: str
+
+
 class MemoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -116,6 +123,7 @@ class LifeEventResponse(BaseModel):
     research_summary: Optional[str]
     research_queries: list[str] = Field(default_factory=list)
     research_sources: list[ResearchSourceResponse] = Field(default_factory=list)
+    research_suggested_edit: Optional[EventEditSuggestionResponse] = None
     event_date_text: Optional[str]
     date_precision: Optional[str]
     date_year: Optional[int]
@@ -148,6 +156,8 @@ class MergeLifeEventRequest(BaseModel):
 
 class UpdateLifeEventRequest(BaseModel):
     title: Optional[str] = None
+    description: Optional[str] = None
+    event_date_text: Optional[str] = None
 
 
 class AssetResponse(BaseModel):

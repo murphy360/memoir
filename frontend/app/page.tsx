@@ -7,6 +7,7 @@ import { AssetEntry, DirectoryEntry, LifeEvent, MemoryEntry, Question, LifePerio
 import {
   type TimelineBundle,
   analyzeLifePeriod,
+  applyEventResearchSuggestionById,
   applyResearchSuggestionById,
   answerQuestionWithMemory,
   assignRecorderPerson,
@@ -20,6 +21,7 @@ import {
   deleteMemoryById,
   deletePeriodById,
   dismissQuestionById,
+  dismissEventResearchSuggestionById,
   dismissResearchSuggestionById,
   fetchEventAssets,
   fetchTimelineBundle,
@@ -38,6 +40,7 @@ import {
   splitPersonEntry as splitPersonEntryRequest,
   summarizeEventById,
   addPersonAlias as addPersonAliasRequest,
+  updateEventById,
   updateMemoryTitle as updateMemoryTitleById,
   updateAssetNotes as updateAssetNotesById,
   updateAssetTitle as updateAssetTitleById,
@@ -185,6 +188,8 @@ export default function HomePage() {
   const [editingPeriodTitleValue, setEditingPeriodTitleValue] = useState("");
   const [editingEventTitleId, setEditingEventTitleId] = useState<number | null>(null);
   const [editingEventTitleValue, setEditingEventTitleValue] = useState("");
+  const [editingEventDateId, setEditingEventDateId] = useState<number | null>(null);
+  const [editingEventDateValue, setEditingEventDateValue] = useState("");
   const [editingMemoryTitleId, setEditingMemoryTitleId] = useState<number | null>(null);
   const [editingMemoryTitleValue, setEditingMemoryTitleValue] = useState("");
   const [memoryTitleSavingId, setMemoryTitleSavingId] = useState<number | null>(null);
@@ -451,6 +456,19 @@ export default function HomePage() {
     }
   }
 
+  async function saveEventDate(eventId: number, newDateText: string) {
+    setStatus("Saving event date...");
+    try {
+      await updateEventById(eventId, { event_date_text: newDateText.trim() || null });
+      setEditingEventDateId(null);
+      setEditingEventDateValue("");
+      await loadTimeline();
+      setStatus("Event date updated.");
+    } catch {
+      setStatus("Failed to update event date.");
+    }
+  }
+
   async function deletePeriod(periodId: number, periodTitle: string) {
     if (!confirm(`Delete "${periodTitle}"? Its events and assets will be unlinked but not deleted.`)) return;
     setStatus("Deleting period...");
@@ -650,6 +668,38 @@ export default function HomePage() {
       setStatus("Event research updated.");
     } catch {
       setStatus("Failed to research event.");
+    } finally {
+      setEventActionId(null);
+    }
+  }
+
+  async function acceptEventResearchSuggestion(eventId: number) {
+    setEventActionId(eventId);
+    setStatus("Applying event suggestion...");
+    try {
+      await applyEventResearchSuggestionById(eventId);
+      await loadTimeline();
+      if (activeEventId === eventId) {
+        await loadAssetsForEvent(eventId);
+      }
+      setStatus("Event updated from suggestion.");
+    } catch {
+      setStatus("Failed to apply event suggestion.");
+    } finally {
+      setEventActionId(null);
+    }
+  }
+
+  async function dismissEventResearchSuggestion(eventId: number) {
+    setEventActionId(eventId);
+    try {
+      await dismissEventResearchSuggestionById(eventId);
+      await loadTimeline();
+      if (activeEventId === eventId) {
+        await loadAssetsForEvent(eventId);
+      }
+    } catch {
+      // ignore
     } finally {
       setEventActionId(null);
     }
@@ -1910,7 +1960,39 @@ export default function HomePage() {
                                         </button>
                                       </div>
                                     )}
-                                    <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}</p>
+                                    {editingEventDateId === event.id ? (
+                                      <div className="controls" style={{ marginTop: "0.25rem" }}>
+                                        <input
+                                          className="directoryInput"
+                                          type="text"
+                                          value={editingEventDateValue}
+                                          autoFocus
+                                          placeholder="Event date text"
+                                          onChange={(e) => setEditingEventDateValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") void saveEventDate(event.id, editingEventDateValue);
+                                            if (e.key === "Escape") { setEditingEventDateId(null); setEditingEventDateValue(""); }
+                                          }}
+                                          style={{ flex: 1 }}
+                                        />
+                                        <button className="primary" type="button" onClick={() => void saveEventDate(event.id, editingEventDateValue)}>Save</button>
+                                        <button className="secondary" type="button" onClick={() => { setEditingEventDateId(null); setEditingEventDateValue(""); }}>Cancel</button>
+                                      </div>
+                                    ) : (
+                                      <div className="controls" style={{ justifyContent: "space-between", gap: "0.4rem", marginTop: "0.2rem" }}>
+                                        <p className="meta" style={{ margin: 0, flex: 1 }}>
+                                          Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}
+                                        </p>
+                                        <button
+                                          className="secondary"
+                                          type="button"
+                                          style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem", flexShrink: 0 }}
+                                          onClick={() => { setEditingEventDateId(event.id); setEditingEventDateValue(event.event_date_text || ""); }}
+                                        >
+                                          Edit Date
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                   <button
                                     className="secondary"
@@ -2015,6 +2097,39 @@ export default function HomePage() {
                                             </ul>
                                           </div>
                                         )}
+                                      </section>
+                                    )}
+                                    {event.research_suggested_edit && (
+                                      <section className="suggestionBox" style={{ marginBottom: "0.55rem" }}>
+                                        <p className="suggestionLabel">Suggested event edits</p>
+                                        {event.research_suggested_edit.title && (
+                                          <p className="suggestionMeta">Title: <strong>{event.research_suggested_edit.title}</strong></p>
+                                        )}
+                                        {event.research_suggested_edit.event_date_text && (
+                                          <p className="suggestionMeta">Date: <strong>{event.research_suggested_edit.event_date_text}</strong></p>
+                                        )}
+                                        {event.research_suggested_edit.description && (
+                                          <p className="suggestionReasoning">Description: {event.research_suggested_edit.description}</p>
+                                        )}
+                                        <p className="suggestionReasoning">{event.research_suggested_edit.reasoning}</p>
+                                        <div className="suggestionActions">
+                                          <button
+                                            className="primary"
+                                            type="button"
+                                            onClick={() => acceptEventResearchSuggestion(event.id)}
+                                            disabled={eventActionId === event.id || isRecording || isLoading}
+                                          >
+                                            Apply
+                                          </button>
+                                          <button
+                                            className="ghost"
+                                            type="button"
+                                            onClick={() => dismissEventResearchSuggestion(event.id)}
+                                            disabled={eventActionId === event.id || isRecording || isLoading}
+                                          >
+                                            Dismiss
+                                          </button>
+                                        </div>
                                       </section>
                                     )}
                                     {(() => {
@@ -2479,7 +2594,39 @@ export default function HomePage() {
                               </button>
                             </div>
                           )}
-                          <p className="meta">Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}</p>
+                          {editingEventDateId === event.id ? (
+                            <div className="controls" style={{ marginTop: "0.25rem" }}>
+                              <input
+                                className="directoryInput"
+                                type="text"
+                                value={editingEventDateValue}
+                                autoFocus
+                                placeholder="Event date text"
+                                onChange={(e) => setEditingEventDateValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") void saveEventDate(event.id, editingEventDateValue);
+                                  if (e.key === "Escape") { setEditingEventDateId(null); setEditingEventDateValue(""); }
+                                }}
+                                style={{ flex: 1 }}
+                              />
+                              <button className="primary" type="button" onClick={() => void saveEventDate(event.id, editingEventDateValue)}>Save</button>
+                              <button className="secondary" type="button" onClick={() => { setEditingEventDateId(null); setEditingEventDateValue(""); }}>Cancel</button>
+                            </div>
+                          ) : (
+                            <div className="controls" style={{ justifyContent: "space-between", gap: "0.4rem", marginTop: "0.2rem" }}>
+                              <p className="meta" style={{ margin: 0, flex: 1 }}>
+                                Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}
+                              </p>
+                              <button
+                                className="secondary"
+                                type="button"
+                                style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem", flexShrink: 0 }}
+                                onClick={() => { setEditingEventDateId(event.id); setEditingEventDateValue(event.event_date_text || ""); }}
+                              >
+                                Edit Date
+                              </button>
+                            </div>
+                          )}
                         </div>
                         <button
                           className="secondary"
@@ -2584,6 +2731,39 @@ export default function HomePage() {
                                   </ul>
                                 </div>
                               )}
+                            </section>
+                          )}
+                          {event.research_suggested_edit && (
+                            <section className="suggestionBox" style={{ marginBottom: "0.55rem" }}>
+                              <p className="suggestionLabel">Suggested event edits</p>
+                              {event.research_suggested_edit.title && (
+                                <p className="suggestionMeta">Title: <strong>{event.research_suggested_edit.title}</strong></p>
+                              )}
+                              {event.research_suggested_edit.event_date_text && (
+                                <p className="suggestionMeta">Date: <strong>{event.research_suggested_edit.event_date_text}</strong></p>
+                              )}
+                              {event.research_suggested_edit.description && (
+                                <p className="suggestionReasoning">Description: {event.research_suggested_edit.description}</p>
+                              )}
+                              <p className="suggestionReasoning">{event.research_suggested_edit.reasoning}</p>
+                              <div className="suggestionActions">
+                                <button
+                                  className="primary"
+                                  type="button"
+                                  onClick={() => acceptEventResearchSuggestion(event.id)}
+                                  disabled={eventActionId === event.id || isRecording || isLoading}
+                                >
+                                  Apply
+                                </button>
+                                <button
+                                  className="ghost"
+                                  type="button"
+                                  onClick={() => dismissEventResearchSuggestion(event.id)}
+                                  disabled={eventActionId === event.id || isRecording || isLoading}
+                                >
+                                  Dismiss
+                                </button>
+                              </div>
                             </section>
                           )}
                           {(() => {

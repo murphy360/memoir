@@ -71,6 +71,7 @@ def build_event_response(event: LifeEvent) -> LifeEventResponse:
         research_summary=event.research_summary,
         research_queries=event.research_queries,
         research_sources=event.research_sources,
+        research_suggested_edit=event.research_suggested_edit,
         event_date_text=event.event_date_text,
         date_precision=event.date_precision,
         date_year=event.date_year,
