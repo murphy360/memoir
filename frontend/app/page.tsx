@@ -3,7 +3,47 @@
 import { ClipboardEventHandler, DragEventHandler, useEffect, useRef, useState } from "react";
 import { DirectoryManager } from "./components/DirectoryManager";
 import { MemoryCard } from "./components/MemoryCard";
-import { AssetEntry, DirectoryEntry, LifeEvent, MemoryEntry, Question, AppSettings, LifePeriod, LifePeriodAnalysis } from "./types";
+import { AssetEntry, DirectoryEntry, LifeEvent, MemoryEntry, Question, LifePeriod, LifePeriodAnalysis } from "./types";
+import {
+  analyzeLifePeriod,
+  applyResearchSuggestionById,
+  answerQuestionWithMemory,
+  assignRecorderPerson,
+  createDirectoryEntry as createDirectoryEntryRequest,
+  createEvent,
+  createMemoryFromAudioBlob,
+  createMemoryFromDocument,
+  createPeriod,
+  deleteDirectoryEntry as deleteDirectoryEntryRequest,
+  deleteEventById,
+  deleteMemoryById,
+  deletePeriodById,
+  dismissQuestionById,
+  dismissResearchSuggestionById,
+  fetchEventAssets,
+  fetchTimelineBundle,
+  linkAssetToEvent,
+  mergeEventInto,
+  mergePeopleEntries,
+  mergePeriodInto,
+  reanalyzeMemoryById,
+  removePersonAlias as removePersonAliasRequest,
+  renameDirectoryEntry as renameDirectoryEntryRequest,
+  renamePeriodTitle,
+  resolveApiUrl,
+  researchMemoryById,
+  saveMainCharacterName as saveMainCharacterNameRequest,
+  splitPersonEntry as splitPersonEntryRequest,
+  addPersonAlias as addPersonAliasRequest,
+  uploadAsset,
+} from "./lib/memoirApi";
+import {
+  AUDIO_DEVICE_STORAGE_KEY,
+  CLIPBOARD_IMAGE_EXTENSIONS,
+  dedupeQuestions,
+  displayPeriodSummary,
+  formatBytes,
+} from "./lib/memoirUi";
 
 type PendingRecording = {
   id: string;
@@ -17,55 +57,6 @@ type AudioInputDevice = {
   deviceId: string;
   label: string;
 };
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
-const AUDIO_DEVICE_STORAGE_KEY = "memoir:last-audio-device-id";
-const CLIPBOARD_IMAGE_EXTENSIONS: Record<string, string> = {
-  "image/png": ".png",
-  "image/jpeg": ".jpg",
-  "image/jpg": ".jpg",
-  "image/gif": ".gif",
-  "image/webp": ".webp",
-};
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-function resolveApiUrl(path: string): string {
-  if (path.startsWith("http://") || path.startsWith("https://")) {
-    return path;
-  }
-  return `${API_BASE}${path}`;
-}
-
-function normalizeQuestionText(value: string): string {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
-}
-
-function dedupeQuestions(items: Question[]): Question[] {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    const key = normalizeQuestionText(item.text);
-    if (!key || seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
-
-function displayPeriodSummary(summary: string): string {
-  return summary
-    .replace(/^Auto-generated summary:\s*/i, "")
-    .replace(/^Auto-generated biography:\s*/i, "");
-}
 
 export default function HomePage() {
   const [activeView, setActiveView] = useState<"explore" | "capture">("explore");
@@ -139,57 +130,28 @@ export default function HomePage() {
 
   async function loadTimeline() {
     try {
-      const [
-        memoriesRes,
-        questionsRes,
-        peopleRes,
-        placesRes,
-        settingsRes,
-        periodsRes,
-        eventsRes,
-        unlinkedAssetsRes,
-      ] = await Promise.all([
-        fetch(`${API_BASE}/api/memories`, { cache: "no-store" }),
-        fetch(`${API_BASE}/api/questions`, { cache: "no-store" }),
-        fetch(`${API_BASE}/api/people`, { cache: "no-store" }),
-        fetch(`${API_BASE}/api/places`, { cache: "no-store" }),
-        fetch(`${API_BASE}/api/settings`, { cache: "no-store" }),
-        fetch(`${API_BASE}/api/periods`, { cache: "no-store" }),
-        fetch(`${API_BASE}/api/events`, { cache: "no-store" }),
-        fetch(`${API_BASE}/api/assets/unlinked`, { cache: "no-store" }),
-      ]);
-      if (!memoriesRes.ok) {
-        throw new Error("Failed to load timeline");
+      const data = await fetchTimelineBundle();
+      setTimeline(data.memories);
+      if (data.questions) {
+        setQuestions(dedupeQuestions(data.questions));
       }
-      const data: MemoryEntry[] = await memoriesRes.json();
-      setTimeline(data);
-      if (questionsRes.ok) {
-        const questionsData: Question[] = await questionsRes.json();
-        setQuestions(dedupeQuestions(questionsData));
+      if (data.people) {
+        setPeopleDirectory(data.people);
       }
-      if (peopleRes.ok) {
-        const peopleData: DirectoryEntry[] = await peopleRes.json();
-        setPeopleDirectory(peopleData);
+      if (data.places) {
+        setPlacesDirectory(data.places);
       }
-      if (placesRes.ok) {
-        const placesData: DirectoryEntry[] = await placesRes.json();
-        setPlacesDirectory(placesData);
+      if (data.settings) {
+        setMainCharacterName(data.settings.main_character_name);
       }
-      if (settingsRes.ok) {
-        const settingsData: AppSettings = await settingsRes.json();
-        setMainCharacterName(settingsData.main_character_name);
+      if (data.periods) {
+        setLifePeriods(data.periods);
       }
-      if (periodsRes.ok) {
-        const periodData: LifePeriod[] = await periodsRes.json();
-        setLifePeriods(periodData);
+      if (data.events) {
+        setLifeEvents(data.events);
       }
-      if (eventsRes.ok) {
-        const eventData: LifeEvent[] = await eventsRes.json();
-        setLifeEvents(eventData);
-      }
-      if (unlinkedAssetsRes.ok) {
-        const assetData: AssetEntry[] = await unlinkedAssetsRes.json();
-        setUnlinkedAssets(assetData);
+      if (data.unlinkedAssets) {
+        setUnlinkedAssets(data.unlinkedAssets);
       }
     } catch (error) {
       setStatus("Could not load timeline from API.");
@@ -198,12 +160,7 @@ export default function HomePage() {
 
   async function loadAssetsForEvent(eventId: number) {
     try {
-      const response = await fetch(`${API_BASE}/api/events/${eventId}/assets`, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error("Failed to load event assets");
-      }
-      const assets: AssetEntry[] = await response.json();
-      setActiveEventAssets(assets);
+      setActiveEventAssets(await fetchEventAssets(eventId));
     } catch {
       setStatus("Could not load assets for the selected event.");
       setActiveEventAssets([]);
@@ -217,19 +174,12 @@ export default function HomePage() {
     setIsSavingLifeStructure(true);
     setStatus("Creating period...");
     try {
-      const response = await fetch(`${API_BASE}/api/periods`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: newPeriodTitle.trim(),
-          start_date_text: newPeriodStart.trim() || null,
-          end_date_text: newPeriodEnd.trim() || null,
-          summary: newPeriodSummary.trim() || null,
-        }),
+      await createPeriod({
+        title: newPeriodTitle.trim(),
+        start_date_text: newPeriodStart.trim() || null,
+        end_date_text: newPeriodEnd.trim() || null,
+        summary: newPeriodSummary.trim() || null,
       });
-      if (!response.ok) {
-        throw new Error("Create period failed");
-      }
       setNewPeriodTitle("");
       setNewPeriodStart("");
       setNewPeriodEnd("");
@@ -261,19 +211,12 @@ export default function HomePage() {
     setIsSavingLifeStructure(true);
     setStatus("Creating event...");
     try {
-      const response = await fetch(`${API_BASE}/api/events`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(),
-          period_id: periodId,
-          description: description.trim() || null,
-          event_date_text: eventDateText.trim() || null,
-        }),
+      await createEvent({
+        title: title.trim(),
+        period_id: periodId,
+        description: description.trim() || null,
+        event_date_text: eventDateText.trim() || null,
       });
-      if (!response.ok) {
-        throw new Error("Create event failed");
-      }
       setNewEventTitle("");
       setNewEventDateText("");
       setNewEventDescription("");
@@ -303,20 +246,11 @@ export default function HomePage() {
     setPeriodAnalysisBusyId(periodId);
     setStatus("Analyzing period...");
     try {
-      const response = await fetch(`${API_BASE}/api/periods/${periodId}/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          apply_dates: Boolean(options?.applyDates),
-          apply_title: Boolean(options?.applyTitle),
-          regenerate_summary: Boolean(options?.regenerateSummary),
-        }),
+      const analysis: LifePeriodAnalysis = await analyzeLifePeriod(periodId, {
+        apply_dates: Boolean(options?.applyDates),
+        apply_title: Boolean(options?.applyTitle),
+        regenerate_summary: Boolean(options?.regenerateSummary),
       });
-      if (!response.ok) {
-        throw new Error("Analyze period failed");
-      }
-
-      const analysis: LifePeriodAnalysis = await response.json();
       setPeriodAnalysisById((current) => ({ ...current, [periodId]: analysis }));
 
       if (options?.applyDates || options?.applyTitle || options?.regenerateSummary) {
@@ -356,12 +290,7 @@ export default function HomePage() {
     if (!trimmed) return;
     setStatus("Saving period title...");
     try {
-      const response = await fetch(`${API_BASE}/api/periods/${periodId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: trimmed }),
-      });
-      if (!response.ok) throw new Error("Failed to rename period");
+      await renamePeriodTitle(periodId, trimmed);
       setEditingPeriodTitleId(null);
       setEditingPeriodTitleValue("");
       await loadTimeline();
@@ -375,8 +304,7 @@ export default function HomePage() {
     if (!confirm(`Delete "${periodTitle}"? Its events and assets will be unlinked but not deleted.`)) return;
     setStatus("Deleting period...");
     try {
-      const response = await fetch(`${API_BASE}/api/periods/${periodId}`, { method: "DELETE" });
-      if (!response.ok) throw new Error("Failed to delete period");
+      await deletePeriodById(periodId);
       setPeriodAnalysisById((current) => { const next = { ...current }; delete next[periodId]; return next; });
       await loadTimeline();
       setStatus("Period deleted.");
@@ -389,12 +317,7 @@ export default function HomePage() {
     setMergingPeriodId(null);
     setStatus("Merging period...");
     try {
-      const response = await fetch(`${API_BASE}/api/periods/${fromPeriodId}/merge`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ into_period_id: intoPeriodId }),
-      });
-      if (!response.ok) throw new Error("Failed to merge period");
+      await mergePeriodInto(fromPeriodId, intoPeriodId);
       setPeriodAnalysisById((current) => { const next = { ...current }; delete next[fromPeriodId]; return next; });
       await loadTimeline();
       setStatus("Period merged.");
@@ -418,15 +341,7 @@ export default function HomePage() {
       if (assetUploadNotes.trim()) {
         formData.append("notes", assetUploadNotes.trim());
       }
-
-      const response = await fetch(`${API_BASE}/api/assets`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error("Upload asset failed");
-      }
+      await uploadAsset(formData);
 
       setAssetUploadNotes("");
       if (eventAssetInputRef.current) {
@@ -450,14 +365,7 @@ export default function HomePage() {
     setIsSavingLifeStructure(true);
     setStatus("Linking asset to event...");
     try {
-      const response = await fetch(`${API_BASE}/api/assets/${assetId}/link-event/${target}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ relation_type: "evidence" }),
-      });
-      if (!response.ok) {
-        throw new Error("Link asset failed");
-      }
+      await linkAssetToEvent(assetId, Number(target), "evidence");
 
       setAssetLinkTargets((current) => {
         const next = { ...current };
@@ -484,12 +392,7 @@ export default function HomePage() {
     setIsSavingLifeStructure(true);
     setStatus("Deleting event...");
     try {
-      const response = await fetch(`${API_BASE}/api/events/${eventId}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error("Delete event failed");
-      }
+      await deleteEventById(eventId);
 
       if (activeEventId === eventId) {
         setActiveEventId(null);
@@ -513,16 +416,7 @@ export default function HomePage() {
     setIsSavingLifeStructure(true);
     setStatus("Merging event...");
     try {
-      const response = await fetch(`${API_BASE}/api/events/${sourceId}/merge`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ into_event_id: Number(targetId) }),
-      });
-      if (!response.ok) {
-        throw new Error("Merge event failed");
-      }
-
-      const merged: LifeEvent = await response.json();
+      const merged: LifeEvent = await mergeEventInto(sourceId, Number(targetId));
       setEventMergeTargets((current) => {
         const next = { ...current };
         delete next[sourceId];
@@ -544,7 +438,7 @@ export default function HomePage() {
 
   async function dismissQuestion(questionId: number) {
     try {
-      await fetch(`${API_BASE}/api/questions/${questionId}/dismiss`, { method: "POST" });
+      await dismissQuestionById(questionId);
       setQuestions((current) => current.filter((q) => q.id !== questionId));
     } catch {
       // silently ignore dismiss errors
@@ -554,11 +448,7 @@ export default function HomePage() {
   async function saveMainCharacterName(name: string | null) {
     setIsSavingCharacter(true);
     try {
-      await fetch(`${API_BASE}/api/settings/main_character_name`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: name }),
-      });
+      await saveMainCharacterNameRequest(name);
       setMainCharacterName(name);
       setShowCharacterInput(false);
       setCharacterInputValue("");
@@ -573,12 +463,7 @@ export default function HomePage() {
     setMemoryActionId(memoryId);
     setStatus("Reanalyzing memory...");
     try {
-      const response = await fetch(`${API_BASE}/api/memories/${memoryId}/reanalyze`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        throw new Error("Reanalyze failed");
-      }
+      await reanalyzeMemoryById(memoryId);
       await loadTimeline();
       setStatus("Memory reanalyzed.");
     } catch {
@@ -592,12 +477,7 @@ export default function HomePage() {
     setMemoryActionId(memoryId);
     setStatus("Researching memory...");
     try {
-      const response = await fetch(`${API_BASE}/api/memories/${memoryId}/research`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        throw new Error("Research failed");
-      }
+      await researchMemoryById(memoryId);
       await loadTimeline();
       setStatus("Memory research updated.");
     } catch {
@@ -611,12 +491,7 @@ export default function HomePage() {
     setMemoryActionId(memoryId);
     setStatus("Applying suggestion...");
     try {
-      const response = await fetch(`${API_BASE}/api/memories/${memoryId}/apply-research-suggestion`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        throw new Error("Apply failed");
-      }
+      await applyResearchSuggestionById(memoryId);
       await loadTimeline();
       setStatus("Date updated from research.");
     } catch {
@@ -629,9 +504,7 @@ export default function HomePage() {
   async function dismissResearchSuggestion(memoryId: number) {
     setMemoryActionId(memoryId);
     try {
-      await fetch(`${API_BASE}/api/memories/${memoryId}/dismiss-research-suggestion`, {
-        method: "POST",
-      });
+      await dismissResearchSuggestionById(memoryId);
       await loadTimeline();
     } catch {
       // ignore
@@ -648,12 +521,7 @@ export default function HomePage() {
     setMemoryActionId(memoryId);
     setStatus("Deleting memory...");
     try {
-      const response = await fetch(`${API_BASE}/api/memories/${memoryId}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error("Delete failed");
-      }
+      await deleteMemoryById(memoryId);
       await loadTimeline();
       setStatus("Memory deleted.");
     } catch {
@@ -667,14 +535,7 @@ export default function HomePage() {
     setMemoryActionId(memoryId);
     setStatus("Saving recorder...");
     try {
-      const response = await fetch(`${API_BASE}/api/memories/${memoryId}/recorder`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ person_id: personId }),
-      });
-      if (!response.ok) {
-        throw new Error("Recorder update failed");
-      }
+      await assignRecorderPerson(memoryId, personId);
       await loadTimeline();
       setStatus("Recorder saved.");
     } catch {
@@ -688,14 +549,7 @@ export default function HomePage() {
     setDirectoryBusyKey(`people:merge:${sourceId}`);
     setStatus("Merging people...");
     try {
-      const response = await fetch(`${API_BASE}/api/people/${sourceId}/merge`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ into_person_id: intoId }),
-      });
-      if (!response.ok) {
-        throw new Error("Merge failed");
-      }
+      await mergePeopleEntries(sourceId, intoId);
       await loadTimeline();
       setStatus("People merged.");
     } catch {
@@ -709,14 +563,7 @@ export default function HomePage() {
     setDirectoryBusyKey(`people:split:${sourceId}`);
     setStatus("Splitting person...");
     try {
-      const response = await fetch(`${API_BASE}/api/people/${sourceId}/split`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ new_names: newNames, keep_alias: keepAlias }),
-      });
-      if (!response.ok) {
-        throw new Error("Split failed");
-      }
+      await splitPersonEntryRequest(sourceId, newNames, keepAlias);
       await loadTimeline();
       setStatus("Person split.");
     } catch {
@@ -729,14 +576,7 @@ export default function HomePage() {
   async function addPersonAlias(personId: number, alias: string) {
     setDirectoryBusyKey(`people:alias:${personId}`);
     try {
-      const response = await fetch(`${API_BASE}/api/people/${personId}/aliases`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ alias }),
-      });
-      if (!response.ok) {
-        throw new Error("Add alias failed");
-      }
+      await addPersonAliasRequest(personId, alias);
       await loadTimeline();
       setStatus("Alias saved.");
     } catch {
@@ -749,13 +589,7 @@ export default function HomePage() {
   async function removePersonAlias(personId: number, alias: string) {
     setDirectoryBusyKey(`people:alias:${personId}`);
     try {
-      const response = await fetch(
-        `${API_BASE}/api/people/${personId}/aliases/${encodeURIComponent(alias)}`,
-        { method: "DELETE" }
-      );
-      if (!response.ok) {
-        throw new Error("Remove alias failed");
-      }
+      await removePersonAliasRequest(personId, alias);
       await loadTimeline();
       setStatus("Alias removed.");
     } catch {
@@ -769,14 +603,7 @@ export default function HomePage() {
     setDirectoryBusyKey(`${kind}:create`);
     setStatus(`Adding ${kind === "people" ? "person" : "place"}...`);
     try {
-      const response = await fetch(`${API_BASE}/api/${kind}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (!response.ok) {
-        throw new Error("Create failed");
-      }
+      await createDirectoryEntryRequest(kind, name);
       await loadTimeline();
       setStatus(`${kind === "people" ? "Person" : "Place"} saved.`);
     } catch {
@@ -790,14 +617,7 @@ export default function HomePage() {
     setDirectoryBusyKey(`${kind}:rename:${itemId}`);
     setStatus(`Renaming ${kind === "people" ? "person" : "place"}...`);
     try {
-      const response = await fetch(`${API_BASE}/api/${kind}/${itemId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (!response.ok) {
-        throw new Error("Rename failed");
-      }
+      await renameDirectoryEntryRequest(kind, itemId, name);
       await loadTimeline();
       setStatus(`${kind === "people" ? "Person" : "Place"} renamed.`);
     } catch {
@@ -815,12 +635,7 @@ export default function HomePage() {
     setDirectoryBusyKey(`${kind}:delete:${itemId}`);
     setStatus(`Deleting ${kind === "people" ? "person" : "place"}...`);
     try {
-      const response = await fetch(`${API_BASE}/api/${kind}/${itemId}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error("Delete failed");
-      }
+      await deleteDirectoryEntryRequest(kind, itemId);
       await loadTimeline();
       setStatus(`${kind === "people" ? "Person" : "Place"} deleted.`);
     } catch {
@@ -1031,26 +846,10 @@ export default function HomePage() {
     );
 
     try {
-      const formData = new FormData();
-      formData.append("audio", blob, `memory-${Date.now()}.webm`);
-
-      const response = await fetch(`${API_BASE}/api/memories`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error("Upload failed");
-      }
-
-      const created: MemoryEntry = await response.json();
+      const created: MemoryEntry = await createMemoryFromAudioBlob(blob);
       if (activeQuestion) {
         try {
-          await fetch(`${API_BASE}/api/questions/${activeQuestion.id}/answer`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ answer_memory_id: created.id }),
-          });
+          await answerQuestionWithMemory(activeQuestion.id, created.id);
         } catch {
           // ignore answer errors
         }
@@ -1090,16 +889,7 @@ export default function HomePage() {
     try {
       const formData = new FormData();
       formData.append("file", file, file.name);
-
-      const response = await fetch(`${API_BASE}/api/memories/document`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: "Upload failed" }));
-        throw new Error(errorData.detail || "Upload failed");
-      }
+      await createMemoryFromDocument(formData);
 
       await loadTimeline();
       setStatus("Document analyzed and saved as a memory.");
