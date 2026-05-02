@@ -1,13 +1,17 @@
 "use client";
 
-import { ClipboardEventHandler, DragEventHandler, useEffect, useMemo, useRef, useState } from "react";
-import { DirectoryManager } from "./components/DirectoryManager";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CaptureSidebar } from "./components/CaptureSidebar";
+import { DirectorySidebar } from "./components/DirectorySidebar";
+import { EventCard } from "./components/EventCard";
+import { LifePeriodCard } from "./components/LifePeriodCard";
 import { MemoryCard } from "./components/MemoryCard";
-import { AssetEntry, DirectoryEntry, LifeEvent, MemoryEntry, Question, LifePeriod, LifePeriodAnalysis } from "./types";
+import { PeriodComposer } from "./components/PeriodComposer";
+import { UnlinkedAssetsInbox } from "./components/UnlinkedAssetsInbox";
+import { AssetEntry, LifeEvent, MemoryEntry, Question, LifePeriodAnalysis } from "./types";
 import {
   type TimelineBundle,
   analyzeLifePeriod,
-  applyEventResearchSuggestionById,
   applyResearchSuggestionById,
   answerQuestionWithMemory,
   assignRecorderPerson,
@@ -21,10 +25,8 @@ import {
   deleteMemoryById,
   deletePeriodById,
   dismissQuestionById,
-  dismissEventResearchSuggestionById,
   dismissResearchSuggestionById,
   fetchEventAssets,
-  fetchTimelineBundle,
   linkAssetToEvent,
   mergeEventInto,
   mergePeopleEntries,
@@ -35,11 +37,9 @@ import {
   renamePeriodTitle,
   updatePeriodDates,
   renameEventTitle,
-  researchEventById,
   resolveApiUrl,
   saveMainCharacterName as saveMainCharacterNameRequest,
   splitPersonEntry as splitPersonEntryRequest,
-  summarizeEventById,
   addPersonAlias as addPersonAliasRequest,
   updateEventById,
   updateMemoryTitle as updateMemoryTitleById,
@@ -49,11 +49,19 @@ import {
 } from "./lib/memoirApi";
 import {
   AUDIO_DEVICE_STORAGE_KEY,
-  CLIPBOARD_IMAGE_EXTENSIONS,
-  dedupeQuestions,
   displayPeriodSummary,
   formatBytes,
 } from "./lib/memoirUi";
+import { useTimelineData } from "./hooks/useTimelineData";
+import { useEventActions } from "./hooks/useEventActions";
+import { useDocumentIntake } from "./hooks/useDocumentIntake";
+import { useRecordingController } from "./hooks/useRecordingController";
+import {
+  PeriodSortMode,
+  UNASSIGNED_PERIOD_VALUE,
+  compareDateStringsDesc,
+  parsePeriodYearHint,
+} from "./lib/homePageHelpers";
 
 type PendingRecording = {
   id: string;
@@ -63,119 +71,6 @@ type PendingRecording = {
   error?: string;
 };
 
-const UNASSIGNED_PERIOD_VALUE = "__unassigned__";
-
-type AudioInputDevice = {
-  deviceId: string;
-  label: string;
-};
-
-function formatAssetCaptureDate(asset: AssetEntry): string | null {
-  if (asset.captured_at_text) {
-    return asset.captured_at_text;
-  }
-  if (asset.captured_at) {
-    const parsed = new Date(asset.captured_at);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toLocaleString();
-    }
-    return asset.captured_at;
-  }
-  return null;
-}
-
-function formatAssetGps(asset: AssetEntry): string | null {
-  if (asset.gps_latitude === null || asset.gps_longitude === null) {
-    return null;
-  }
-  return `${asset.gps_latitude.toFixed(5)}, ${asset.gps_longitude.toFixed(5)}`;
-}
-
-function renderImageMetadataBadges(asset: AssetEntry): JSX.Element | null {
-  const isImage = asset.kind === "photo" || (asset.content_type || "").startsWith("image/");
-  if (!isImage) {
-    return null;
-  }
-
-  const hasLocation = asset.gps_latitude !== null && asset.gps_longitude !== null;
-  const hasCapture = Boolean(asset.captured_at_text || asset.captured_at);
-  const hasCamera = Boolean(asset.camera_make || asset.camera_model || asset.lens_model);
-  const hasDimensions = asset.image_width !== null || asset.image_height !== null;
-  const hasNonLocationMetadata = hasCapture || hasCamera || hasDimensions;
-
-  let metadataLabel = "Metadata: none";
-  let metadataClass = "assetMetaBadge isMissing";
-  if (hasLocation && hasNonLocationMetadata) {
-    metadataLabel = "Metadata: rich";
-    metadataClass = "assetMetaBadge isPresent";
-  } else if (hasLocation || hasNonLocationMetadata) {
-    metadataLabel = "Metadata: partial";
-    metadataClass = "assetMetaBadge isPartial";
-  }
-
-  return (
-    <div className="assetMetaBadgeRow">
-      <span className={metadataClass}>{metadataLabel}</span>
-      <span className={`assetMetaBadge ${hasLocation ? "isPresent" : "isMissing"}`}>
-        Location: {hasLocation ? "present" : "missing"}
-      </span>
-    </div>
-  );
-}
-
-function collectEventMemoryIds(event: LifeEvent, assets: AssetEntry[]): number[] {
-  const ids = new Set<number>();
-  for (const memoryId of event.linked_memory_ids) {
-    ids.add(memoryId);
-  }
-  for (const asset of assets) {
-    if (asset.legacy_memory_id !== null) {
-      ids.add(asset.legacy_memory_id);
-    }
-  }
-  return Array.from(ids);
-}
-
-type PeriodSortMode =
-  | "timeline-asc"
-  | "timeline-desc"
-  | "updated-desc"
-  | "events-desc"
-  | "title-asc";
-
-function parsePeriodYearHint(value: string | null): number | null {
-  if (!value) {
-    return null;
-  }
-
-  const directYear = value.match(/\b(19\d{2}|20\d{2})\b/);
-  if (directYear) {
-    return Number.parseInt(directYear[1], 10);
-  }
-
-  const decadeYear = value.match(/\b(19\d0|20\d0)s\b/i);
-  if (decadeYear) {
-    return Number.parseInt(decadeYear[1], 10);
-  }
-
-  return null;
-}
-
-function compareDateStringsDesc(left: string, right: string): number {
-  const leftTime = new Date(left).getTime();
-  const rightTime = new Date(right).getTime();
-  if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
-    return 0;
-  }
-  if (Number.isNaN(leftTime)) {
-    return 1;
-  }
-  if (Number.isNaN(rightTime)) {
-    return -1;
-  }
-  return rightTime - leftTime;
-}
-
 export default function HomePage() {
   const [isDirectoryDrawerOpen, setIsDirectoryDrawerOpen] = useState(false);
   const [isCaptureDrawerOpen, setIsCaptureDrawerOpen] = useState(false);
@@ -183,10 +78,20 @@ export default function HomePage() {
   const [directorySearch, setDirectorySearch] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState("Ready to record a memory.");
-  const [timeline, setTimeline] = useState<MemoryEntry[]>([]);
-  const [lifePeriods, setLifePeriods] = useState<LifePeriod[]>([]);
-  const [lifeEvents, setLifeEvents] = useState<LifeEvent[]>([]);
-  const [unlinkedAssets, setUnlinkedAssets] = useState<AssetEntry[]>([]);
+  const {
+    timeline,
+    lifePeriods,
+    lifeEvents,
+    unlinkedAssets,
+    setUnlinkedAssets,
+    questions,
+    setQuestions,
+    peopleDirectory,
+    placesDirectory,
+    mainCharacterName,
+    setMainCharacterName,
+    loadTimeline,
+  } = useTimelineData({ setStatus });
   const [activeEventId, setActiveEventId] = useState<number | null>(null);
   const [activeEventAssets, setActiveEventAssets] = useState<AssetEntry[]>([]);
   const [isSavingLifeStructure, setIsSavingLifeStructure] = useState(false);
@@ -208,18 +113,12 @@ export default function HomePage() {
   const [editingAssetNotesId, setEditingAssetNotesId] = useState<number | null>(null);
   const [editingAssetNotesValue, setEditingAssetNotesValue] = useState("");
   const [assetNotesSavingId, setAssetNotesSavingId] = useState<number | null>(null);
-  const [peopleDirectory, setPeopleDirectory] = useState<DirectoryEntry[]>([]);
-  const [placesDirectory, setPlacesDirectory] = useState<DirectoryEntry[]>([]);
   const [pendingRecording, setPendingRecording] = useState<PendingRecording | null>(null);
   const [recordingForEventId, setRecordingForEventId] = useState<number | null>(null);
   const [eventRecordingPending, setEventRecordingPending] = useState<Record<number, PendingRecording>>({});
-  const [audioDevices, setAudioDevices] = useState<AudioInputDevice[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState("");
-  const [audioLevel, setAudioLevel] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [highlightedElementId, setHighlightedElementId] = useState<string | null>(null);
   const [memoryActionId, setMemoryActionId] = useState<number | null>(null);
-  const [eventActionId, setEventActionId] = useState<number | null>(null);
   const [directoryBusyKey, setDirectoryBusyKey] = useState<string | null>(null);
   const [isPeriodComposerOpen, setIsPeriodComposerOpen] = useState(false);
   const [expandedPeriods, setExpandedPeriods] = useState<Record<number, boolean>>({});
@@ -250,20 +149,14 @@ export default function HomePage() {
   const [mergingPeriodId, setMergingPeriodId] = useState<number | null>(null);
   const [periodSortMode, setPeriodSortMode] = useState<PeriodSortMode>("timeline-asc");
 
-  const [questions, setQuestions] = useState<Question[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
 
-  // undefined = not yet loaded, null = loaded but not set, string = set
-  const [mainCharacterName, setMainCharacterName] = useState<string | null | undefined>(undefined);
   const [showCharacterInput, setShowCharacterInput] = useState(false);
   const [characterInputValue, setCharacterInputValue] = useState("");
   const [isSavingCharacter, setIsSavingCharacter] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
-  const [isReadingClipboard, setIsReadingClipboard] = useState(false);
-  const [isDragOverDocumentTarget, setIsDragOverDocumentTarget] = useState(false);
-  const [documentUploadError, setDocumentUploadError] = useState<string | null>(null);
   const documentFileInputRef = useRef<HTMLInputElement | null>(null);
   const eventAssetInputRef = useRef<HTMLInputElement | null>(null);
   const focusClearTimerRef = useRef<number | null>(null);
@@ -271,9 +164,16 @@ export default function HomePage() {
   const chunksRef = useRef<BlobPart[]>([]);
   const shouldDiscardRecordingRef = useRef(false);
   const currentPreviewAudioUrlRef = useRef<string | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const levelAnimationRef = useRef<number | null>(null);
-  const documentDragDepthRef = useRef(0);
+
+  const {
+    audioDevices,
+    selectedDeviceId,
+    setSelectedDeviceId,
+    audioLevel,
+    refreshAudioDevices,
+    startAudioLevelMonitoring,
+    stopAudioLevelMonitoring,
+  } = useRecordingController(setStatus);
 
   const eventCountByPeriod = useMemo(() => {
     const counts: Record<number, number> = {};
@@ -350,38 +250,6 @@ export default function HomePage() {
     return periods;
   }, [eventCountByPeriod, lifePeriods, periodSortMode]);
 
-  async function loadTimeline(): Promise<TimelineBundle | null> {
-    try {
-      const data = await fetchTimelineBundle();
-      setTimeline(data.memories);
-      if (data.questions) {
-        setQuestions(dedupeQuestions(data.questions));
-      }
-      if (data.people) {
-        setPeopleDirectory(data.people);
-      }
-      if (data.places) {
-        setPlacesDirectory(data.places);
-      }
-      if (data.settings) {
-        setMainCharacterName(data.settings.main_character_name);
-      }
-      if (data.periods) {
-        setLifePeriods(data.periods);
-      }
-      if (data.events) {
-        setLifeEvents(data.events);
-      }
-      if (data.unlinkedAssets) {
-        setUnlinkedAssets(data.unlinkedAssets);
-      }
-      return data;
-    } catch (error) {
-      setStatus("Could not load timeline from API.");
-      return null;
-    }
-  }
-
   function markAndScrollTo(elementId: string, delayMs = 120) {
     window.setTimeout(() => {
       const element = document.getElementById(elementId);
@@ -429,6 +297,19 @@ export default function HomePage() {
       setActiveEventAssets([]);
     }
   }
+
+  const {
+    eventActionId,
+    summarizeEvent,
+    deepResearchEvent,
+    acceptEventResearchSuggestion,
+    dismissEventResearchSuggestion,
+  } = useEventActions({
+    activeEventId,
+    loadTimeline,
+    loadAssetsForEvent,
+    setStatus,
+  });
 
   async function createLifePeriod() {
     if (!newPeriodTitle.trim()) {
@@ -824,72 +705,6 @@ export default function HomePage() {
     }
   }
 
-  async function summarizeEvent(eventId: number) {
-    setEventActionId(eventId);
-    setStatus("Summarizing event...");
-    try {
-      await summarizeEventById(eventId);
-      await loadTimeline();
-      if (activeEventId === eventId) {
-        await loadAssetsForEvent(eventId);
-      }
-      setStatus("Event summary updated.");
-    } catch {
-      setStatus("Failed to summarize event.");
-    } finally {
-      setEventActionId(null);
-    }
-  }
-
-  async function deepResearchEvent(eventId: number) {
-    setEventActionId(eventId);
-    setStatus("Researching event...");
-    try {
-      await researchEventById(eventId);
-      await loadTimeline();
-      if (activeEventId === eventId) {
-        await loadAssetsForEvent(eventId);
-      }
-      setStatus("Event research updated.");
-    } catch {
-      setStatus("Failed to research event.");
-    } finally {
-      setEventActionId(null);
-    }
-  }
-
-  async function acceptEventResearchSuggestion(eventId: number) {
-    setEventActionId(eventId);
-    setStatus("Applying event suggestion...");
-    try {
-      await applyEventResearchSuggestionById(eventId);
-      await loadTimeline();
-      if (activeEventId === eventId) {
-        await loadAssetsForEvent(eventId);
-      }
-      setStatus("Event updated from suggestion.");
-    } catch {
-      setStatus("Failed to apply event suggestion.");
-    } finally {
-      setEventActionId(null);
-    }
-  }
-
-  async function dismissEventResearchSuggestion(eventId: number) {
-    setEventActionId(eventId);
-    try {
-      await dismissEventResearchSuggestionById(eventId);
-      await loadTimeline();
-      if (activeEventId === eventId) {
-        await loadAssetsForEvent(eventId);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setEventActionId(null);
-    }
-  }
-
   async function acceptResearchSuggestion(memoryId: number) {
     setMemoryActionId(memoryId);
     setStatus("Applying suggestion...");
@@ -1131,94 +946,6 @@ export default function HomePage() {
     }
   }
 
-  async function refreshAudioDevices() {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const inputs = devices
-        .filter((device) => device.kind === "audioinput")
-        .map((device, index) => ({
-          deviceId: device.deviceId,
-          label: device.label || `Microphone ${index + 1}`,
-        }));
-
-      setAudioDevices(inputs);
-      setSelectedDeviceId((current) => {
-        if (current && inputs.some((item) => item.deviceId === current)) {
-          return current;
-        }
-
-        const savedDeviceId = localStorage.getItem(AUDIO_DEVICE_STORAGE_KEY);
-        if (savedDeviceId && inputs.some((item) => item.deviceId === savedDeviceId)) {
-          return savedDeviceId;
-        }
-
-        const fallbackDeviceId = inputs[0]?.deviceId || "";
-        if (fallbackDeviceId) {
-          localStorage.setItem(AUDIO_DEVICE_STORAGE_KEY, fallbackDeviceId);
-        } else {
-          localStorage.removeItem(AUDIO_DEVICE_STORAGE_KEY);
-        }
-        return fallbackDeviceId;
-      });
-    } catch {
-      setStatus("Unable to enumerate microphone devices.");
-    }
-  }
-
-  useEffect(() => {
-    refreshAudioDevices();
-
-    const mediaDevices = navigator.mediaDevices;
-    const onDeviceChange = () => {
-      refreshAudioDevices();
-    };
-
-    mediaDevices.addEventListener("devicechange", onDeviceChange);
-    return () => {
-      mediaDevices.removeEventListener("devicechange", onDeviceChange);
-    };
-  }, []);
-
-  function stopAudioLevelMonitoring() {
-    if (levelAnimationRef.current !== null) {
-      cancelAnimationFrame(levelAnimationRef.current);
-      levelAnimationRef.current = null;
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    setAudioLevel(0);
-  }
-
-  function startAudioLevelMonitoring(stream: MediaStream) {
-    stopAudioLevelMonitoring();
-
-    const context = new AudioContext();
-    const source = context.createMediaStreamSource(stream);
-    const analyser = context.createAnalyser();
-    analyser.fftSize = 2048;
-    source.connect(analyser);
-    audioContextRef.current = context;
-
-    const data = new Uint8Array(analyser.fftSize);
-
-    const tick = () => {
-      analyser.getByteTimeDomainData(data);
-      let sum = 0;
-      for (let i = 0; i < data.length; i += 1) {
-        const normalized = (data[i] - 128) / 128;
-        sum += normalized * normalized;
-      }
-      const rms = Math.sqrt(sum / data.length);
-      const scaled = Math.min(1, rms * 4);
-      setAudioLevel(scaled);
-      levelAnimationRef.current = requestAnimationFrame(tick);
-    };
-
-    levelAnimationRef.current = requestAnimationFrame(tick);
-  }
-
   useEffect(() => {
     return () => {
       if (focusClearTimerRef.current !== null) {
@@ -1414,6 +1141,24 @@ export default function HomePage() {
     }
   }
 
+  const {
+    isReadingClipboard,
+    isDragOverDocumentTarget,
+    documentUploadError,
+    setDocumentUploadError,
+    pasteImageFromClipboard,
+    onDocumentPasteZonePaste,
+    onDocumentDragEnter,
+    onDocumentDragOver,
+    onDocumentDragLeave,
+    onDocumentDrop,
+  } = useDocumentIntake({
+    isUploadingDocument,
+    isRecording,
+    isLoading,
+    uploadDocument,
+  });
+
   async function uploadDocumentToEvent(file: File, eventId: number) {
     setEventDocumentUploadingId(eventId);
     setEventDocumentErrors((prev) => ({ ...prev, [eventId]: null }));
@@ -1434,142 +1179,6 @@ export default function HomePage() {
       setStatus("Document upload failed.");
     } finally {
       setEventDocumentUploadingId(null);
-    }
-  }
-
-  function asClipboardImageFile(blob: Blob, fallbackNamePrefix: string): File {
-    const mimeType = (blob.type || "").toLowerCase();
-    const extension = CLIPBOARD_IMAGE_EXTENSIONS[mimeType] || ".png";
-    const timestamp = Date.now();
-    const fileName = `${fallbackNamePrefix}-${timestamp}${extension}`;
-    return new File([blob], fileName, { type: mimeType || "image/png" });
-  }
-
-  function extractImageFromClipboardData(data: DataTransfer | null): File | null {
-    if (!data) {
-      return null;
-    }
-
-    for (const item of Array.from(data.items)) {
-      if (item.kind !== "file" || !item.type.startsWith("image/")) {
-        continue;
-      }
-      const file = item.getAsFile();
-      if (file) {
-        return asClipboardImageFile(file, "screen-clipping");
-      }
-    }
-
-    return null;
-  }
-
-  const onDocumentPasteZonePaste: ClipboardEventHandler<HTMLDivElement> = (event) => {
-    if (isUploadingDocument || isRecording || isLoading) {
-      return;
-    }
-
-    const imageFile = extractImageFromClipboardData(event.clipboardData);
-    if (!imageFile) {
-      return;
-    }
-
-    event.preventDefault();
-    uploadDocument(imageFile);
-  };
-
-  function dataTransferHasFiles(dataTransfer: DataTransfer | null): boolean {
-    if (!dataTransfer) {
-      return false;
-    }
-    if (dataTransfer.files && dataTransfer.files.length > 0) {
-      return true;
-    }
-    return Array.from(dataTransfer.items || []).some((item) => item.kind === "file");
-  }
-
-  const onDocumentDragEnter: DragEventHandler<HTMLDivElement> = (event) => {
-    event.preventDefault();
-    if (isUploadingDocument || isReadingClipboard || isRecording || isLoading) {
-      return;
-    }
-
-    documentDragDepthRef.current += 1;
-    if (dataTransferHasFiles(event.dataTransfer)) {
-      setIsDragOverDocumentTarget(true);
-    }
-  };
-
-  const onDocumentDragOver: DragEventHandler<HTMLDivElement> = (event) => {
-    event.preventDefault();
-    if (isUploadingDocument || isReadingClipboard || isRecording || isLoading) {
-      return;
-    }
-
-    if (dataTransferHasFiles(event.dataTransfer)) {
-      event.dataTransfer.dropEffect = "copy";
-      setIsDragOverDocumentTarget(true);
-    }
-  };
-
-  const onDocumentDragLeave: DragEventHandler<HTMLDivElement> = (event) => {
-    event.preventDefault();
-    documentDragDepthRef.current = Math.max(0, documentDragDepthRef.current - 1);
-    if (documentDragDepthRef.current === 0) {
-      setIsDragOverDocumentTarget(false);
-    }
-  };
-
-  const onDocumentDrop: DragEventHandler<HTMLDivElement> = (event) => {
-    event.preventDefault();
-    documentDragDepthRef.current = 0;
-    setIsDragOverDocumentTarget(false);
-
-    if (isUploadingDocument || isReadingClipboard || isRecording || isLoading) {
-      return;
-    }
-
-    const droppedFile = event.dataTransfer.files?.[0] || null;
-    if (!droppedFile) {
-      setDocumentUploadError("No file detected. Drop a PDF, image, or text file.");
-      return;
-    }
-
-    uploadDocument(droppedFile);
-  };
-
-  async function pasteImageFromClipboard() {
-    if (!navigator.clipboard?.read) {
-      setDocumentUploadError("Clipboard image reading is not available in this browser. Click the paste box and press Ctrl+V instead.");
-      return;
-    }
-
-    setIsReadingClipboard(true);
-    setDocumentUploadError(null);
-
-    try {
-      const items = await navigator.clipboard.read();
-      let matchedBlob: Blob | null = null;
-
-      for (const item of items) {
-        const imageType = item.types.find((type) => type.startsWith("image/"));
-        if (!imageType) {
-          continue;
-        }
-        matchedBlob = await item.getType(imageType);
-        break;
-      }
-
-      if (!matchedBlob) {
-        setDocumentUploadError("No image found in clipboard. Copy a screen clipping, then try again.");
-        return;
-      }
-
-      await uploadDocument(asClipboardImageFile(matchedBlob, "screen-clipping"));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not read from clipboard.";
-      setDocumentUploadError(message);
-    } finally {
-      setIsReadingClipboard(false);
     }
   }
 
@@ -1636,112 +1245,137 @@ export default function HomePage() {
   const unassignedEvents = lifeEvents.filter((event) => event.period_id === null);
   const timelineStandaloneMemories = timeline.filter((memory) => !lifeEventMemoryIds.has(memory.id));
 
+  function renderEventCard(event: LifeEvent, mergeCandidates: LifeEvent[]) {
+    return (
+      <EventCard
+        key={event.id}
+        event={event}
+        mergeCandidates={mergeCandidates}
+        isHighlighted={highlightedElementId === `event-card-${event.id}`}
+        isOpen={activeEventId === event.id}
+        onToggleOpen={async () => {
+          if (activeEventId === event.id) {
+            setActiveEventId(null);
+            setActiveEventAssets([]);
+            return;
+          }
+          setActiveEventId(event.id);
+          await loadAssetsForEvent(event.id);
+        }}
+        isSavingLifeStructure={isSavingLifeStructure}
+        isRecording={isRecording}
+        isLoading={isLoading}
+        deleteLifeEvent={deleteLifeEvent}
+        editingEventTitleId={editingEventTitleId}
+        setEditingEventTitleId={setEditingEventTitleId}
+        editingEventTitleValue={editingEventTitleValue}
+        setEditingEventTitleValue={setEditingEventTitleValue}
+        renameEvent={renameEvent}
+        editingEventDateId={editingEventDateId}
+        setEditingEventDateId={setEditingEventDateId}
+        editingEventDateValue={editingEventDateValue}
+        setEditingEventDateValue={setEditingEventDateValue}
+        saveEventDate={saveEventDate}
+        editingEventLocationId={editingEventLocationId}
+        setEditingEventLocationId={setEditingEventLocationId}
+        editingEventLocationValue={editingEventLocationValue}
+        setEditingEventLocationValue={setEditingEventLocationValue}
+        saveEventLocation={saveEventLocation}
+        eventMoveTargets={eventMoveTargets}
+        setEventMoveTargets={setEventMoveTargets}
+        moveEventToPeriod={moveEventToPeriod}
+        sortedLifePeriods={sortedLifePeriods}
+        eventMergeTargets={eventMergeTargets}
+        setEventMergeTargets={setEventMergeTargets}
+        mergeLifeEvent={mergeLifeEvent}
+        eventActionId={eventActionId}
+        summarizeEvent={summarizeEvent}
+        deepResearchEvent={deepResearchEvent}
+        acceptEventResearchSuggestion={acceptEventResearchSuggestion}
+        dismissEventResearchSuggestion={dismissEventResearchSuggestion}
+        questionsForEvent={questionsByEventId.get(event.id) ?? []}
+        setActiveQuestion={setActiveQuestion}
+        dismissQuestion={dismissQuestion}
+        eventCapturePanelOpenIds={eventCapturePanelOpenIds}
+        setEventCapturePanelOpenIds={setEventCapturePanelOpenIds}
+        recordingForEventId={recordingForEventId}
+        audioDevices={audioDevices}
+        selectedDeviceId={selectedDeviceId}
+        setSelectedDeviceId={setSelectedDeviceId}
+        audioLevel={audioLevel}
+        startRecording={startRecording}
+        stopRecording={stopRecording}
+        cancelRecording={cancelRecording}
+        eventRecordingPending={eventRecordingPending}
+        eventDocumentUploadingId={eventDocumentUploadingId}
+        eventDocumentErrors={eventDocumentErrors}
+        uploadDocumentToEvent={uploadDocumentToEvent}
+        eventAssetInputRef={eventAssetInputRef}
+        isUploadingAsset={isUploadingAsset}
+        uploadAssetToActiveEvent={uploadAssetToActiveEvent}
+        activeEventAssets={activeEventAssets}
+        highlightedElementId={highlightedElementId}
+        expandedAssetRowIds={expandedAssetRowIds}
+        setExpandedAssetRowIds={setExpandedAssetRowIds}
+        editingAssetTitleId={editingAssetTitleId}
+        setEditingAssetTitleId={setEditingAssetTitleId}
+        editingAssetTitleValue={editingAssetTitleValue}
+        setEditingAssetTitleValue={setEditingAssetTitleValue}
+        assetTitleSavingId={assetTitleSavingId}
+        saveAssetTitle={saveAssetTitle}
+        editingAssetNotesId={editingAssetNotesId}
+        setEditingAssetNotesId={setEditingAssetNotesId}
+        editingAssetNotesValue={editingAssetNotesValue}
+        setEditingAssetNotesValue={setEditingAssetNotesValue}
+        assetNotesSavingId={assetNotesSavingId}
+        saveAssetNotes={saveAssetNotes}
+        resolveApiUrl={resolveApiUrl}
+        formatBytes={formatBytes}
+        deleteAsset={deleteAsset}
+        timeline={timeline}
+        editingMemoryTitleId={editingMemoryTitleId}
+        setEditingMemoryTitleId={setEditingMemoryTitleId}
+        editingMemoryTitleValue={editingMemoryTitleValue}
+        setEditingMemoryTitleValue={setEditingMemoryTitleValue}
+        memoryTitleSavingId={memoryTitleSavingId}
+        saveMemoryTitle={saveMemoryTitle}
+        expandedMemoryRowIds={expandedMemoryRowIds}
+        setExpandedMemoryRowIds={setExpandedMemoryRowIds}
+        questions={questions}
+        peopleDirectory={peopleDirectory}
+        acceptResearchSuggestion={acceptResearchSuggestion}
+        dismissResearchSuggestion={dismissResearchSuggestion}
+        reanalyzeMemory={reanalyzeMemory}
+        deleteMemory={deleteMemory}
+        assignRecorder={assignRecorder}
+        memoryActionId={memoryActionId}
+      />
+    );
+  }
+
   return (
     <main className="appShell">
-      <button
-        type="button"
-        className="secondary directoryToggle"
-        onClick={() => setIsDirectoryDrawerOpen(true)}
-      >
-        People & Places
-      </button>
-
-      {isDirectoryDrawerOpen && (
-        <button
-          type="button"
-          className="directoryBackdrop"
-          aria-label="Close directory panel"
-          onClick={() => setIsDirectoryDrawerOpen(false)}
-        />
-      )}
-
-      <aside className={`directorySidebar ${isDirectoryDrawerOpen ? "isOpen" : ""}`}>
-        <div className="directorySidebarHeader">
-          <div>
-            <h2>Directories</h2>
-            <p className="meta directoryMeta">{activeDirectoryCount} shown of {activeDirectoryTotal}</p>
-          </div>
-          <button
-            type="button"
-            className="ghost directoryClose"
-            onClick={() => setIsDirectoryDrawerOpen(false)}
-          >
-            Close
-          </button>
-        </div>
-
-        <div className="directoryTabRow" role="tablist" aria-label="Directory tabs">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeDirectoryTab === "people"}
-            className={activeDirectoryTab === "people" ? "primary" : "secondary"}
-            onClick={() => setActiveDirectoryTab("people")}
-          >
-            People
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeDirectoryTab === "places"}
-            className={activeDirectoryTab === "places" ? "primary" : "secondary"}
-            onClick={() => setActiveDirectoryTab("places")}
-          >
-            Places
-          </button>
-        </div>
-
-        <div className="directoryFilterHeaderRow">
-          <label className="directoryFilterLabel" htmlFor="directory-filter-input">
-            Search {activeDirectoryTab === "people" ? "people" : "places"}
-          </label>
-          <button
-            type="button"
-            className="ghost directoryFilterClear"
-            onClick={() => setDirectorySearch("")}
-            disabled={!directorySearch}
-          >
-            Clear
-          </button>
-        </div>
-        <input
-          id="directory-filter-input"
-          type="search"
-          className="directoryInput"
-          placeholder={activeDirectoryTab === "people" ? "Type a name or alias" : "Type a place name"}
-          value={directorySearch}
-          onChange={(event) => setDirectorySearch(event.target.value)}
-          autoComplete="off"
-        />
-
-        {activeDirectoryTab === "people" ? (
-          <DirectoryManager
-            title="People Directory"
-            addLabel="Add a person"
-            emptyLabel={normalizedDirectorySearch ? "No matching people for this search." : "No people have been added yet."}
-            items={filteredPeopleDirectory}
-            isBusy={directoryBusyKey !== null || isLoading || isRecording}
-            onCreate={(name) => createDirectoryEntry("people", name)}
-            onRename={(itemId, name) => renameDirectoryEntry("people", itemId, name)}
-            onDelete={(itemId) => deleteDirectoryEntry("people", itemId)}
-            onMerge={mergePersonEntry}
-            onSplit={splitPersonEntry}
-            onAddAlias={addPersonAlias}
-            onRemoveAlias={removePersonAlias}
-          />
-        ) : (
-          <DirectoryManager
-            title="Places Directory"
-            addLabel="Add a place"
-            emptyLabel={normalizedDirectorySearch ? "No matching places for this search." : "No places have been added yet."}
-            items={filteredPlacesDirectory}
-            isBusy={directoryBusyKey !== null || isLoading || isRecording}
-            onCreate={(name) => createDirectoryEntry("places", name)}
-            onRename={(itemId, name) => renameDirectoryEntry("places", itemId, name)}
-            onDelete={(itemId) => deleteDirectoryEntry("places", itemId)}
-          />
-        )}
-      </aside>
+      <DirectorySidebar
+        isDirectoryDrawerOpen={isDirectoryDrawerOpen}
+        setIsDirectoryDrawerOpen={setIsDirectoryDrawerOpen}
+        activeDirectoryTab={activeDirectoryTab}
+        setActiveDirectoryTab={setActiveDirectoryTab}
+        directorySearch={directorySearch}
+        setDirectorySearch={setDirectorySearch}
+        activeDirectoryCount={activeDirectoryCount}
+        activeDirectoryTotal={activeDirectoryTotal}
+        normalizedDirectorySearch={normalizedDirectorySearch}
+        filteredPeopleDirectory={filteredPeopleDirectory}
+        filteredPlacesDirectory={filteredPlacesDirectory}
+        isBusy={directoryBusyKey !== null || isLoading || isRecording}
+        onCreateDirectoryEntry={createDirectoryEntry}
+        onRenameDirectoryEntry={renameDirectoryEntry}
+        onDeleteDirectoryEntry={deleteDirectoryEntry}
+        onMergePersonEntry={mergePersonEntry}
+        onSplitPersonEntry={splitPersonEntry}
+        onAddPersonAlias={addPersonAlias}
+        onRemovePersonAlias={removePersonAlias}
+      />
 
       <div className="workspaceColumn">
         <section className="hero">
@@ -1794,58 +1428,20 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {isPeriodComposerOpen && (
-                <article className="memory" style={{ marginTop: "0.75rem" }}>
-                  <h3>Create Period</h3>
-                  <div className="lifeFormFields">
-                    <input
-                      className="directoryInput"
-                      type="text"
-                      placeholder="Period title (e.g. Birth and Early Childhood)"
-                      value={newPeriodTitle}
-                      onChange={(e) => setNewPeriodTitle(e.target.value)}
-                      disabled={isSavingLifeStructure || isRecording || isLoading}
-                    />
-                    <input
-                      className="directoryInput"
-                      type="text"
-                      placeholder="Start text (e.g. 1948)"
-                      value={newPeriodStart}
-                      onChange={(e) => setNewPeriodStart(e.target.value)}
-                      disabled={isSavingLifeStructure || isRecording || isLoading}
-                    />
-                    <input
-                      className="directoryInput"
-                      type="text"
-                      placeholder="End text (e.g. 1960)"
-                      value={newPeriodEnd}
-                      onChange={(e) => setNewPeriodEnd(e.target.value)}
-                      disabled={isSavingLifeStructure || isRecording || isLoading}
-                    />
-                    <textarea
-                      className="directoryInput"
-                      placeholder="Summary"
-                      value={newPeriodSummary}
-                      onChange={(e) => setNewPeriodSummary(e.target.value)}
-                      disabled={isSavingLifeStructure || isRecording || isLoading}
-                      rows={3}
-                    />
-                  </div>
-                  <div className="controls">
-                    <button
-                      className="primary"
-                      type="button"
-                      onClick={async () => {
-                        await createLifePeriod();
-                        setIsPeriodComposerOpen(false);
-                      }}
-                      disabled={!newPeriodTitle.trim() || isSavingLifeStructure || isRecording || isLoading}
-                    >
-                      Create Period
-                    </button>
-                  </div>
-                </article>
-              )}
+              <PeriodComposer
+                isOpen={isPeriodComposerOpen}
+                newPeriodTitle={newPeriodTitle}
+                setNewPeriodTitle={setNewPeriodTitle}
+                newPeriodStart={newPeriodStart}
+                setNewPeriodStart={setNewPeriodStart}
+                newPeriodEnd={newPeriodEnd}
+                setNewPeriodEnd={setNewPeriodEnd}
+                newPeriodSummary={newPeriodSummary}
+                setNewPeriodSummary={setNewPeriodSummary}
+                isBusy={isSavingLifeStructure || isRecording || isLoading}
+                createLifePeriod={createLifePeriod}
+                onCreated={() => setIsPeriodComposerOpen(false)}
+              />
 
               <div className="lifePeriodList">
                 {lifePeriods.length === 0 && <p className="meta">No periods created yet.</p>}
@@ -1866,10 +1462,10 @@ export default function HomePage() {
                   const periodAnalysis = periodAnalysisById[period.id] || null;
 
                   return (
-                    <article
+                    <LifePeriodCard
                       key={period.id}
-                      id={`period-card-${period.id}`}
-                      className={`memory${highlightedElementId === `period-card-${period.id}` ? " focusPulse" : ""}`}
+                      period={period}
+                      isHighlighted={highlightedElementId === `period-card-${period.id}`}
                     >
                       <div className="periodSummaryRow">
                         <div style={{ flex: 1 }}>
@@ -2172,696 +1768,11 @@ export default function HomePage() {
 
                           <div className="lifeEventList">
                             {eventsForPeriod.length === 0 && <p className="meta">No events in this period yet.</p>}
-                            {eventsForPeriod.map((event) => (
-                              <article
-                                key={event.id}
-                                id={`event-card-${event.id}`}
-                                className={`memory${highlightedElementId === `event-card-${event.id}` ? " focusPulse" : ""}`}
-                              >
-                                <div className="periodSummaryRow">
-                                  <div>
-                                    <p className="entitySectionLabel" style={{ marginBottom: "0.2rem" }}>
-                                      <span className="entityPill entityPillEvent">Event</span>
-                                      <span className="entityFlowArrow">contains</span>
-                                      <span className="entityPill entityPillMemory">Memory</span>
-                                      <span className="entityFlowArrow">+</span>
-                                      <span className="entityPill entityPillAsset">Assets</span>
-                                    </p>
-                                    {editingEventTitleId === event.id ? (
-                                      <div className="controls" style={{ marginBottom: "0.35rem" }}>
-                                        <input
-                                          className="directoryInput"
-                                          type="text"
-                                          value={editingEventTitleValue}
-                                          autoFocus
-                                          onChange={(e) => setEditingEventTitleValue(e.target.value)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Enter") renameEvent(event.id, editingEventTitleValue);
-                                            if (e.key === "Escape") { setEditingEventTitleId(null); setEditingEventTitleValue(""); }
-                                          }}
-                                          style={{ flex: 1 }}
-                                        />
-                                        <button className="primary" type="button" onClick={() => renameEvent(event.id, editingEventTitleValue)} disabled={!editingEventTitleValue.trim()}>Save</button>
-                                        <button className="secondary" type="button" onClick={() => { setEditingEventTitleId(null); setEditingEventTitleValue(""); }}>Cancel</button>
-                                      </div>
-                                    ) : (
-                                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                                        <p style={{ margin: 0, fontWeight: 700 }}>{event.title}</p>
-                                        <button
-                                          className="secondary"
-                                          type="button"
-                                          title="Edit title"
-                                          style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem" }}
-                                          onClick={() => { setEditingEventTitleId(event.id); setEditingEventTitleValue(event.title); }}
-                                        >
-                                          ✏️
-                                        </button>
-                                      </div>
-                                    )}
-                                    {editingEventDateId === event.id ? (
-                                      <div className="controls" style={{ marginTop: "0.25rem" }}>
-                                        <input
-                                          className="directoryInput"
-                                          type="text"
-                                          value={editingEventDateValue}
-                                          autoFocus
-                                          placeholder="Event date text"
-                                          onChange={(e) => setEditingEventDateValue(e.target.value)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Enter") void saveEventDate(event.id, editingEventDateValue);
-                                            if (e.key === "Escape") { setEditingEventDateId(null); setEditingEventDateValue(""); }
-                                          }}
-                                          style={{ flex: 1 }}
-                                        />
-                                        <button className="primary" type="button" onClick={() => void saveEventDate(event.id, editingEventDateValue)}>Save</button>
-                                        <button className="secondary" type="button" onClick={() => { setEditingEventDateId(null); setEditingEventDateValue(""); }}>Cancel</button>
-                                      </div>
-                                    ) : (
-                                      <div className="controls" style={{ justifyContent: "space-between", gap: "0.4rem", marginTop: "0.2rem" }}>
-                                        <p className="meta" style={{ margin: 0, flex: 1 }}>
-                                          Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}
-                                        </p>
-                                        <button
-                                          className="secondary"
-                                          type="button"
-                                          style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem", flexShrink: 0 }}
-                                          onClick={() => { setEditingEventDateId(event.id); setEditingEventDateValue(event.event_date_text || ""); }}
-                                        >
-                                          Edit Date
-                                        </button>
-                                      </div>
-                                    )}
-                                    {editingEventLocationId === event.id ? (
-                                      <div className="controls" style={{ marginTop: "0.25rem" }}>
-                                        <input
-                                          className="directoryInput"
-                                          type="text"
-                                          value={editingEventLocationValue}
-                                          autoFocus
-                                          placeholder="Location"
-                                          onChange={(e) => setEditingEventLocationValue(e.target.value)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Enter") void saveEventLocation(event.id, editingEventLocationValue);
-                                            if (e.key === "Escape") { setEditingEventLocationId(null); setEditingEventLocationValue(""); }
-                                          }}
-                                          style={{ flex: 1 }}
-                                        />
-                                        <button className="primary" type="button" onClick={() => void saveEventLocation(event.id, editingEventLocationValue)}>Save</button>
-                                        <button className="secondary" type="button" onClick={() => { setEditingEventLocationId(null); setEditingEventLocationValue(""); }}>Cancel</button>
-                                      </div>
-                                    ) : (
-                                      <div className="controls" style={{ justifyContent: "space-between", gap: "0.4rem", marginTop: "0.2rem" }}>
-                                        <p className="meta" style={{ margin: 0, flex: 1 }}>
-                                          Location: {event.location || "—"}
-                                        </p>
-                                        <button
-                                          className="secondary"
-                                          type="button"
-                                          style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem", flexShrink: 0 }}
-                                          onClick={() => { setEditingEventLocationId(event.id); setEditingEventLocationValue(event.location || ""); }}
-                                        >
-                                          Edit Location
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", alignItems: "stretch" }}>
-                                    <button
-                                      className="secondary"
-                                      type="button"
-                                      onClick={async () => {
-                                        if (activeEventId === event.id) {
-                                          setActiveEventId(null);
-                                          setActiveEventAssets([]);
-                                          return;
-                                        }
-                                        setActiveEventId(event.id);
-                                        await loadAssetsForEvent(event.id);
-                                      }}
-                                    >
-                                      {activeEventId === event.id ? "Hide" : "Open"}
-                                    </button>
-                                    <button
-                                      className="secondary"
-                                      type="button"
-                                      style={{ color: "var(--danger, #c0392b)" }}
-                                      onClick={() => deleteLifeEvent(event.id)}
-                                      disabled={isSavingLifeStructure || isRecording || isLoading}
-                                    >
-                                      Delete
-                                    </button>
-                                  </div>
-                                </div>
-
-                                {activeEventId === event.id && (
-                                  <>
-                                    <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
-                                      <select
-                                        className="directoryInput"
-                                        value={eventMoveTargets[event.id] || (event.period_id === null ? UNASSIGNED_PERIOD_VALUE : `${event.period_id}`)}
-                                        onChange={(e) => setEventMoveTargets((current) => ({ ...current, [event.id]: e.target.value }))}
-                                        disabled={isSavingLifeStructure}
-                                      >
-                                        <option value={UNASSIGNED_PERIOD_VALUE}>Unassigned</option>
-                                        {sortedLifePeriods.map((periodOption) => (
-                                          <option key={periodOption.id} value={periodOption.id}>{periodOption.title}</option>
-                                        ))}
-                                      </select>
-                                      <button
-                                        className="secondary"
-                                        type="button"
-                                        onClick={() => moveEventToPeriod(event)}
-                                        disabled={isSavingLifeStructure}
-                                      >
-                                        Move to Period
-                                      </button>
-                                    </div>
-                                    {editingEventTitleId === event.id && (
-                                      <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
-                                        <select
-                                          className="directoryInput"
-                                          value={eventMergeTargets[event.id] || ""}
-                                          onChange={(e) => setEventMergeTargets((current) => ({ ...current, [event.id]: e.target.value }))}
-                                          disabled={isSavingLifeStructure}
-                                        >
-                                          <option value="">Merge into another event</option>
-                                          {eventsForPeriod.filter((candidate) => candidate.id !== event.id).map((candidate) => (
-                                            <option key={candidate.id} value={candidate.id}>{candidate.title}</option>
-                                          ))}
-                                        </select>
-                                        <button
-                                          className="secondary"
-                                          type="button"
-                                          onClick={() => mergeLifeEvent(event.id)}
-                                          disabled={!eventMergeTargets[event.id] || isSavingLifeStructure}
-                                        >
-                                          Merge Event
-                                        </button>
-                                        <button
-                                          className="ghost"
-                                          type="button"
-                                          title="Remove event wrapper only (keeps linked memory and assets)."
-                                          onClick={() => deleteLifeEvent(event.id)}
-                                          disabled={isSavingLifeStructure}
-                                        >
-                                          Remove Event
-                                        </button>
-                                      </div>
-                                    )}
-                                    <div className="controls" style={{ marginBottom: "0.55rem", flexWrap: "wrap" }}>
-                                      <button
-                                        className="secondary"
-                                        type="button"
-                                        onClick={() => summarizeEvent(event.id)}
-                                        disabled={eventActionId === event.id || isRecording || isLoading || isSavingLifeStructure}
-                                      >
-                                        {event.summary ? "Refresh Event Summary" : "Summarize Event"}
-                                      </button>
-                                      <button
-                                        className="secondary"
-                                        type="button"
-                                        onClick={() => deepResearchEvent(event.id)}
-                                        disabled={eventActionId === event.id || isRecording || isLoading || isSavingLifeStructure}
-                                      >
-                                        {event.research_summary ? "Refresh Deep Research" : "Deep Research"}
-                                      </button>
-                                    </div>
-                                    {event.summary && (
-                                      <section className="researchPanel" style={{ marginBottom: "0.55rem" }}>
-                                        <p className="researchLabel">Event Summary</p>
-                                        <pre className="researchSummary">{event.summary}</pre>
-                                      </section>
-                                    )}
-                                    {event.research_summary && (
-                                      <section className="researchPanel" style={{ marginBottom: "0.55rem" }}>
-                                        <p className="researchLabel">Deep Research</p>
-                                        <pre className="researchSummary">{event.research_summary}</pre>
-                                        {(event.research_queries || []).length > 0 && (
-                                          <div className="researchQueries">
-                                            <p className="researchSubhead">Search queries used</p>
-                                            <div className="researchQueryList">
-                                              {(event.research_queries || []).map((query) => (
-                                                <span key={`${event.id}-query-${query}`} className="researchQueryChip">{query}</span>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )}
-                                        {(event.research_sources || []).length > 0 && (
-                                          <div className="researchSources">
-                                            <p className="researchSubhead">Sources</p>
-                                            <ul className="researchSourceList">
-                                              {(event.research_sources || []).map((source) => (
-                                                <li key={`${event.id}-source-${source.url}`}>
-                                                  <a href={source.url} target="_blank" rel="noreferrer">
-                                                    {source.title}
-                                                  </a>
-                                                </li>
-                                              ))}
-                                            </ul>
-                                          </div>
-                                        )}
-                                      </section>
-                                    )}
-                                    {event.research_suggested_edit && (
-                                      <section className="suggestionBox" style={{ marginBottom: "0.55rem" }}>
-                                        <p className="suggestionLabel">Suggested event edits</p>
-                                        {event.research_suggested_edit.title && (
-                                          <p className="suggestionMeta">Title: <strong>{event.research_suggested_edit.title}</strong></p>
-                                        )}
-                                        {event.research_suggested_edit.event_date_text && (
-                                          <p className="suggestionMeta">Date: <strong>{event.research_suggested_edit.event_date_text}</strong></p>
-                                        )}
-                                        {event.research_suggested_edit.description && (
-                                          <p className="suggestionReasoning">Description: {event.research_suggested_edit.description}</p>
-                                        )}
-                                        <p className="suggestionReasoning">{event.research_suggested_edit.reasoning}</p>
-                                        <div className="suggestionActions">
-                                          <button
-                                            className="primary"
-                                            type="button"
-                                            onClick={() => acceptEventResearchSuggestion(event.id)}
-                                            disabled={eventActionId === event.id || isRecording || isLoading}
-                                          >
-                                            Apply
-                                          </button>
-                                          <button
-                                            className="ghost"
-                                            type="button"
-                                            onClick={() => dismissEventResearchSuggestion(event.id)}
-                                            disabled={eventActionId === event.id || isRecording || isLoading}
-                                          >
-                                            Dismiss
-                                          </button>
-                                        </div>
-                                      </section>
-                                    )}
-                                    {(() => {
-                                      const memoryIds = collectEventMemoryIds(
-                                        event,
-                                        activeEventId === event.id ? activeEventAssets : [],
-                                      );
-                                      const linkedMemories = memoryIds
-                                        .map((memoryId) => timeline.find((memory) => memory.id === memoryId))
-                                        .filter((memory): memory is MemoryEntry => memory !== undefined);
-                                      if (linkedMemories.length === 0) {
-                                        return null;
-                                      }
-                                      return (
-                                        <div className="lifeAssetList">
-                                          <div className="entitySectionLabel">
-                                            <span className="entityPill entityPillMemory">Memory</span>
-                                            Narrative, transcript, and extracted context
-                                          </div>
-                                          {linkedMemories.map((linkedMemory) => (
-                                            <div
-                                              key={`event-memory-${event.id}-${linkedMemory.id}`}
-                                              id={`memory-row-${linkedMemory.id}`}
-                                              className={`lifeAssetRow${highlightedElementId === `memory-card-${linkedMemory.id}` ? " focusPulse" : ""}`}
-                                            >
-                                              <div className="assetRowHeader">
-                                                <span style={{ flex: 1, minWidth: 0 }}>
-                                                  <strong>{linkedMemory.event_description || `Memory ${linkedMemory.id}`}</strong>
-                                                  <span className="meta">
-                                                    {linkedMemory.estimated_date_text ? ` · ${linkedMemory.estimated_date_text}` : ""}
-                                                  </span>
-                                                </span>
-                                                <div className="controls" style={{ gap: "0.4rem", justifyContent: "flex-end" }}>
-                                                  {editingMemoryTitleId === linkedMemory.id ? (
-                                                    <>
-                                                      <input
-                                                        className="directoryInput"
-                                                        type="text"
-                                                        value={editingMemoryTitleValue}
-                                                        autoFocus
-                                                        onChange={(e) => setEditingMemoryTitleValue(e.target.value)}
-                                                        onKeyDown={(e) => {
-                                                          if (e.key === "Enter") {
-                                                            void saveMemoryTitle(linkedMemory.id, event.id);
-                                                          }
-                                                          if (e.key === "Escape") {
-                                                            setEditingMemoryTitleId(null);
-                                                            setEditingMemoryTitleValue("");
-                                                          }
-                                                        }}
-                                                        style={{ minWidth: "14rem", maxWidth: "18rem" }}
-                                                      />
-                                                      <button className="primary" type="button" onClick={() => void saveMemoryTitle(linkedMemory.id, event.id)} disabled={memoryTitleSavingId === linkedMemory.id}>Save</button>
-                                                      <button className="secondary" type="button" onClick={() => { setEditingMemoryTitleId(null); setEditingMemoryTitleValue(""); }}>Cancel</button>
-                                                    </>
-                                                  ) : (
-                                                    <button
-                                                      className="secondary"
-                                                      type="button"
-                                                      style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
-                                                      onClick={() => {
-                                                        setEditingMemoryTitleId(linkedMemory.id);
-                                                        setEditingMemoryTitleValue(linkedMemory.event_description || "");
-                                                      }}
-                                                    >
-                                                      Edit Title
-                                                    </button>
-                                                  )}
-                                                  <button
-                                                    className="secondary"
-                                                    type="button"
-                                                    style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
-                                                    onClick={() => setExpandedMemoryRowIds((prev) => {
-                                                      const next = new Set(prev);
-                                                      if (next.has(linkedMemory.id)) next.delete(linkedMemory.id); else next.add(linkedMemory.id);
-                                                      return next;
-                                                    })}
-                                                  >
-                                                    {expandedMemoryRowIds.has(linkedMemory.id) ? "Collapse" : "Expand"}
-                                                  </button>
-                                                </div>
-                                              </div>
-                                              {expandedMemoryRowIds.has(linkedMemory.id) && (
-                                                <MemoryCard
-                                                  containerId={`memory-card-${linkedMemory.id}`}
-                                                  isHighlighted={highlightedElementId === `memory-card-${linkedMemory.id}`}
-                                                  memory={linkedMemory}
-                                                  linkedQuestions={questions.filter((q) => q.source_memory_id === linkedMemory.id)}
-                                                  peopleOptions={peopleDirectory}
-                                                  formatBytes={formatBytes}
-                                                  resolveApiUrl={resolveApiUrl}
-                                                  onAcceptSuggestion={acceptResearchSuggestion}
-                                                  onDismissSuggestion={dismissResearchSuggestion}
-                                                  onReanalyze={reanalyzeMemory}
-                                                  onDelete={deleteMemory}
-                                                  onAssignRecorder={assignRecorder}
-                                                  isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
-                                                  hideHeader
-                                                />
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      );
-                                    })()}
-                                    {(questionsByEventId.get(event.id)?.length ?? 0) > 0 && (
-                                      <div className="inlineQuestionList">
-                                        <p className="inlineQuestionListLabel">Open questions for this event</p>
-                                        {questionsByEventId.get(event.id)!.map(({ question, sourceMemory }) => (
-                                          <article key={question.id} className="questionCard inlineQuestionCard">
-                                            <p className="questionText">{question.text}</p>
-                                            {sourceMemory && (
-                                              <p className="questionSource">From: <em>{sourceMemory.event_description}</em></p>
-                                            )}
-                                            <div className="questionActions">
-                                              <button
-                                                className="primary"
-                                                type="button"
-                                                onClick={() => { setActiveQuestion(question); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                                                disabled={isRecording || isLoading}
-                                              >
-                                                Answer this
-                                              </button>
-                                              <button
-                                                className="ghost"
-                                                type="button"
-                                                onClick={() => dismissQuestion(question.id)}
-                                                disabled={isRecording || isLoading}
-                                              >
-                                                Remove
-                                              </button>
-                                            </div>
-                                          </article>
-                                        ))}
-                                      </div>
-                                    )}
-                                    <div style={{ marginTop: "0.5rem" }}>
-                                      <button
-                                        className="secondary"
-                                        type="button"
-                                        onClick={() => setEventCapturePanelOpenIds((prev) => {
-                                          const next = new Set(prev);
-                                          if (next.has(event.id)) next.delete(event.id); else next.add(event.id);
-                                          return next;
-                                        })}
-                                        disabled={isRecording && recordingForEventId !== event.id}
-                                      >
-                                        {eventCapturePanelOpenIds.has(event.id) ? "Close Add Memory" : "+ Add Memory"}
-                                      </button>
-                                    </div>
-                                    {eventCapturePanelOpenIds.has(event.id) && (
-                                      <div className="eventCapturePanel">
-                                        <div className="captureBlock">
-                                          <h4 className="captureBlockTitle">Record Audio</h4>
-                                          <div className="inputSection">
-                                            <label className="meta" htmlFor={`event-mic-${event.id}`}>Input device</label>
-                                            <select
-                                              id={`event-mic-${event.id}`}
-                                              className="micSelect"
-                                              value={selectedDeviceId}
-                                              onChange={(e) => {
-                                                const nextDeviceId = e.target.value;
-                                                setSelectedDeviceId(nextDeviceId);
-                                                if (nextDeviceId) localStorage.setItem(AUDIO_DEVICE_STORAGE_KEY, nextDeviceId);
-                                                else localStorage.removeItem(AUDIO_DEVICE_STORAGE_KEY);
-                                              }}
-                                              disabled={isRecording || isLoading || audioDevices.length === 0}
-                                            >
-                                              {audioDevices.length === 0 && <option value="">No microphones found</option>}
-                                              {audioDevices.map((device) => (
-                                                <option key={device.deviceId} value={device.deviceId}>{device.label}</option>
-                                              ))}
-                                            </select>
-                                            <div className="levelWrap" aria-label="audio input level">
-                                              <div className="levelTrack">
-                                                <div className="levelFill" style={{ width: `${Math.round(audioLevel * 100)}%` }} />
-                                              </div>
-                                              <span className="meta levelText">Input level: {Math.round(audioLevel * 100)}%</span>
-                                            </div>
-                                          </div>
-                                          {recordingForEventId === event.id ? (
-                                            <>
-                                              <p className="meta" style={{ marginBottom: "0.35rem" }}>Recording… <span className="badge">live</span></p>
-                                              <div className="controls">
-                                                <button className="secondary" type="button" onClick={stopRecording} disabled={!isRecording || isLoading}>Stop &amp; Process</button>
-                                                <button className="ghost" type="button" onClick={cancelRecording} disabled={!isRecording || isLoading}>Cancel</button>
-                                              </div>
-                                            </>
-                                          ) : (
-                                            <div className="controls">
-                                              <button className="primary" type="button" onClick={() => startRecording(event.id)} disabled={isRecording || isLoading || audioDevices.length === 0}>Start Recording</button>
-                                            </div>
-                                          )}
-                                          {eventRecordingPending[event.id] && (
-                                            <div className="pendingRecordingInline" style={{ marginTop: "0.5rem" }}>
-                                              <audio controls preload="metadata" src={eventRecordingPending[event.id].audioUrl} style={{ flex: 1 }} />
-                                              <span className="meta">
-                                                {eventRecordingPending[event.id].status === "processing" && "Processing…"}
-                                                {eventRecordingPending[event.id].status === "saved" && "Saved ✓"}
-                                                {eventRecordingPending[event.id].status === "failed" && (eventRecordingPending[event.id].error ?? "Failed")}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
-                                        <div className="captureBlock">
-                                          <h4 className="captureBlockTitle">Upload a Document</h4>
-                                          <p className="meta">Upload a PDF, image, or text file and link it directly to this event as an asset.</p>
-                                          <div className="controls">
-                                            <input
-                                              type="file"
-                                              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt"
-                                              disabled={eventDocumentUploadingId === event.id || isRecording || isLoading}
-                                              onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) uploadDocumentToEvent(file, event.id);
-                                                e.currentTarget.value = "";
-                                              }}
-                                              style={{ flex: 1 }}
-                                            />
-                                          </div>
-                                          {eventDocumentUploadingId === event.id && <p className="status">Uploading…</p>}
-                                          {eventDocumentErrors[event.id] && <p className="status" style={{ color: "var(--error, #c00)" }}>{eventDocumentErrors[event.id]}</p>}
-                                        </div>
-                                        <div className="captureBlock">
-                                          <h4 className="captureBlockTitle">Upload Asset</h4>
-                                          <p className="meta">Upload a photo, audio, or file directly as an asset without AI analysis.</p>
-                                          <input
-                                            ref={eventAssetInputRef}
-                                            type="file"
-                                            accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt,.mp3,.wav,.m4a,.ogg,.webm,audio/*"
-                                            disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
-                                            onChange={(e) => {
-                                              const file = e.target.files?.[0];
-                                              if (file) uploadAssetToActiveEvent(file);
-                                            }}
-                                          />
-                                        </div>
-                                      </div>
-                                    )}
-                                    {activeEventAssets.length === 0 ? (
-                                      <p className="meta">No assets linked to this event yet.</p>
-                                    ) : (
-                                      <div className="lifeAssetList">
-                                        <div className="entitySectionLabel">
-                                          <span className="entityPill entityPillAsset">Assets</span>
-                                          Supporting files linked to this event
-                                        </div>
-                                        {activeEventAssets.map((asset) => (
-                                          <div
-                                            key={asset.id}
-                                            id={`asset-row-${asset.id}`}
-                                            className={`lifeAssetRow${highlightedElementId === `asset-row-${asset.id}` ? " focusPulse" : ""}`}
-                                          >
-                                            <div className="assetRowHeader">
-                                              <span style={{ flex: 1, minWidth: 0 }}>
-                                                <strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong>
-                                                <span className="meta"> · {asset.kind}{asset.size_bytes ? ` · ${formatBytes(asset.size_bytes)}` : ""}</span>
-                                              </span>
-                                              <button
-                                                className="secondary"
-                                                type="button"
-                                                style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
-                                                onClick={() => setExpandedAssetRowIds((prev) => {
-                                                  const next = new Set(prev);
-                                                  if (next.has(asset.id)) next.delete(asset.id); else next.add(asset.id);
-                                                  return next;
-                                                })}
-                                              >
-                                                {expandedAssetRowIds.has(asset.id) ? "Collapse" : "Expand"}
-                                              </button>
-                                            </div>
-                                            {expandedAssetRowIds.has(asset.id) && <div>
-                                              {editingAssetTitleId === asset.id ? (
-                                                <div className="controls" style={{ marginBottom: "0.35rem" }}>
-                                                  <input
-                                                    className="directoryInput"
-                                                    type="text"
-                                                    value={editingAssetTitleValue}
-                                                    autoFocus
-                                                    onChange={(e) => setEditingAssetTitleValue(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                      if (e.key === "Enter") {
-                                                        void saveAssetTitle(asset.id, event.id);
-                                                      }
-                                                      if (e.key === "Escape") {
-                                                        setEditingAssetTitleId(null);
-                                                        setEditingAssetTitleValue("");
-                                                      }
-                                                    }}
-                                                    style={{ flex: 1 }}
-                                                  />
-                                                  <button className="primary" type="button" onClick={() => void saveAssetTitle(asset.id, event.id)} disabled={assetTitleSavingId === asset.id}>Save</button>
-                                                  <button className="secondary" type="button" onClick={() => { setEditingAssetTitleId(null); setEditingAssetTitleValue(""); }}>Cancel</button>
-                                                </div>
-                                              ) : (
-                                                <div className="assetNotesRow" style={{ marginTop: 0 }}>
-                                                  <span className="meta">Title</span>
-                                                  <button
-                                                    className="secondary"
-                                                    type="button"
-                                                    style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
-                                                    onClick={() => {
-                                                      setEditingAssetTitleId(asset.id);
-                                                      setEditingAssetTitleValue(asset.title || "");
-                                                    }}
-                                                  >
-                                                    Edit Title
-                                                  </button>
-                                                </div>
-                                              )}
-                                              <p className="meta">Filename: {asset.original_filename || "none"}</p>
-                                              {asset.kind === "photo" && (
-                                                <img
-                                                  src={resolveApiUrl(`${asset.download_url}?download=false`)}
-                                                  alt={asset.title || asset.original_filename || `Asset ${asset.id}`}
-                                                  className="assetThumbnail"
-                                                />
-                                              )}
-                                              <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
-                                              {renderImageMetadataBadges(asset)}
-                                              {(asset.image_width !== null || asset.image_height !== null) && (
-                                                <p className="meta">Dimensions: {asset.image_width || "?"} x {asset.image_height || "?"}</p>
-                                              )}
-                                              {formatAssetCaptureDate(asset) && (
-                                                <p className="meta">Captured: {formatAssetCaptureDate(asset)}</p>
-                                              )}
-                                              {formatAssetGps(asset) && (
-                                                <p className="meta">Location: {formatAssetGps(asset)}</p>
-                                              )}
-                                              {(asset.camera_make || asset.camera_model) && (
-                                                <p className="meta">Camera: {[asset.camera_make, asset.camera_model].filter(Boolean).join(" ")}</p>
-                                              )}
-                                              {editingAssetNotesId === asset.id ? (
-                                                <div className="controls" style={{ marginTop: "0.35rem" }}>
-                                                  <input
-                                                    className="directoryInput"
-                                                    type="text"
-                                                    value={editingAssetNotesValue}
-                                                    autoFocus
-                                                    onChange={(e) => setEditingAssetNotesValue(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                      if (e.key === "Enter") {
-                                                        void saveAssetNotes(asset.id, event.id);
-                                                      }
-                                                      if (e.key === "Escape") {
-                                                        setEditingAssetNotesId(null);
-                                                        setEditingAssetNotesValue("");
-                                                      }
-                                                    }}
-                                                    style={{ flex: 1 }}
-                                                  />
-                                                  <button className="primary" type="button" onClick={() => void saveAssetNotes(asset.id, event.id)} disabled={assetNotesSavingId === asset.id}>Save</button>
-                                                  <button className="secondary" type="button" onClick={() => { setEditingAssetNotesId(null); setEditingAssetNotesValue(""); }}>Cancel</button>
-                                                </div>
-                                              ) : (
-                                                <div className="assetNotesRow">
-                                                  <p className="meta">Notes: {asset.notes || "none"}</p>
-                                                  <button
-                                                    className="secondary"
-                                                    type="button"
-                                                    style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
-                                                    onClick={() => {
-                                                      setEditingAssetNotesId(asset.id);
-                                                      setEditingAssetNotesValue(asset.notes || "");
-                                                    }}
-                                                  >
-                                                    Edit Notes
-                                                  </button>
-                                                </div>
-                                              )}
-                                              {asset.playback_url && (
-                                                <audio
-                                                  controls
-                                                  preload="metadata"
-                                                  src={resolveApiUrl(asset.playback_url)}
-                                                  style={{ width: "100%", marginTop: "0.45rem" }}
-                                                />
-                                              )}
-                                              {asset.text_excerpt && (
-                                                <p className="meta assetTranscript">Transcript: {asset.text_excerpt}</p>
-                                              )}
-                                            </div>}
-                                            {expandedAssetRowIds.has(asset.id) && <div className="assetActions">
-                                              <a className="secondary linkButton" href={resolveApiUrl(`${asset.download_url}?download=false`)} target="_blank" rel="noreferrer">
-                                                View
-                                              </a>
-                                              <a className="secondary linkButton" href={resolveApiUrl(`${asset.download_url}?download=true`)}>
-                                                Download
-                                              </a>
-                                              <button
-                                                className="ghost"
-                                                type="button"
-                                                onClick={() => deleteAsset(asset.id, activeEventId ?? undefined)}
-                                              >
-                                                Delete
-                                              </button>
-                                            </div>}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </>
-                                )}
-                              </article>
-                            ))}
+                            {eventsForPeriod.map((event) => renderEventCard(event, eventsForPeriod))}
                           </div>
                         </>
                       )}
-                    </article>
+                    </LifePeriodCard>
                   );
                 })}
               </div>
@@ -2871,864 +1782,36 @@ export default function HomePage() {
                 <p className="meta">Events with no period assignment appear here so they never disappear from view.</p>
                 <div className="lifeEventList">
                   {unassignedEvents.length === 0 && <p className="meta">No unassigned events.</p>}
-                  {unassignedEvents.map((event) => (
-                    <article
-                      key={event.id}
-                      id={`event-card-${event.id}`}
-                      className={`memory${highlightedElementId === `event-card-${event.id}` ? " focusPulse" : ""}`}
-                    >
-                      <div className="periodSummaryRow">
-                        <div>
-                          <p className="entitySectionLabel" style={{ marginBottom: "0.2rem" }}>
-                            <span className="entityPill entityPillEvent">Event</span>
-                            <span className="entityFlowArrow">contains</span>
-                            <span className="entityPill entityPillMemory">Memory</span>
-                            <span className="entityFlowArrow">+</span>
-                            <span className="entityPill entityPillAsset">Assets</span>
-                          </p>
-                          {editingEventTitleId === event.id ? (
-                            <div className="controls" style={{ marginBottom: "0.35rem" }}>
-                              <input
-                                className="directoryInput"
-                                type="text"
-                                value={editingEventTitleValue}
-                                autoFocus
-                                onChange={(e) => setEditingEventTitleValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") renameEvent(event.id, editingEventTitleValue);
-                                  if (e.key === "Escape") { setEditingEventTitleId(null); setEditingEventTitleValue(""); }
-                                }}
-                                style={{ flex: 1 }}
-                              />
-                              <button className="primary" type="button" onClick={() => renameEvent(event.id, editingEventTitleValue)} disabled={!editingEventTitleValue.trim()}>Save</button>
-                              <button className="secondary" type="button" onClick={() => { setEditingEventTitleId(null); setEditingEventTitleValue(""); }}>Cancel</button>
-                            </div>
-                          ) : (
-                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                              <p style={{ margin: 0, fontWeight: 700 }}>{event.title}</p>
-                              <button
-                                className="secondary"
-                                type="button"
-                                title="Edit title"
-                                style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem" }}
-                                onClick={() => { setEditingEventTitleId(event.id); setEditingEventTitleValue(event.title); }}
-                              >
-                                ✏️
-                              </button>
-                            </div>
-                          )}
-                          {editingEventDateId === event.id ? (
-                            <div className="controls" style={{ marginTop: "0.25rem" }}>
-                              <input
-                                className="directoryInput"
-                                type="text"
-                                value={editingEventDateValue}
-                                autoFocus
-                                placeholder="Event date text"
-                                onChange={(e) => setEditingEventDateValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") void saveEventDate(event.id, editingEventDateValue);
-                                  if (e.key === "Escape") { setEditingEventDateId(null); setEditingEventDateValue(""); }
-                                }}
-                                style={{ flex: 1 }}
-                              />
-                              <button className="primary" type="button" onClick={() => void saveEventDate(event.id, editingEventDateValue)}>Save</button>
-                              <button className="secondary" type="button" onClick={() => { setEditingEventDateId(null); setEditingEventDateValue(""); }}>Cancel</button>
-                            </div>
-                          ) : (
-                            <div className="controls" style={{ justifyContent: "space-between", gap: "0.4rem", marginTop: "0.2rem" }}>
-                              <p className="meta" style={{ margin: 0, flex: 1 }}>
-                                Date: {event.event_date_text || "unknown"} | Linked assets: {event.linked_asset_count}{(questionsByEventId.get(event.id)?.length ?? 0) > 0 && ` | Questions: ${questionsByEventId.get(event.id)!.length}`}
-                              </p>
-                              <button
-                                className="secondary"
-                                type="button"
-                                style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem", flexShrink: 0 }}
-                                onClick={() => { setEditingEventDateId(event.id); setEditingEventDateValue(event.event_date_text || ""); }}
-                              >
-                                Edit Date
-                              </button>
-                            </div>
-                          )}
-                          {editingEventLocationId === event.id ? (
-                            <div className="controls" style={{ marginTop: "0.25rem" }}>
-                              <input
-                                className="directoryInput"
-                                type="text"
-                                value={editingEventLocationValue}
-                                autoFocus
-                                placeholder="Location"
-                                onChange={(e) => setEditingEventLocationValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") void saveEventLocation(event.id, editingEventLocationValue);
-                                  if (e.key === "Escape") { setEditingEventLocationId(null); setEditingEventLocationValue(""); }
-                                }}
-                                style={{ flex: 1 }}
-                              />
-                              <button className="primary" type="button" onClick={() => void saveEventLocation(event.id, editingEventLocationValue)}>Save</button>
-                              <button className="secondary" type="button" onClick={() => { setEditingEventLocationId(null); setEditingEventLocationValue(""); }}>Cancel</button>
-                            </div>
-                          ) : (
-                            <div className="controls" style={{ justifyContent: "space-between", gap: "0.4rem", marginTop: "0.2rem" }}>
-                              <p className="meta" style={{ margin: 0, flex: 1 }}>
-                                Location: {event.location || "—"}
-                              </p>
-                              <button
-                                className="secondary"
-                                type="button"
-                                style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem", flexShrink: 0 }}
-                                onClick={() => { setEditingEventLocationId(event.id); setEditingEventLocationValue(event.location || ""); }}
-                              >
-                                Edit Location
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", alignItems: "stretch" }}>
-                          <button
-                            className="secondary"
-                            type="button"
-                            onClick={async () => {
-                              if (activeEventId === event.id) {
-                                setActiveEventId(null);
-                                setActiveEventAssets([]);
-                                return;
-                              }
-                              setActiveEventId(event.id);
-                              await loadAssetsForEvent(event.id);
-                            }}
-                          >
-                            {activeEventId === event.id ? "Hide" : "Open"}
-                          </button>
-                          <button
-                            className="secondary"
-                            type="button"
-                            style={{ color: "var(--danger, #c0392b)" }}
-                            onClick={() => deleteLifeEvent(event.id)}
-                            disabled={isSavingLifeStructure || isRecording || isLoading}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-
-                      {activeEventId === event.id && (
-                        <>
-                          <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
-                            <select
-                              className="directoryInput"
-                              value={eventMoveTargets[event.id] || (event.period_id === null ? UNASSIGNED_PERIOD_VALUE : `${event.period_id}`)}
-                              onChange={(e) => setEventMoveTargets((current) => ({ ...current, [event.id]: e.target.value }))}
-                              disabled={isSavingLifeStructure}
-                            >
-                              <option value={UNASSIGNED_PERIOD_VALUE}>Unassigned</option>
-                              {sortedLifePeriods.map((periodOption) => (
-                                <option key={periodOption.id} value={periodOption.id}>{periodOption.title}</option>
-                              ))}
-                            </select>
-                            <button
-                              className="secondary"
-                              type="button"
-                              onClick={() => moveEventToPeriod(event)}
-                              disabled={isSavingLifeStructure}
-                            >
-                              Move to Period
-                            </button>
-                          </div>
-                          {editingEventTitleId === event.id && (
-                            <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
-                              <select
-                                className="directoryInput"
-                                value={eventMergeTargets[event.id] || ""}
-                                onChange={(e) => setEventMergeTargets((current) => ({ ...current, [event.id]: e.target.value }))}
-                                disabled={isSavingLifeStructure}
-                              >
-                                <option value="">Merge into another event</option>
-                                {lifeEvents.filter((candidate) => candidate.id !== event.id).map((candidate) => (
-                                  <option key={candidate.id} value={candidate.id}>{candidate.title}</option>
-                                ))}
-                              </select>
-                              <button
-                                className="secondary"
-                                type="button"
-                                onClick={() => mergeLifeEvent(event.id)}
-                                disabled={!eventMergeTargets[event.id] || isSavingLifeStructure}
-                              >
-                                Merge Event
-                              </button>
-                              <button
-                                className="ghost"
-                                type="button"
-                                title="Remove event wrapper only (keeps linked memory and assets)."
-                                onClick={() => deleteLifeEvent(event.id)}
-                                disabled={isSavingLifeStructure}
-                              >
-                                Remove Event
-                              </button>
-                            </div>
-                          )}
-                          <div className="controls" style={{ marginBottom: "0.55rem", flexWrap: "wrap" }}>
-                            <button
-                              className="secondary"
-                              type="button"
-                              onClick={() => summarizeEvent(event.id)}
-                              disabled={eventActionId === event.id || isRecording || isLoading || isSavingLifeStructure}
-                            >
-                              {event.summary ? "Refresh Event Summary" : "Summarize Event"}
-                            </button>
-                            <button
-                              className="secondary"
-                              type="button"
-                              onClick={() => deepResearchEvent(event.id)}
-                              disabled={eventActionId === event.id || isRecording || isLoading || isSavingLifeStructure}
-                            >
-                              {event.research_summary ? "Refresh Deep Research" : "Deep Research"}
-                            </button>
-                          </div>
-                          {event.summary && (
-                            <section className="researchPanel" style={{ marginBottom: "0.55rem" }}>
-                              <p className="researchLabel">Event Summary</p>
-                              <pre className="researchSummary">{event.summary}</pre>
-                            </section>
-                          )}
-                          {event.research_summary && (
-                            <section className="researchPanel" style={{ marginBottom: "0.55rem" }}>
-                              <p className="researchLabel">Deep Research</p>
-                              <pre className="researchSummary">{event.research_summary}</pre>
-                              {(event.research_queries || []).length > 0 && (
-                                <div className="researchQueries">
-                                  <p className="researchSubhead">Search queries used</p>
-                                  <div className="researchQueryList">
-                                    {(event.research_queries || []).map((query) => (
-                                      <span key={`${event.id}-query-${query}`} className="researchQueryChip">{query}</span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              {(event.research_sources || []).length > 0 && (
-                                <div className="researchSources">
-                                  <p className="researchSubhead">Sources</p>
-                                  <ul className="researchSourceList">
-                                    {(event.research_sources || []).map((source) => (
-                                      <li key={`${event.id}-source-${source.url}`}>
-                                        <a href={source.url} target="_blank" rel="noreferrer">
-                                          {source.title}
-                                        </a>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-                            </section>
-                          )}
-                          {event.research_suggested_edit && (
-                            <section className="suggestionBox" style={{ marginBottom: "0.55rem" }}>
-                              <p className="suggestionLabel">Suggested event edits</p>
-                              {event.research_suggested_edit.title && (
-                                <p className="suggestionMeta">Title: <strong>{event.research_suggested_edit.title}</strong></p>
-                              )}
-                              {event.research_suggested_edit.event_date_text && (
-                                <p className="suggestionMeta">Date: <strong>{event.research_suggested_edit.event_date_text}</strong></p>
-                              )}
-                              {event.research_suggested_edit.description && (
-                                <p className="suggestionReasoning">Description: {event.research_suggested_edit.description}</p>
-                              )}
-                              <p className="suggestionReasoning">{event.research_suggested_edit.reasoning}</p>
-                              <div className="suggestionActions">
-                                <button
-                                  className="primary"
-                                  type="button"
-                                  onClick={() => acceptEventResearchSuggestion(event.id)}
-                                  disabled={eventActionId === event.id || isRecording || isLoading}
-                                >
-                                  Apply
-                                </button>
-                                <button
-                                  className="ghost"
-                                  type="button"
-                                  onClick={() => dismissEventResearchSuggestion(event.id)}
-                                  disabled={eventActionId === event.id || isRecording || isLoading}
-                                >
-                                  Dismiss
-                                </button>
-                              </div>
-                            </section>
-                          )}
-                          {(() => {
-                            const memoryIds = collectEventMemoryIds(
-                              event,
-                              activeEventId === event.id ? activeEventAssets : [],
-                            );
-                            const linkedMemories = memoryIds
-                              .map((memoryId) => timeline.find((memory) => memory.id === memoryId))
-                              .filter((memory): memory is MemoryEntry => memory !== undefined);
-                            if (linkedMemories.length === 0) {
-                              return null;
-                            }
-                            return (
-                              <div className="lifeAssetList">
-                                <div className="entitySectionLabel">
-                                  <span className="entityPill entityPillMemory">Memory</span>
-                                  Narrative, transcript, and extracted context
-                                </div>
-                                {linkedMemories.map((linkedMemory) => (
-                                  <div
-                                    key={`event-memory-${event.id}-${linkedMemory.id}`}
-                                    id={`memory-row-${linkedMemory.id}`}
-                                    className={`lifeAssetRow${highlightedElementId === `memory-card-${linkedMemory.id}` ? " focusPulse" : ""}`}
-                                  >
-                                    <div className="assetRowHeader">
-                                      <span style={{ flex: 1, minWidth: 0 }}>
-                                        <strong>{linkedMemory.event_description || `Memory ${linkedMemory.id}`}</strong>
-                                        <span className="meta">
-                                          {linkedMemory.estimated_date_text ? ` · ${linkedMemory.estimated_date_text}` : ""}
-                                        </span>
-                                      </span>
-                                      <div className="controls" style={{ gap: "0.4rem", justifyContent: "flex-end" }}>
-                                        {editingMemoryTitleId === linkedMemory.id ? (
-                                          <>
-                                            <input
-                                              className="directoryInput"
-                                              type="text"
-                                              value={editingMemoryTitleValue}
-                                              autoFocus
-                                              onChange={(e) => setEditingMemoryTitleValue(e.target.value)}
-                                              onKeyDown={(e) => {
-                                                if (e.key === "Enter") {
-                                                  void saveMemoryTitle(linkedMemory.id, event.id);
-                                                }
-                                                if (e.key === "Escape") {
-                                                  setEditingMemoryTitleId(null);
-                                                  setEditingMemoryTitleValue("");
-                                                }
-                                              }}
-                                              style={{ minWidth: "14rem", maxWidth: "18rem" }}
-                                            />
-                                            <button className="primary" type="button" onClick={() => void saveMemoryTitle(linkedMemory.id, event.id)} disabled={memoryTitleSavingId === linkedMemory.id}>Save</button>
-                                            <button className="secondary" type="button" onClick={() => { setEditingMemoryTitleId(null); setEditingMemoryTitleValue(""); }}>Cancel</button>
-                                          </>
-                                        ) : (
-                                          <button
-                                            className="secondary"
-                                            type="button"
-                                            style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
-                                            onClick={() => {
-                                              setEditingMemoryTitleId(linkedMemory.id);
-                                              setEditingMemoryTitleValue(linkedMemory.event_description || "");
-                                            }}
-                                          >
-                                            Edit Title
-                                          </button>
-                                        )}
-                                        <button
-                                          className="secondary"
-                                          type="button"
-                                          style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
-                                          onClick={() => setExpandedMemoryRowIds((prev) => {
-                                            const next = new Set(prev);
-                                            if (next.has(linkedMemory.id)) next.delete(linkedMemory.id); else next.add(linkedMemory.id);
-                                            return next;
-                                          })}
-                                        >
-                                          {expandedMemoryRowIds.has(linkedMemory.id) ? "Collapse" : "Expand"}
-                                        </button>
-                                      </div>
-                                    </div>
-                                    {expandedMemoryRowIds.has(linkedMemory.id) && (
-                                      <MemoryCard
-                                        containerId={`memory-card-${linkedMemory.id}`}
-                                        isHighlighted={highlightedElementId === `memory-card-${linkedMemory.id}`}
-                                        memory={linkedMemory}
-                                        linkedQuestions={questions.filter((q) => q.source_memory_id === linkedMemory.id)}
-                                        peopleOptions={peopleDirectory}
-                                        formatBytes={formatBytes}
-                                        resolveApiUrl={resolveApiUrl}
-                                        onAcceptSuggestion={acceptResearchSuggestion}
-                                        onDismissSuggestion={dismissResearchSuggestion}
-                                        onReanalyze={reanalyzeMemory}
-                                        onDelete={deleteMemory}
-                                        onAssignRecorder={assignRecorder}
-                                        isBusy={isLoading || memoryActionId === linkedMemory.id || isRecording}
-                                        hideHeader
-                                      />
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          })()}
-                          {(questionsByEventId.get(event.id)?.length ?? 0) > 0 && (
-                            <div className="inlineQuestionList">
-                              <p className="inlineQuestionListLabel">Open questions for this event</p>
-                              {questionsByEventId.get(event.id)!.map(({ question, sourceMemory }) => (
-                                <article key={question.id} className="questionCard inlineQuestionCard">
-                                  <p className="questionText">{question.text}</p>
-                                  {sourceMemory && (
-                                    <p className="questionSource">From: <em>{sourceMemory.event_description}</em></p>
-                                  )}
-                                  <div className="questionActions">
-                                    <button
-                                      className="primary"
-                                      type="button"
-                                      onClick={() => { setActiveQuestion(question); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                                      disabled={isRecording || isLoading}
-                                    >
-                                      Answer this
-                                    </button>
-                                    <button
-                                      className="ghost"
-                                      type="button"
-                                      onClick={() => dismissQuestion(question.id)}
-                                      disabled={isRecording || isLoading}
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                </article>
-                              ))}
-                            </div>
-                          )}
-                          <div style={{ marginTop: "0.5rem" }}>
-                            <button
-                              className="secondary"
-                              type="button"
-                              onClick={() => setEventCapturePanelOpenIds((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(event.id)) next.delete(event.id); else next.add(event.id);
-                                return next;
-                              })}
-                              disabled={isRecording && recordingForEventId !== event.id}
-                            >
-                              {eventCapturePanelOpenIds.has(event.id) ? "Close Add Memory" : "+ Add Memory"}
-                            </button>
-                          </div>
-                          {eventCapturePanelOpenIds.has(event.id) && (
-                            <div className="eventCapturePanel">
-                              <div className="captureBlock">
-                                <h4 className="captureBlockTitle">Record Audio</h4>
-                                <div className="inputSection">
-                                  <label className="meta" htmlFor={`event-mic-${event.id}`}>Input device</label>
-                                  <select
-                                    id={`event-mic-${event.id}`}
-                                    className="micSelect"
-                                    value={selectedDeviceId}
-                                    onChange={(e) => {
-                                      const nextDeviceId = e.target.value;
-                                      setSelectedDeviceId(nextDeviceId);
-                                      if (nextDeviceId) localStorage.setItem(AUDIO_DEVICE_STORAGE_KEY, nextDeviceId);
-                                      else localStorage.removeItem(AUDIO_DEVICE_STORAGE_KEY);
-                                    }}
-                                    disabled={isRecording || isLoading || audioDevices.length === 0}
-                                  >
-                                    {audioDevices.length === 0 && <option value="">No microphones found</option>}
-                                    {audioDevices.map((device) => (
-                                      <option key={device.deviceId} value={device.deviceId}>{device.label}</option>
-                                    ))}
-                                  </select>
-                                  <div className="levelWrap" aria-label="audio input level">
-                                    <div className="levelTrack">
-                                      <div className="levelFill" style={{ width: `${Math.round(audioLevel * 100)}%` }} />
-                                    </div>
-                                    <span className="meta levelText">Input level: {Math.round(audioLevel * 100)}%</span>
-                                  </div>
-                                </div>
-                                {recordingForEventId === event.id ? (
-                                  <>
-                                    <p className="meta" style={{ marginBottom: "0.35rem" }}>Recording… <span className="badge">live</span></p>
-                                    <div className="controls">
-                                      <button className="secondary" type="button" onClick={stopRecording} disabled={!isRecording || isLoading}>Stop &amp; Process</button>
-                                      <button className="ghost" type="button" onClick={cancelRecording} disabled={!isRecording || isLoading}>Cancel</button>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <div className="controls">
-                                    <button className="primary" type="button" onClick={() => startRecording(event.id)} disabled={isRecording || isLoading || audioDevices.length === 0}>Start Recording</button>
-                                  </div>
-                                )}
-                                {eventRecordingPending[event.id] && (
-                                  <div className="pendingRecordingInline" style={{ marginTop: "0.5rem" }}>
-                                    <audio controls preload="metadata" src={eventRecordingPending[event.id].audioUrl} style={{ flex: 1 }} />
-                                    <span className="meta">
-                                      {eventRecordingPending[event.id].status === "processing" && "Processing…"}
-                                      {eventRecordingPending[event.id].status === "saved" && "Saved ✓"}
-                                      {eventRecordingPending[event.id].status === "failed" && (eventRecordingPending[event.id].error ?? "Failed")}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                              <div className="captureBlock">
-                                <h4 className="captureBlockTitle">Upload a Document</h4>
-                                <p className="meta">Upload a PDF, image, or text file and link it directly to this event as an asset.</p>
-                                <div className="controls">
-                                  <input
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt"
-                                    disabled={eventDocumentUploadingId === event.id || isRecording || isLoading}
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) uploadDocumentToEvent(file, event.id);
-                                      e.currentTarget.value = "";
-                                    }}
-                                    style={{ flex: 1 }}
-                                  />
-                                </div>
-                                {eventDocumentUploadingId === event.id && <p className="status">Uploading…</p>}
-                                {eventDocumentErrors[event.id] && <p className="status" style={{ color: "var(--error, #c00)" }}>{eventDocumentErrors[event.id]}</p>}
-                              </div>
-                              <div className="captureBlock">
-                                <h4 className="captureBlockTitle">Upload Asset</h4>
-                                <p className="meta">Upload a photo, audio, or file directly as an asset without AI analysis.</p>
-                                <input
-                                  ref={eventAssetInputRef}
-                                  type="file"
-                                  accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt,.mp3,.wav,.m4a,.ogg,.webm,audio/*"
-                                  disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) uploadAssetToActiveEvent(file);
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          )}
-                          {activeEventAssets.length === 0 ? (
-                            <p className="meta">No assets linked to this event yet.</p>
-                          ) : (
-                            <div className="lifeAssetList">
-                              <div className="entitySectionLabel">
-                                <span className="entityPill entityPillAsset">Assets</span>
-                                Supporting files linked to this event
-                              </div>
-                              {activeEventAssets.map((asset) => (
-                                <div
-                                  key={asset.id}
-                                  id={`asset-row-${asset.id}`}
-                                  className={`lifeAssetRow${highlightedElementId === `asset-row-${asset.id}` ? " focusPulse" : ""}`}
-                                >
-                                  <div className="assetRowHeader">
-                                    <span style={{ flex: 1, minWidth: 0 }}>
-                                      <strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong>
-                                      <span className="meta"> · {asset.kind}{asset.size_bytes ? ` · ${formatBytes(asset.size_bytes)}` : ""}</span>
-                                    </span>
-                                    <button
-                                      className="secondary"
-                                      type="button"
-                                      style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
-                                      onClick={() => setExpandedAssetRowIds((prev) => {
-                                        const next = new Set(prev);
-                                        if (next.has(asset.id)) next.delete(asset.id); else next.add(asset.id);
-                                        return next;
-                                      })}
-                                    >
-                                      {expandedAssetRowIds.has(asset.id) ? "Collapse" : "Expand"}
-                                    </button>
-                                  </div>
-                                  {expandedAssetRowIds.has(asset.id) && <div>
-                                    {editingAssetTitleId === asset.id ? (
-                                      <div className="controls" style={{ marginBottom: "0.35rem" }}>
-                                        <input
-                                          className="directoryInput"
-                                          type="text"
-                                          value={editingAssetTitleValue}
-                                          autoFocus
-                                          onChange={(e) => setEditingAssetTitleValue(e.target.value)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
-                                              void saveAssetTitle(asset.id, event.id);
-                                            }
-                                            if (e.key === "Escape") {
-                                              setEditingAssetTitleId(null);
-                                              setEditingAssetTitleValue("");
-                                            }
-                                          }}
-                                          style={{ flex: 1 }}
-                                        />
-                                        <button className="primary" type="button" onClick={() => void saveAssetTitle(asset.id, event.id)} disabled={assetTitleSavingId === asset.id}>Save</button>
-                                        <button className="secondary" type="button" onClick={() => { setEditingAssetTitleId(null); setEditingAssetTitleValue(""); }}>Cancel</button>
-                                      </div>
-                                    ) : (
-                                      <div className="assetNotesRow" style={{ marginTop: 0 }}>
-                                        <span className="meta">Title</span>
-                                        <button
-                                          className="secondary"
-                                          type="button"
-                                          style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
-                                          onClick={() => {
-                                            setEditingAssetTitleId(asset.id);
-                                            setEditingAssetTitleValue(asset.title || "");
-                                          }}
-                                        >
-                                          Edit Title
-                                        </button>
-                                      </div>
-                                    )}
-                                    <p className="meta">Filename: {asset.original_filename || "none"}</p>
-                                    {asset.kind === "photo" && (
-                                      <img
-                                        src={resolveApiUrl(`${asset.download_url}?download=false`)}
-                                        alt={asset.title || asset.original_filename || `Asset ${asset.id}`}
-                                        className="assetThumbnail"
-                                      />
-                                    )}
-                                    <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
-                                    {renderImageMetadataBadges(asset)}
-                                    {(asset.image_width !== null || asset.image_height !== null) && (
-                                      <p className="meta">Dimensions: {asset.image_width || "?"} x {asset.image_height || "?"}</p>
-                                    )}
-                                    {formatAssetCaptureDate(asset) && (
-                                      <p className="meta">Captured: {formatAssetCaptureDate(asset)}</p>
-                                    )}
-                                    {formatAssetGps(asset) && (
-                                      <p className="meta">Location: {formatAssetGps(asset)}</p>
-                                    )}
-                                    {(asset.camera_make || asset.camera_model) && (
-                                      <p className="meta">Camera: {[asset.camera_make, asset.camera_model].filter(Boolean).join(" ")}</p>
-                                    )}
-                                    {editingAssetNotesId === asset.id ? (
-                                      <div className="controls" style={{ marginTop: "0.35rem" }}>
-                                        <input
-                                          className="directoryInput"
-                                          type="text"
-                                          value={editingAssetNotesValue}
-                                          autoFocus
-                                          onChange={(e) => setEditingAssetNotesValue(e.target.value)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
-                                              void saveAssetNotes(asset.id, event.id);
-                                            }
-                                            if (e.key === "Escape") {
-                                              setEditingAssetNotesId(null);
-                                              setEditingAssetNotesValue("");
-                                            }
-                                          }}
-                                          style={{ flex: 1 }}
-                                        />
-                                        <button className="primary" type="button" onClick={() => void saveAssetNotes(asset.id, event.id)} disabled={assetNotesSavingId === asset.id}>Save</button>
-                                        <button className="secondary" type="button" onClick={() => { setEditingAssetNotesId(null); setEditingAssetNotesValue(""); }}>Cancel</button>
-                                      </div>
-                                    ) : (
-                                      <div className="assetNotesRow">
-                                        <p className="meta">Notes: {asset.notes || "none"}</p>
-                                        <button
-                                          className="secondary"
-                                          type="button"
-                                          style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
-                                          onClick={() => {
-                                            setEditingAssetNotesId(asset.id);
-                                            setEditingAssetNotesValue(asset.notes || "");
-                                          }}
-                                        >
-                                          Edit Notes
-                                        </button>
-                                      </div>
-                                    )}
-                                    {asset.playback_url && (
-                                      <audio
-                                        controls
-                                        preload="metadata"
-                                        src={resolveApiUrl(asset.playback_url)}
-                                        style={{ width: "100%", marginTop: "0.45rem" }}
-                                      />
-                                    )}
-                                    {asset.text_excerpt && (
-                                      <p className="meta assetTranscript">Transcript: {asset.text_excerpt}</p>
-                                    )}
-                                  </div>}
-                                  {expandedAssetRowIds.has(asset.id) && <div className="assetActions">
-                                    <a className="secondary linkButton" href={resolveApiUrl(`${asset.download_url}?download=false`)} target="_blank" rel="noreferrer">
-                                      View
-                                    </a>
-                                    <a className="secondary linkButton" href={resolveApiUrl(`${asset.download_url}?download=true`)}>
-                                      Download
-                                    </a>
-                                    <button
-                                      className="ghost"
-                                      type="button"
-                                      onClick={() => deleteAsset(asset.id, activeEventId ?? undefined)}
-                                    >
-                                      Delete
-                                    </button>
-                                  </div>}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </article>
-                  ))}
+                  {unassignedEvents.map((event) => renderEventCard(event, lifeEvents))}
                 </div>
               </article>
 
-              <article className="memory" style={{ marginTop: "0.75rem" }}>
-                <h3>Unlinked Assets Inbox</h3>
-                {unlinkedAssets.length === 0 ? (
-                  <p className="meta">No unlinked assets. Great job keeping context connected.</p>
-                ) : (
-                  <div className="lifeAssetList">
-                    {unlinkedAssets.map((asset) => (
-                      <div
-                        key={asset.id}
-                        id={`asset-row-${asset.id}`}
-                        className={`lifeAssetRow${highlightedElementId === `asset-row-${asset.id}` ? " focusPulse" : ""}`}
-                      >
-                        <div className="assetRowHeader">
-                          <span style={{ flex: 1, minWidth: 0 }}>
-                            <strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong>
-                            <span className="meta"> · {asset.kind}{asset.size_bytes ? ` · ${formatBytes(asset.size_bytes)}` : ""}</span>
-                          </span>
-                          <button
-                            className="secondary"
-                            type="button"
-                            style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
-                            onClick={() => setExpandedAssetRowIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(asset.id)) next.delete(asset.id); else next.add(asset.id);
-                              return next;
-                            })}
-                          >
-                            {expandedAssetRowIds.has(asset.id) ? "Collapse" : "Expand"}
-                          </button>
-                        </div>
-                        {expandedAssetRowIds.has(asset.id) && <div>
-                          {editingAssetTitleId === asset.id ? (
-                            <div className="controls" style={{ marginBottom: "0.35rem" }}>
-                              <input
-                                className="directoryInput"
-                                type="text"
-                                value={editingAssetTitleValue}
-                                autoFocus
-                                onChange={(e) => setEditingAssetTitleValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    void saveAssetTitle(asset.id);
-                                  }
-                                  if (e.key === "Escape") {
-                                    setEditingAssetTitleId(null);
-                                    setEditingAssetTitleValue("");
-                                  }
-                                }}
-                                style={{ flex: 1 }}
-                              />
-                              <button className="primary" type="button" onClick={() => void saveAssetTitle(asset.id)} disabled={assetTitleSavingId === asset.id}>Save</button>
-                              <button className="secondary" type="button" onClick={() => { setEditingAssetTitleId(null); setEditingAssetTitleValue(""); }}>Cancel</button>
-                            </div>
-                          ) : (
-                            <div className="assetNotesRow" style={{ marginTop: 0 }}>
-                              <span className="meta">Title</span>
-                              <button
-                                className="secondary"
-                                type="button"
-                                style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
-                                onClick={() => {
-                                  setEditingAssetTitleId(asset.id);
-                                  setEditingAssetTitleValue(asset.title || "");
-                                }}
-                              >
-                                Edit Title
-                              </button>
-                            </div>
-                          )}
-                          <p className="meta">Filename: {asset.original_filename || "none"}</p>
-                          {asset.kind === "photo" && (
-                            <img
-                              src={resolveApiUrl(`${asset.download_url}?download=false`)}
-                              alt={asset.title || asset.original_filename || `Asset ${asset.id}`}
-                              className="assetThumbnail"
-                            />
-                          )}
-                          <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
-                          {renderImageMetadataBadges(asset)}
-                          {(asset.image_width !== null || asset.image_height !== null) && (
-                            <p className="meta">Dimensions: {asset.image_width || "?"} x {asset.image_height || "?"}</p>
-                          )}
-                          {formatAssetCaptureDate(asset) && (
-                            <p className="meta">Captured: {formatAssetCaptureDate(asset)}</p>
-                          )}
-                          {formatAssetGps(asset) && (
-                            <p className="meta">Location: {formatAssetGps(asset)}</p>
-                          )}
-                          {(asset.camera_make || asset.camera_model) && (
-                            <p className="meta">Camera: {[asset.camera_make, asset.camera_model].filter(Boolean).join(" ")}</p>
-                          )}
-                          {editingAssetNotesId === asset.id ? (
-                            <div className="controls" style={{ marginTop: "0.35rem" }}>
-                              <input
-                                className="directoryInput"
-                                type="text"
-                                value={editingAssetNotesValue}
-                                autoFocus
-                                onChange={(e) => setEditingAssetNotesValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    void saveAssetNotes(asset.id);
-                                  }
-                                  if (e.key === "Escape") {
-                                    setEditingAssetNotesId(null);
-                                    setEditingAssetNotesValue("");
-                                  }
-                                }}
-                                style={{ flex: 1 }}
-                              />
-                              <button className="primary" type="button" onClick={() => void saveAssetNotes(asset.id)} disabled={assetNotesSavingId === asset.id}>Save</button>
-                              <button className="secondary" type="button" onClick={() => { setEditingAssetNotesId(null); setEditingAssetNotesValue(""); }}>Cancel</button>
-                            </div>
-                          ) : (
-                            <div className="assetNotesRow">
-                              <p className="meta">Notes: {asset.notes || "none"}</p>
-                              <button
-                                className="secondary"
-                                type="button"
-                                style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
-                                onClick={() => {
-                                  setEditingAssetNotesId(asset.id);
-                                  setEditingAssetNotesValue(asset.notes || "");
-                                }}
-                              >
-                                Edit Notes
-                              </button>
-                            </div>
-                          )}
-                        </div>}
-                        {expandedAssetRowIds.has(asset.id) && <div className="lifeAssetLinkControls">
-                          <select
-                            className="directoryInput"
-                            value={assetLinkTargets[asset.id] || ""}
-                            onChange={(e) => setAssetLinkTargets((current) => ({ ...current, [asset.id]: e.target.value }))}
-                            disabled={isSavingLifeStructure || lifeEvents.length === 0}
-                          >
-                            <option value="">Select event</option>
-                            {lifeEvents.map((event) => (
-                              <option key={event.id} value={event.id}>{event.title}</option>
-                            ))}
-                          </select>
-                          <button
-                            className="secondary"
-                            type="button"
-                            onClick={() => linkUnlinkedAssetToEvent(asset.id)}
-                            disabled={!assetLinkTargets[asset.id] || isSavingLifeStructure}
-                          >
-                            Link
-                          </button>
-                          <a className="ghost linkButton" href={resolveApiUrl(`${asset.download_url}?download=false`)} target="_blank" rel="noreferrer">
-                            View
-                          </a>
-                          <a className="ghost linkButton" href={resolveApiUrl(`${asset.download_url}?download=true`)}>
-                            Download
-                          </a>
-                          <button
-                            className="ghost"
-                            type="button"
-                            onClick={() => deleteAsset(asset.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </article>
+              <UnlinkedAssetsInbox
+                unlinkedAssets={unlinkedAssets}
+                highlightedElementId={highlightedElementId}
+                expandedAssetRowIds={expandedAssetRowIds}
+                setExpandedAssetRowIds={setExpandedAssetRowIds}
+                editingAssetTitleId={editingAssetTitleId}
+                setEditingAssetTitleId={setEditingAssetTitleId}
+                editingAssetTitleValue={editingAssetTitleValue}
+                setEditingAssetTitleValue={setEditingAssetTitleValue}
+                assetTitleSavingId={assetTitleSavingId}
+                saveAssetTitle={saveAssetTitle}
+                editingAssetNotesId={editingAssetNotesId}
+                setEditingAssetNotesId={setEditingAssetNotesId}
+                editingAssetNotesValue={editingAssetNotesValue}
+                setEditingAssetNotesValue={setEditingAssetNotesValue}
+                assetNotesSavingId={assetNotesSavingId}
+                saveAssetNotes={saveAssetNotes}
+                resolveApiUrl={resolveApiUrl}
+                formatBytes={formatBytes}
+                deleteAsset={deleteAsset}
+                lifeEvents={lifeEvents}
+                assetLinkTargets={assetLinkTargets}
+                setAssetLinkTargets={setAssetLinkTargets}
+                linkUnlinkedAssetToEvent={linkUnlinkedAssetToEvent}
+                isSavingLifeStructure={isSavingLifeStructure}
+              />
             </section>
 
             <section className="timeline">
@@ -3852,169 +1935,37 @@ export default function HomePage() {
           </>
       </div>
 
-      {isCaptureDrawerOpen && (
-        <button
-          type="button"
-          className="captureBackdrop"
-          aria-label="Close new memory panel"
-          onClick={() => setIsCaptureDrawerOpen(false)}
-        />
-      )}
-
-      <aside className={`captureSidebar ${isCaptureDrawerOpen ? "isOpen" : ""}`}>
-        <div className="captureSidebarHeader">
-          <div>
-            <h2>New Memory</h2>
-          </div>
-          <button
-            type="button"
-            className="ghost captureClose"
-            onClick={() => setIsCaptureDrawerOpen(false)}
-          >
-            Close
-          </button>
-        </div>
-
-        <div className="captureBlock">
-          <h3 className="captureBlockTitle">Record Audio</h3>
-          <div className="inputSection">
-            <label className="meta" htmlFor="mic-select">Input device</label>
-            <select
-              id="mic-select"
-              className="micSelect"
-              value={selectedDeviceId}
-              onChange={(event) => {
-                const nextDeviceId = event.target.value;
-                setSelectedDeviceId(nextDeviceId);
-                if (nextDeviceId) {
-                  localStorage.setItem(AUDIO_DEVICE_STORAGE_KEY, nextDeviceId);
-                } else {
-                  localStorage.removeItem(AUDIO_DEVICE_STORAGE_KEY);
-                }
-              }}
-              disabled={isRecording || isLoading || audioDevices.length === 0}
-            >
-              {audioDevices.length === 0 && <option value="">No microphones found</option>}
-              {audioDevices.map((device) => (
-                <option key={device.deviceId} value={device.deviceId}>
-                  {device.label}
-                </option>
-              ))}
-            </select>
-
-            <div className="levelWrap" aria-label="audio input level">
-              <div className="levelTrack">
-                <div className="levelFill" style={{ width: `${Math.round(audioLevel * 100)}%` }} />
-              </div>
-              <span className="meta levelText">Input level: {Math.round(audioLevel * 100)}%</span>
-            </div>
-          </div>
-
-          {activeQuestion && (
-            <div className="activePrompt">
-              <div className="activePromptBody">
-                <p className="activePromptLabel">Answering:</p>
-                <p className="activePromptText">{activeQuestion.text}</p>
-              </div>
-              <button
-                className="ghost"
-                type="button"
-                onClick={() => setActiveQuestion(null)}
-                disabled={isRecording}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-
-          <div className="controls">
-            <button
-              className="primary"
-              onClick={() => startRecording()}
-              disabled={isRecording || isLoading || audioDevices.length === 0}
-              type="button"
-            >
-              Start Recording
-            </button>
-            <button
-              className="secondary"
-              onClick={stopRecording}
-              disabled={!isRecording || isLoading}
-              type="button"
-            >
-              Stop & Process
-            </button>
-            <button
-              className="ghost"
-              onClick={cancelRecording}
-              disabled={!isRecording || isLoading}
-              type="button"
-            >
-              Cancel Recording
-            </button>
-          </div>
-          <p className="status">{status}</p>
-        </div>
-
-        <div className="captureBlock">
-          <h3 className="captureBlockTitle">Upload a Document</h3>
-          <p className="meta">Upload a PDF, image, or text file, or paste a screen clipping. It will be saved as an asset in the unlinked inbox.</p>
-          <div className="controls">
-            <input
-              ref={documentFileInputRef}
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt"
-              disabled={isUploadingDocument || isReadingClipboard || isRecording || isLoading}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  uploadDocument(file);
-                }
-              }}
-              style={{ flex: 1 }}
-            />
-            <button
-              className="secondary"
-              type="button"
-              onClick={pasteImageFromClipboard}
-              disabled={isUploadingDocument || isReadingClipboard || isRecording || isLoading}
-            >
-              Paste from Clipboard
-            </button>
-          </div>
-          <div
-            className={`pasteTarget ${isDragOverDocumentTarget ? "dragOver" : ""}`}
-            role="button"
-            tabIndex={0}
-            onPaste={onDocumentPasteZonePaste}
-            onDragEnter={onDocumentDragEnter}
-            onDragOver={onDocumentDragOver}
-            onDragLeave={onDocumentDragLeave}
-            onDrop={onDocumentDrop}
-            aria-label="Paste image from clipboard"
-          >
-            <p className="pasteTargetTitle">Paste or Drop a File</p>
-            <p className="meta">Click this area and press Ctrl+V, or drag and drop a PDF, image, or text file here.</p>
-          </div>
-          {(isUploadingDocument || isReadingClipboard) && <p className="status">Uploading file...</p>}
-          {documentUploadError && <p className="status" style={{ color: "var(--error, #c00)" }}>{documentUploadError}</p>}
-        </div>
-
-        {pendingRecording && (
-          <div className="captureBlock">
-            <h3 className="captureBlockTitle">Latest Recording</h3>
-            <p className="meta">
-              Status: <span className="badge">{pendingRecording.status}</span>
-            </p>
-            <p className="meta">File size: {formatBytes(pendingRecording.sizeBytes)}</p>
-            <audio controls preload="metadata" src={pendingRecording.audioUrl} style={{ width: "100%" }} />
-            {pendingRecording.sizeBytes === 0 && (
-              <p className="meta">This recording is empty (0 B), which explains silent playback.</p>
-            )}
-            {pendingRecording.error && <p className="meta">{pendingRecording.error}</p>}
-          </div>
-        )}
-      </aside>
+      <CaptureSidebar
+        isCaptureDrawerOpen={isCaptureDrawerOpen}
+        setIsCaptureDrawerOpen={setIsCaptureDrawerOpen}
+        selectedDeviceId={selectedDeviceId}
+        setSelectedDeviceId={setSelectedDeviceId}
+        audioDevices={audioDevices}
+        audioLevel={audioLevel}
+        isRecording={isRecording}
+        isLoading={isLoading}
+        activeQuestion={activeQuestion}
+        setActiveQuestion={setActiveQuestion}
+        status={status}
+        startRecording={() => startRecording()}
+        stopRecording={stopRecording}
+        cancelRecording={cancelRecording}
+        documentFileInputRef={documentFileInputRef}
+        isUploadingDocument={isUploadingDocument}
+        isReadingClipboard={isReadingClipboard}
+        isDragOverDocumentTarget={isDragOverDocumentTarget}
+        documentUploadError={documentUploadError}
+        uploadDocument={uploadDocument}
+        pasteImageFromClipboard={pasteImageFromClipboard}
+        onDocumentPasteZonePaste={onDocumentPasteZonePaste}
+        onDocumentDragEnter={onDocumentDragEnter}
+        onDocumentDragOver={onDocumentDragOver}
+        onDocumentDragLeave={onDocumentDragLeave}
+        onDocumentDrop={onDocumentDrop}
+        pendingRecording={pendingRecording}
+        formatBytes={formatBytes}
+        audioDeviceStorageKey={AUDIO_DEVICE_STORAGE_KEY}
+      />
     </main>
   );
 }
