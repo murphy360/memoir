@@ -307,14 +307,25 @@ def _generate_period_summary(period: LifePeriod, events: list[LifeEvent], asset_
     else:
         range_text = f"{min_year} to {max_year}"
 
-    event_titles = [(event.title or "").strip() for event in events if (event.title or "").strip()]
-    event_descriptions = [(event.description or "").strip() for event in events]
+    event_data = [
+        (
+            (event.title or "").strip(),
+            (event.description or "").strip(),
+            (event.event_date_text or "").strip(),
+        )
+        for event in events
+        if (event.title or "").strip()
+    ]
+    event_titles = [t for t, d, dt in event_data]
+    event_descriptions = [d for t, d, dt in event_data]
+    event_date_texts = [dt for t, d, dt in event_data]
 
     ai_text = generate_period_biography(
         period_title=period.title,
         year_range=range_text,
         event_titles=event_titles,
         event_descriptions=event_descriptions,
+        event_date_texts=event_date_texts,
         asset_count=asset_count,
     )
     if ai_text:

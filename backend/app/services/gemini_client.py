@@ -869,6 +869,7 @@ def generate_period_biography(
     year_range: str,
     event_titles: list[str],
     event_descriptions: list[str],
+    event_date_texts: list[str],
     asset_count: int,
 ) -> Optional[str]:
     """Use Gemini to write a short biography-style narrative paragraph for a life period.
@@ -883,13 +884,14 @@ def generate_period_biography(
     gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
 
-    # Build a concise bullet list of events for the prompt
+    # Build a concise bullet list of events for the prompt, including dates when known
     event_lines = []
-    for i, (title, desc) in enumerate(zip(event_titles, event_descriptions)):
+    for title, desc, date_text in zip(event_titles, event_descriptions, event_date_texts):
+        date_label = f" [{date_text}]" if date_text else ""
         if desc and desc.strip():
-            event_lines.append(f"- {title}: {desc.strip()[:300]}")
+            event_lines.append(f"- {title}{date_label}: {desc.strip()[:300]}")
         else:
-            event_lines.append(f"- {title}")
+            event_lines.append(f"- {title}{date_label}")
     events_block = "\n".join(event_lines) if event_lines else "(no events recorded yet)"
 
     prompt = (
@@ -897,11 +899,12 @@ def generate_period_biography(
         f"Chapter title: {period_title}\n"
         f"Time period: {year_range}\n"
         f"Number of supporting photos/documents: {asset_count}\n\n"
-        "Key events in this chapter:\n"
+        "Key events in this chapter (listed in chronological order — dates in brackets where known):\n"
         f"{events_block}\n\n"
         "Write a rich, flowing narrative in the style of a warm personal biography. Rules:\n"
         "- Write in third person (use 'he', 'she', or 'they' — infer from context, default to 'they' if unclear)\n"
         "- Weave all the events into connected prose — do NOT list them as bullets\n"
+        "- Preserve the chronological sequence of events exactly as listed above — do not reorder them\n"
         "- Use the actual names of places, schools, organisations, and people mentioned in the events\n"
         "- Write as many paragraphs as the material warrants — this may become a full memoir chapter\n"
         "- Always end on a complete sentence\n"
