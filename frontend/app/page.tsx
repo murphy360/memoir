@@ -1120,6 +1120,33 @@ export default function HomePage() {
     await startRecording(undefined, { quickCapture: true });
   }
 
+  // A period-scoped quick memory still needs an event wrapper so uploads and summaries stay organized.
+  async function startQuickMemoryCaptureForPeriod(period: { id: number; title: string }) {
+    if (isRecording || isLoading || isSavingLifeStructure) {
+      return;
+    }
+
+    setIsSavingLifeStructure(true);
+    setStatus(`Preparing quick memory for ${period.title}...`);
+    try {
+      const createdEvent = await createEvent({
+        title: "Quick memory",
+        period_id: period.id,
+        description: null,
+        location: null,
+        event_date_text: null,
+      });
+
+      await loadTimeline();
+      focusEventInTimeline(createdEvent.id, createdEvent.period_id);
+      await startRecording(createdEvent.id);
+    } catch {
+      setStatus("Failed to start quick memory in this period.");
+    } finally {
+      setIsSavingLifeStructure(false);
+    }
+  }
+
   function stopRecording() {
     shouldDiscardRecordingRef.current = false;
     const recorder = mediaRecorderRef.current;
@@ -1731,6 +1758,14 @@ export default function HomePage() {
                           {period.summary && <p>{displayPeriodSummary(period.summary)}</p>}
 
                           <div className="controls" style={{ marginTop: "0.45rem" }}>
+                            <button
+                              className="primary"
+                              type="button"
+                              onClick={() => void startQuickMemoryCaptureForPeriod(period)}
+                              disabled={isSavingLifeStructure || isRecording || isLoading}
+                            >
+                              Quick Memory in This Period
+                            </button>
                             <button
                               className="secondary"
                               type="button"

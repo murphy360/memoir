@@ -359,9 +359,7 @@ def create_event(body: CreateLifeEventRequest, db: Session = Depends(get_db)) ->
         ),
     )
     db.add(event)
-    if body.period_id is not None:
-        period = db.get(LifePeriod, body.period_id)
-        refresh_period_summary(db, period)
+    # Period summary refresh is deferred — triggered explicitly via "Analyze Period".
     db.commit()
     db.refresh(event)
     return build_event_response(event)
@@ -786,19 +784,11 @@ async def upload_asset(
     db.add(asset)
     db.flush()
 
-    if normalized_kind == "photo":
-        sync_asset_faces_for_photo(db, asset, file_bytes)
+    # Face detection and period summary are deferred — run "Process Event Photos" after upload.
+    # sync_asset_faces_for_photo is intentionally skipped here to keep uploads fast.
 
     if event:
         db.add(EventAsset(event_id=event.id, asset_id=asset.id, relation_type="evidence"))
-
-    period_for_summary: Optional[LifePeriod] = None
-    if period_id is not None:
-        period_for_summary = db.get(LifePeriod, period_id)
-    elif event and event.period_id is not None:
-        period_for_summary = db.get(LifePeriod, event.period_id)
-
-    refresh_period_summary(db, period_for_summary)
 
     db.commit()
     db.refresh(asset)

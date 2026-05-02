@@ -234,6 +234,8 @@ export function EventCard({
   memoryActionId,
 }: EventCardProps) {
   const [faceAssignTargets, setFaceAssignTargets] = useState<Record<number, string>>({});
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [isResearchOpen, setIsResearchOpen] = useState(false);
 
   return (
     <article
@@ -362,7 +364,6 @@ export function EventCard({
           </button>
         </div>
       </div>
-
       {isOpen && (
         <>
           <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
@@ -446,37 +447,61 @@ export function EventCard({
           </div>
           {event.summary && (
             <section className="researchPanel" style={{ marginBottom: "0.55rem" }}>
-              <p className="researchLabel">Event Summary</p>
-              <pre className="researchSummary">{event.summary}</pre>
+              <div className="controls" style={{ justifyContent: "space-between", marginBottom: "0.35rem" }}>
+                <p className="researchLabel" style={{ margin: 0 }}>Event Summary</p>
+                <button
+                  className="secondary"
+                  type="button"
+                  style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
+                  onClick={() => setIsSummaryOpen((current) => !current)}
+                >
+                  {isSummaryOpen ? "Collapse" : "Expand"}
+                </button>
+              </div>
+              {isSummaryOpen && <pre className="researchSummary">{event.summary}</pre>}
             </section>
           )}
           {event.research_summary && (
             <section className="researchPanel" style={{ marginBottom: "0.55rem" }}>
-              <p className="researchLabel">Deep Research</p>
-              <pre className="researchSummary">{event.research_summary}</pre>
-              {(event.research_queries || []).length > 0 && (
-                <div className="researchQueries">
-                  <p className="researchSubhead">Search queries used</p>
-                  <div className="researchQueryList">
-                    {(event.research_queries || []).map((query) => (
-                      <span key={`${event.id}-query-${query}`} className="researchQueryChip">{query}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {(event.research_sources || []).length > 0 && (
-                <div className="researchSources">
-                  <p className="researchSubhead">Sources</p>
-                  <ul className="researchSourceList">
-                    {(event.research_sources || []).map((source) => (
-                      <li key={`${event.id}-source-${source.url}`}>
-                        <a href={source.url} target="_blank" rel="noreferrer">
-                          {source.title}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              <div className="controls" style={{ justifyContent: "space-between", marginBottom: "0.35rem" }}>
+                <p className="researchLabel" style={{ margin: 0 }}>Deep Research</p>
+                <button
+                  className="secondary"
+                  type="button"
+                  style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
+                  onClick={() => setIsResearchOpen((current) => !current)}
+                >
+                  {isResearchOpen ? "Collapse" : "Expand"}
+                </button>
+              </div>
+              {isResearchOpen && (
+                <>
+                  <pre className="researchSummary">{event.research_summary}</pre>
+                  {(event.research_queries || []).length > 0 && (
+                    <div className="researchQueries">
+                      <p className="researchSubhead">Search queries used</p>
+                      <div className="researchQueryList">
+                        {(event.research_queries || []).map((query) => (
+                          <span key={`${event.id}-query-${query}`} className="researchQueryChip">{query}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {(event.research_sources || []).length > 0 && (
+                    <div className="researchSources">
+                      <p className="researchSubhead">Sources</p>
+                      <ul className="researchSourceList">
+                        {(event.research_sources || []).map((source) => (
+                          <li key={`${event.id}-source-${source.url}`}>
+                            <a href={source.url} target="_blank" rel="noreferrer">
+                              {source.title}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
               )}
             </section>
           )}
