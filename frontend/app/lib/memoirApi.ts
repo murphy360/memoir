@@ -20,7 +20,19 @@ function toAbsoluteApiUrl(path: string): string {
 
 async function expectOk(response: Response, message: string): Promise<void> {
   if (!response.ok) {
-    throw new Error(message);
+    let detail = "";
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const data = await response.json().catch(() => null);
+      if (data && typeof data.detail === "string") {
+        detail = data.detail;
+      } else if (data) {
+        detail = JSON.stringify(data);
+      }
+    } else {
+      detail = await response.text().catch(() => "");
+    }
+    throw new Error(detail ? `${message}: ${detail}` : message);
   }
 }
 

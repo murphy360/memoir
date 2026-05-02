@@ -18,6 +18,12 @@ type PendingRecording = {
   error?: string;
 };
 
+type EventDocumentUploadProgressItem = {
+  fileName: string;
+  status: "uploading" | "saved" | "failed";
+  error?: string;
+};
+
 type AudioInputDevice = {
   deviceId: string;
   label: string;
@@ -76,7 +82,8 @@ type EventCardProps = {
   eventRecordingPending: Record<number, PendingRecording>;
   eventDocumentUploadingId: number | null;
   eventDocumentErrors: Record<number, string | null>;
-  uploadDocumentToEvent: (file: File, eventId: number) => Promise<void>;
+  eventDocumentUploadProgressByEventId: Record<number, EventDocumentUploadProgressItem[]>;
+  uploadDocumentsToEvent: (files: File[], eventId: number) => Promise<void>;
   eventAssetInputRef: RefObject<HTMLInputElement>;
   isUploadingAsset: boolean;
   uploadAssetToActiveEvent: (file: File) => Promise<void>;
@@ -171,7 +178,8 @@ export function EventCard({
   eventRecordingPending,
   eventDocumentUploadingId,
   eventDocumentErrors,
-  uploadDocumentToEvent,
+  eventDocumentUploadProgressByEventId,
+  uploadDocumentsToEvent,
   eventAssetInputRef,
   isUploadingAsset,
   uploadAssetToActiveEvent,
@@ -574,7 +582,8 @@ export function EventCard({
               eventRecordingPending={eventRecordingPending}
               eventDocumentUploadingId={eventDocumentUploadingId}
               eventDocumentErrors={eventDocumentErrors}
-              uploadDocumentToEvent={(file, eventId) => { void uploadDocumentToEvent(file, eventId); }}
+              eventDocumentUploadProgress={eventDocumentUploadProgressByEventId[event.id] ?? []}
+              uploadDocumentsToEvent={(files, eventId) => { void uploadDocumentsToEvent(files, eventId); }}
               eventAssetInputRef={eventAssetInputRef}
               isUploadingAsset={isUploadingAsset}
               isSavingLifeStructure={isSavingLifeStructure}

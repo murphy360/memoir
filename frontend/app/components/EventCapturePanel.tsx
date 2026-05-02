@@ -1,4 +1,5 @@
-import type { RefObject } from "react";
+import { useRef, useState } from "react";
+import type { DragEventHandler, RefObject } from "react";
 
 const EVENT_AUDIO_STORAGE_KEY = "memoir.audioInputDeviceId";
 
@@ -13,6 +14,12 @@ type PendingRecording = {
 type AudioInputDevice = {
   deviceId: string;
   label: string;
+};
+
+type EventDocumentUploadProgressItem = {
+  fileName: string;
+  status: "uploading" | "saved" | "failed";
+  error?: string;
 };
 
 type EventCapturePanelProps = {
@@ -30,7 +37,8 @@ type EventCapturePanelProps = {
   eventRecordingPending: Record<number, PendingRecording>;
   eventDocumentUploadingId: number | null;
   eventDocumentErrors: Record<number, string | null>;
-  uploadDocumentToEvent: (file: File, eventId: number) => void;
+  eventDocumentUploadProgress: EventDocumentUploadProgressItem[];
+  uploadDocumentsToEvent: (files: File[], eventId: number) => void;
   eventAssetInputRef: RefObject<HTMLInputElement>;
   isUploadingAsset: boolean;
   isSavingLifeStructure: boolean;
@@ -52,12 +60,59 @@ export function EventCapturePanel({
   eventRecordingPending,
   eventDocumentUploadingId,
   eventDocumentErrors,
-  uploadDocumentToEvent,
+  eventDocumentUploadProgress,
+  uploadDocumentsToEvent,
   eventAssetInputRef,
   isUploadingAsset,
   isSavingLifeStructure,
   uploadAssetToActiveEvent,
 }: EventCapturePanelProps) {
+  const [isDragOverDocumentTarget, setIsDragOverDocumentTarget] = useState(false);
+  const documentDragDepthRef = useRef(0);
+
+  const onDocumentDragEnter: DragEventHandler<HTMLDivElement> = (event) => {
+    event.preventDefault();
+    if (eventDocumentUploadingId === eventId || isRecording || isLoading) {
+      return;
+    }
+    documentDragDepthRef.current += 1;
+    setIsDragOverDocumentTarget(true);
+  };
+
+  const onDocumentDragOver: DragEventHandler<HTMLDivElement> = (event) => {
+    event.preventDefault();
+    if (eventDocumentUploadingId === eventId || isRecording || isLoading) {
+      return;
+    }
+    event.dataTransfer.dropEffect = "copy";
+    setIsDragOverDocumentTarget(true);
+  };
+
+  const onDocumentDragLeave: DragEventHandler<HTMLDivElement> = (event) => {
+    event.preventDefault();
+    documentDragDepthRef.current = Math.max(0, documentDragDepthRef.current - 1);
+    if (documentDragDepthRef.current === 0) {
+      setIsDragOverDocumentTarget(false);
+    }
+  };
+
+  const onDocumentDrop: DragEventHandler<HTMLDivElement> = (event) => {
+    event.preventDefault();
+    documentDragDepthRef.current = 0;
+    setIsDragOverDocumentTarget(false);
+
+    if (eventDocumentUploadingId === eventId || isRecording || isLoading) {
+      return;
+    }
+
+    const droppedFiles = Array.from(event.dataTransfer.files ?? []);
+    if (droppedFiles.length === 0) {
+      return;
+    }
+
+    uploadDocumentsToEvent(droppedFiles, eventId);
+  };
+
   return (
     <div className="eventCapturePanel">
       <div className="captureBlock">
@@ -114,20 +169,52 @@ export function EventCapturePanel({
       </div>
       <div className="captureBlock">
         <h4 className="captureBlockTitle">Upload a Document</h4>
-        <p className="meta">Upload a PDF, image, or text file and link it directly to this event as an asset.</p>
+        <p className="meta">Upload one or many PDFs, images, or text files and link them directly to this event as assets.</p>
         <div className="controls">
           <input
             type="file"
+            multiple
             accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt"
             disabled={eventDocumentUploadingId === eventId || isRecording || isLoading}
             onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) uploadDocumentToEvent(file, eventId);
+              const files = Array.from(e.target.files ?? []);
+              if (files.length > 0) {
+                uploadDocumentsToEvent(files, eventId);
+              }
               e.currentTarget.value = "";
             }}
             style={{ flex: 1 }}
           />
         </div>
+        <div
+          className={`pasteTarget ${isDragOverDocumentTarget ? "dragOver" : ""}`}
+          role="button"
+          tabIndex={0}
+          onDragEnter={onDocumentDragEnter}
+          onDragOver={onDocumentDragOver}
+          onDragLeave={onDocumentDragLeave}
+          onDrop={onDocumentDrop}
+          aria-label="Drop files to upload to this event"
+        >
+          <p className="pasteTargetTitle">Drop Files Here</p>
+          <p className="meta">Drag and drop multiple photos or documents to upload them all to this event.</p>
+        </div>
+        {eventDocumentUploadProgress.length > 0 && (
+          <div style={{ marginTop: "0.5rem" }}>
+            <p className="meta" style={{ marginBottom: "0.25rem" }}>Upload Progress</p>
+            <ul style={{ margin: 0, paddingLeft: "1rem" }}>
+              {eventDocumentUploadProgress.map((item, index) => (
+                <li key={`${item.fileName}-${index}`} className="meta" style={{ marginBottom: "0.1rem" }}>
+                  {item.status === "uploading" && "Uploading... "}
+                  {item.status === "saved" && "Saved ✓ "}
+                  {item.status === "failed" && "Failed ✗ "}
+                  {item.fileName}
+                  {item.status === "failed" && item.error ? ` (${item.error})` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {eventDocumentUploadingId === eventId && <p className="status">Uploading...</p>}
         {eventDocumentErrors[eventId] && <p className="status" style={{ color: "var(--error, #c00)" }}>{eventDocumentErrors[eventId]}</p>}
       </div>

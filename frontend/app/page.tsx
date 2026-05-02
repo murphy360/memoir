@@ -71,6 +71,12 @@ type PendingRecording = {
   error?: string;
 };
 
+type EventDocumentUploadProgressItem = {
+  fileName: string;
+  status: "uploading" | "saved" | "failed";
+  error?: string;
+};
+
 export default function HomePage() {
   const [isDirectoryDrawerOpen, setIsDirectoryDrawerOpen] = useState(false);
   const [isCaptureDrawerOpen, setIsCaptureDrawerOpen] = useState(false);
@@ -146,6 +152,7 @@ export default function HomePage() {
   const [eventCapturePanelOpenIds, setEventCapturePanelOpenIds] = useState<Set<number>>(new Set());
   const [eventDocumentUploadingId, setEventDocumentUploadingId] = useState<number | null>(null);
   const [eventDocumentErrors, setEventDocumentErrors] = useState<Record<number, string | null>>({});
+  const [eventDocumentUploadProgressByEventId, setEventDocumentUploadProgressByEventId] = useState<Record<number, EventDocumentUploadProgressItem[]>>({});
   const [mergingPeriodId, setMergingPeriodId] = useState<number | null>(null);
   const [periodSortMode, setPeriodSortMode] = useState<PeriodSortMode>("timeline-asc");
 
@@ -1119,11 +1126,12 @@ export default function HomePage() {
       setRecordingForEventId(null);
       updatePending((p) => ({ ...p, status: "saved", error: undefined }));
     } catch (error) {
-      setStatus("Failed to process recording. Check API connection.");
+      const message = error instanceof Error ? error.message : "Failed to process recording.";
+      setStatus(message);
       updatePending((p) => ({
         ...p,
         status: "failed",
-        error: "Processing failed. You can still play this audio and try again.",
+        error: message,
       }));
     } finally {
       setIsLoading(false);
@@ -1174,20 +1182,76 @@ export default function HomePage() {
     uploadDocument,
   });
 
-  async function uploadDocumentToEvent(file: File, eventId: number) {
+  async function uploadDocumentsToEvent(files: File[], eventId: number) {
+    if (files.length === 0) {
+      return;
+    }
+
+    // Seed a per-file progress list so the event panel can show live status updates.
+    const initialProgress: EventDocumentUploadProgressItem[] = files.map((file) => ({
+      fileName: file.name || "unnamed file",
+      status: "uploading",
+    }));
+
     setEventDocumentUploadingId(eventId);
     setEventDocumentErrors((prev) => ({ ...prev, [eventId]: null }));
-    setStatus("Uploading file to event...");
+    setEventDocumentUploadProgressByEventId((prev) => ({ ...prev, [eventId]: initialProgress }));
+    setStatus(files.length === 1 ? "Uploading file to event..." : `Uploading ${files.length} files to event...`);
     try {
-      const formData = new FormData();
-      formData.append("file", file, file.name);
-      const kind = file.type.startsWith("image/") ? "photo" : "document";
-      formData.append("kind", kind);
-      formData.append("event_id", String(eventId));
-      const uploaded = await uploadAsset(formData);
+      const uploadedAssetIds: number[] = [];
+      const failedFileNames: string[] = [];
+
+      for (const [index, file] of files.entries()) {
+        try {
+          const formData = new FormData();
+          formData.append("file", file, file.name);
+          const kind = file.type.startsWith("image/") ? "photo" : "document";
+          formData.append("kind", kind);
+          formData.append("event_id", String(eventId));
+          const uploaded = await uploadAsset(formData);
+          uploadedAssetIds.push(uploaded.id);
+          setEventDocumentUploadProgressByEventId((prev) => ({
+            ...prev,
+            [eventId]: (prev[eventId] ?? []).map((item, itemIndex) => (
+              itemIndex === index ? { ...item, status: "saved", error: undefined } : item
+            )),
+          }));
+        } catch {
+          failedFileNames.push(file.name || "unnamed file");
+          setEventDocumentUploadProgressByEventId((prev) => ({
+            ...prev,
+            [eventId]: (prev[eventId] ?? []).map((item, itemIndex) => (
+              itemIndex === index ? { ...item, status: "failed", error: "Upload failed" } : item
+            )),
+          }));
+        }
+      }
+
+      if (uploadedAssetIds.length === 0) {
+        setEventDocumentErrors((prev) => ({
+          ...prev,
+          [eventId]: files.length === 1
+            ? "Document upload failed."
+            : `All ${files.length} uploads failed.`,
+        }));
+        setStatus("Document upload failed.");
+        return;
+      }
+
       await Promise.all([loadTimeline(), loadAssetsForEvent(eventId)]);
-      markAndScrollTo(`asset-row-${uploaded.id}`, 220);
-      setStatus("File uploaded and linked to event.");
+      markAndScrollTo(`asset-row-${uploadedAssetIds[uploadedAssetIds.length - 1]}`, 220);
+
+      if (failedFileNames.length === 0) {
+        setStatus(uploadedAssetIds.length === 1
+          ? "File uploaded and linked to event."
+          : `${uploadedAssetIds.length} files uploaded and linked to event.`);
+      } else {
+        setEventDocumentErrors((prev) => ({
+          ...prev,
+          [eventId]: `${failedFileNames.length} file(s) failed to upload: ${failedFileNames.slice(0, 3).join(", ")}${failedFileNames.length > 3 ? ", ..." : ""}`,
+        }));
+        setStatus(`${uploadedAssetIds.length} uploaded, ${failedFileNames.length} failed.`);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to process document.";
       setEventDocumentErrors((prev) => ({ ...prev, [eventId]: message }));
@@ -1324,7 +1388,8 @@ export default function HomePage() {
         eventRecordingPending={eventRecordingPending}
         eventDocumentUploadingId={eventDocumentUploadingId}
         eventDocumentErrors={eventDocumentErrors}
-        uploadDocumentToEvent={uploadDocumentToEvent}
+        eventDocumentUploadProgressByEventId={eventDocumentUploadProgressByEventId}
+        uploadDocumentsToEvent={uploadDocumentsToEvent}
         eventAssetInputRef={eventAssetInputRef}
         isUploadingAsset={isUploadingAsset}
         uploadAssetToActiveEvent={uploadAssetToActiveEvent}
