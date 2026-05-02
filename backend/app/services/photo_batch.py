@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Asset, EventAsset, LifeEvent, LifePeriod
 from app.services.document_storage import save_document_file
+from app.services.faces import sync_asset_faces_for_photo
 from app.services.gemini_client import extract_text_from_photo_batch
 from app.services.image_metadata import extract_and_apply_image_metadata
 from app.services.periods import refresh_period_summary
@@ -117,6 +118,7 @@ def process_queued_photo_uploads(
 
         db.add(asset)
         db.flush()
+        sync_asset_faces_for_photo(db, asset, item.file_bytes)
 
         event: Optional[LifeEvent] = None
         if item.event_id is not None:
@@ -195,6 +197,7 @@ def process_event_photo_assets(
     summaries = extract_text_from_photo_batch(payloads)
     updated_assets: list[Asset] = []
     for index, asset in enumerate(valid_assets, start=1):
+        sync_asset_faces_for_photo(db, asset, payloads[index - 1][1])
         summary = summaries.get(index)
         if not summary:
             continue

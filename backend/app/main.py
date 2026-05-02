@@ -15,10 +15,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine, ensure_schema_migrations, get_db
-from app.models import Asset, Base, EventAsset, LifeEvent, LifePeriod, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place, Question, Setting
+from app.models import Asset, AssetFace, Base, EventAsset, LifeEvent, LifePeriod, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place, Question, Setting
 from app.schemas import (
     AnalyzeLifePeriodRequest,
     AssetResponse,
+    AssignFacePersonRequest,
+    EventFaceResponse,
     AddAliasRequest,
     AnswerQuestionRequest,
     CreateLifeEventRequest,
@@ -55,6 +57,7 @@ from app.services.gemini_client import (
 )
 from app.services.gemini_client import extract_text_from_document
 from app.services.image_metadata import extract_and_apply_image_metadata
+from app.services.faces import assign_face_to_person, list_faces_for_event, sync_asset_faces_for_photo
 from app.services.directory import (
     assign_recorder_person,
     build_directory_response,
@@ -488,6 +491,63 @@ def list_event_assets(event_id: int, db: Session = Depends(get_db)) -> list[Asse
     return [build_asset_response(asset) for asset in assets]
 
 
+def _build_event_face_response(face: AssetFace) -> EventFaceResponse:
+    asset = face.asset
+    person = face.person
+    return EventFaceResponse(
+        id=face.id,
+        asset_id=face.asset_id,
+        asset_title=(asset.title if asset else None) or (asset.original_filename if asset else None),
+        asset_download_url=(asset.download_url if asset else ""),
+        bbox_x=face.bbox_x,
+        bbox_y=face.bbox_y,
+        bbox_w=face.bbox_w,
+        bbox_h=face.bbox_h,
+        confidence=face.confidence,
+        person_id=person.id if person else None,
+        person_name=person.name if person else None,
+    )
+
+
+@app.get("/api/events/{event_id}/faces", response_model=list[EventFaceResponse])
+def list_event_faces(event_id: int, db: Session = Depends(get_db)) -> list[EventFaceResponse]:
+    event = db.get(LifeEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    faces = list_faces_for_event(db, event_id)
+    return [_build_event_face_response(face) for face in faces if face.asset]
+
+
+@app.post("/api/faces/{face_id}/assign-person", response_model=EventFaceResponse)
+def assign_event_face_person(
+    face_id: int,
+    body: AssignFacePersonRequest,
+    db: Session = Depends(get_db),
+) -> EventFaceResponse:
+    try:
+        face = assign_face_to_person(db, face_id, body.person_id)
+    except ValueError as exc:
+        if str(exc) == "face_not_found":
+            raise HTTPException(status_code=404, detail="Face not found") from exc
+        if str(exc) == "person_not_found":
+            raise HTTPException(status_code=404, detail="Person not found") from exc
+        raise HTTPException(status_code=400, detail="Could not assign face") from exc
+
+    db.commit()
+    db.refresh(face)
+    return _build_event_face_response(face)
+
+
+@app.delete("/api/faces/{face_id}", status_code=204)
+def delete_event_face(face_id: int, db: Session = Depends(get_db)) -> None:
+    face = db.get(AssetFace, face_id)
+    if not face:
+        raise HTTPException(status_code=404, detail="Face not found")
+    db.delete(face)
+    db.commit()
+
+
 def _refresh_event_summary_and_suggestion(
     db: Session,
     event: LifeEvent,
@@ -725,6 +785,9 @@ async def upload_asset(
 
     db.add(asset)
     db.flush()
+
+    if normalized_kind == "photo":
+        sync_asset_faces_for_photo(db, asset, file_bytes)
 
     if event:
         db.add(EventAsset(event_id=event.id, asset_id=asset.id, relation_type="evidence"))

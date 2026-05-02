@@ -18,6 +18,7 @@ class Person(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     aliases: Mapped[list["PersonAlias"]] = relationship(back_populates="person", cascade="all, delete-orphan")
+    tagged_faces: Mapped[list["AssetFace"]] = relationship(back_populates="person")
 
 
 class PersonAlias(Base):
@@ -260,11 +261,31 @@ class Asset(Base):
 
     period: Mapped[Optional["LifePeriod"]] = relationship(back_populates="assets")
     event_links: Mapped[list["EventAsset"]] = relationship(back_populates="asset", cascade="all, delete-orphan")
+    faces: Mapped[list["AssetFace"]] = relationship(back_populates="asset", cascade="all, delete-orphan")
     legacy_memory: Mapped[Optional["MemoryEntry"]] = relationship(foreign_keys=[legacy_memory_id])
 
     @property
     def download_url(self) -> str:
         return f"/api/assets/{self.id}/download"
+
+
+class AssetFace(Base):
+    __tablename__ = "asset_faces"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Bounding box values are normalized to [0, 1] against image width/height.
+    bbox_x: Mapped[float] = mapped_column(Float, nullable=False)
+    bbox_y: Mapped[float] = mapped_column(Float, nullable=False)
+    bbox_w: Mapped[float] = mapped_column(Float, nullable=False)
+    bbox_h: Mapped[float] = mapped_column(Float, nullable=False)
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # person_id stays null until a user manually assigns the detected face.
+    person_id: Mapped[Optional[int]] = mapped_column(ForeignKey("people.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    asset: Mapped["Asset"] = relationship(back_populates="faces")
+    person: Mapped[Optional["Person"]] = relationship(back_populates="tagged_faces")
 
 
 class Question(Base):

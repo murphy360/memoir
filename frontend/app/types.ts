@@ -148,3 +148,21 @@ export type AssetEntry = {
   linked_event_ids: number[];
   created_at: string;
 };
+
+/**
+ * One detected face region from a photo asset linked to an event.
+ * person_id/person_name stay null until manually assigned.
+ */
+export type EventFaceEntry = {
+  id: number;
+  asset_id: number;
+  asset_title: string | null;
+  asset_download_url: string;
+  bbox_x: number;
+  bbox_y: number;
+  bbox_w: number;
+  bbox_h: number;
+  confidence: number | null;
+  person_id: number | null;
+  person_name: string | null;
+};

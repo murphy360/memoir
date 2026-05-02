@@ -2,6 +2,7 @@ import {
   AppSettings,
   AssetEntry,
   DirectoryEntry,
+  EventFaceEntry,
   LifeEvent,
   LifePeriod,
   LifePeriodAnalysis,
@@ -107,6 +108,31 @@ export async function fetchEventAssets(eventId: number): Promise<AssetEntry[]> {
   const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}/assets`), { cache: "no-store" });
   await expectOk(response, "Failed to load event assets");
   return response.json();
+}
+
+/** Load detected faces for one event from GET /api/events/{event_id}/faces. */
+export async function fetchEventFaces(eventId: number): Promise<EventFaceEntry[]> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}/faces`), { cache: "no-store" });
+  await expectOk(response, "Failed to load event faces");
+  return response.json();
+}
+
+/** Assign or clear person link for a detected face via POST /api/faces/{face_id}/assign-person. */
+export async function assignFacePerson(faceId: number, personId: number | null): Promise<EventFaceEntry> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/faces/${faceId}/assign-person`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ person_id: personId }),
+  });
+
+  await expectOk(response, "Failed to assign face");
+  return response.json();
+}
+
+/** Permanently delete a detected face record via DELETE /api/faces/{face_id}. */
+export async function deleteFace(faceId: number): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/faces/${faceId}`), { method: "DELETE" });
+  await expectOk(response, "Failed to delete face");
 }
 
 export async function createPeriod(payload: {
@@ -220,11 +246,15 @@ export async function uploadAsset(formData: FormData): Promise<AssetEntry> {
   return response.json();
 }
 
-export async function processEventPhotoAssets(eventId: number): Promise<{ events_processed: number; photos_processed: number; processed_asset_ids: number[] }> {
+/** Process event photos via POST /api/assets/photos/process-events, optionally including already-processed assets for re-runs. */
+export async function processEventPhotoAssets(
+  eventId: number,
+  includeProcessed = false,
+): Promise<{ events_processed: number; photos_processed: number; processed_asset_ids: number[] }> {
   const response = await fetch(toAbsoluteApiUrl("/api/assets/photos/process-events"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ event_id: eventId }),
+    body: JSON.stringify({ event_id: eventId, include_processed: includeProcessed }),
   });
   await expectOk(response, "Process event photos failed");
   return response.json();

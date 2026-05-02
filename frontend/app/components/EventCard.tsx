@@ -1,9 +1,10 @@
+import { useState } from "react";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { EventAssetList } from "./EventAssetList";
 import { EventCapturePanel } from "./EventCapturePanel";
 import { EventLinkedMemories } from "./EventLinkedMemories";
 import { UNASSIGNED_PERIOD_VALUE } from "../lib/homePageHelpers";
-import type { AssetEntry, DirectoryEntry, LifeEvent, LifePeriod, MemoryEntry, Question } from "../types";
+import type { AssetEntry, DirectoryEntry, EventFaceEntry, LifeEvent, LifePeriod, MemoryEntry, Question } from "../types";
 
 type QuestionContext = {
   question: Question;
@@ -90,6 +91,7 @@ type EventCardProps = {
   isUploadingAsset: boolean;
   uploadAssetToActiveEvent: (file: File) => Promise<void>;
   activeEventAssets: AssetEntry[];
+  eventFaces: EventFaceEntry[];
   highlightedElementId: string | null;
   expandedAssetRowIds: Set<number>;
   setExpandedAssetRowIds: Dispatch<SetStateAction<Set<number>>>;
@@ -108,7 +110,10 @@ type EventCardProps = {
   resolveApiUrl: (path: string) => string;
   formatBytes: (bytes: number) => string;
   deleteAsset: (assetId: number, eventId?: number) => Promise<void>;
+  assignFaceToPerson: (faceId: number, personId: number | null, eventId: number) => Promise<void>;
+  assigningFaceId: number | null;
   timeline: MemoryEntry[];
+    discardFace: (faceId: number, eventId: number) => Promise<void>;
   editingMemoryTitleId: number | null;
   setEditingMemoryTitleId: (id: number | null) => void;
   editingMemoryTitleValue: string;
@@ -188,6 +193,7 @@ export function EventCard({
   isUploadingAsset,
   uploadAssetToActiveEvent,
   activeEventAssets,
+  eventFaces,
   highlightedElementId,
   expandedAssetRowIds,
   setExpandedAssetRowIds,
@@ -206,7 +212,10 @@ export function EventCard({
   resolveApiUrl,
   formatBytes,
   deleteAsset,
+  assignFaceToPerson,
+  assigningFaceId,
   timeline,
+    discardFace,
   editingMemoryTitleId,
   setEditingMemoryTitleId,
   editingMemoryTitleValue,
@@ -224,6 +233,8 @@ export function EventCard({
   assignRecorder,
   memoryActionId,
 }: EventCardProps) {
+  const [faceAssignTargets, setFaceAssignTargets] = useState<Record<number, string>>({});
+
   return (
     <article
       id={`event-card-${event.id}`}
@@ -499,6 +510,99 @@ export function EventCard({
                 >
                   Dismiss
                 </button>
+              </div>
+            </section>
+          )}
+
+          {eventFaces.length > 0 && (
+            <section className="memory" style={{ marginBottom: "0.55rem" }}>
+              <h3 style={{ marginTop: 0 }}>People in Photos</h3>
+              <p className="meta" style={{ marginTop: "0.2rem" }}>
+                {eventFaces.filter((face) => face.person_id !== null).length} tagged, {eventFaces.filter((face) => face.person_id === null).length} untagged
+              </p>
+              <div className="controls" style={{ flexWrap: "wrap" }}>
+                {eventFaces.map((face, index) => {
+                  const faceCx = face.bbox_x + face.bbox_w / 2;
+                  const faceCy = face.bbox_y + face.bbox_h / 2;
+                  // Scale so the face bbox fills ~60% of the thumbnail height; cap to avoid distortion
+                  const previewScale = Math.max(1.5, Math.min(4.0, 0.6 / Math.max(face.bbox_h, 0.08)));
+                  const originX = `${Math.round(faceCx * 100)}%`;
+                  const originY = `${Math.round(faceCy * 100)}%`;
+                  const selectedPerson = faceAssignTargets[face.id] || "";
+                  return (
+                    <div key={face.id} className="assetNotesRow" style={{ alignItems: "center", gap: "0.6rem", width: "100%" }}>
+                      <div
+                        style={{
+                          width: "58px",
+                          height: "58px",
+                          borderRadius: "10px",
+                          overflow: "hidden",
+                          border: "1px solid rgba(0,0,0,0.15)",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <img
+                          src={resolveApiUrl(`${face.asset_download_url}?download=false`)}
+                          alt={`Detected face ${index + 1}`}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            objectPosition: `${originX} ${originY}`,
+                            transform: `scale(${previewScale})`,
+                            transformOrigin: `${originX} ${originY}`,
+                          }}
+                        />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p className="meta" style={{ margin: 0 }}>
+                          {face.person_name ? `Tagged: ${face.person_name}` : "Unknown person"}
+                          {face.asset_title ? ` · ${face.asset_title}` : ""}
+                        </p>
+                        <div className="controls" style={{ marginTop: "0.25rem", flexWrap: "wrap" }}>
+                          <select
+                            className="directoryInput"
+                            value={selectedPerson}
+                            onChange={(e) => setFaceAssignTargets((current) => ({ ...current, [face.id]: e.target.value }))}
+                            disabled={peopleDirectory.length === 0 || assigningFaceId === face.id}
+                          >
+                            <option value="">Select person</option>
+                            {peopleDirectory.map((person) => (
+                              <option key={person.id} value={person.id}>{person.name}</option>
+                            ))}
+                          </select>
+                          <button
+                            className="secondary"
+                            type="button"
+                            disabled={!selectedPerson || assigningFaceId === face.id}
+                            onClick={() => void assignFaceToPerson(face.id, Number(selectedPerson), event.id)}
+                          >
+                            {assigningFaceId === face.id ? "Saving..." : "Assign"}
+                          </button>
+                          {face.person_id !== null && (
+                            <button
+                              className="ghost"
+                              type="button"
+                              disabled={assigningFaceId === face.id}
+                              onClick={() => void assignFaceToPerson(face.id, null, event.id)}
+                            >
+                              Clear
+                                                      <button
+                                                        className="ghost"
+                                                        type="button"
+                                                        disabled={assigningFaceId === face.id}
+                                                        onClick={() => void discardFace(face.id, event.id)}
+                                                        title="Not a face — remove this detection"
+                                                      >
+                                                        Discard
+                                                      </button>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </section>
           )}

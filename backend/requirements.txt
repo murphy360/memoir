@@ -5,3 +5,4 @@ sqlalchemy==2.0.37
 pydantic==2.10.4
 requests==2.32.3
 Pillow==11.2.1
+opencv-python-headless==4.10.0.84

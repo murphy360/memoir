@@ -8,7 +8,7 @@ import { LifePeriodCard } from "./components/LifePeriodCard";
 import { MemoryCard } from "./components/MemoryCard";
 import { PeriodComposer } from "./components/PeriodComposer";
 import { UnlinkedAssetsInbox } from "./components/UnlinkedAssetsInbox";
-import { AssetEntry, LifeEvent, MemoryEntry, Question, LifePeriodAnalysis } from "./types";
+import { AssetEntry, EventFaceEntry, LifeEvent, MemoryEntry, Question, LifePeriodAnalysis } from "./types";
 import {
   type TimelineBundle,
   analyzeLifePeriod,
@@ -26,7 +26,10 @@ import {
   deletePeriodById,
   dismissQuestionById,
   dismissResearchSuggestionById,
+  assignFacePerson,
+  deleteFace,
   fetchEventAssets,
+  fetchEventFaces,
   linkAssetToEvent,
   mergeEventInto,
   mergePeopleEntries,
@@ -101,6 +104,8 @@ export default function HomePage() {
   } = useTimelineData({ setStatus });
   const [activeEventId, setActiveEventId] = useState<number | null>(null);
   const [activeEventAssets, setActiveEventAssets] = useState<AssetEntry[]>([]);
+  const [activeEventFaces, setActiveEventFaces] = useState<EventFaceEntry[]>([]);
+  const [assigningFaceId, setAssigningFaceId] = useState<number | null>(null);
   const [isSavingLifeStructure, setIsSavingLifeStructure] = useState(false);
   const [isUploadingAsset, setIsUploadingAsset] = useState(false);
   const [assetLinkTargets, setAssetLinkTargets] = useState<Record<number, string>>({});
@@ -300,10 +305,45 @@ export default function HomePage() {
 
   async function loadAssetsForEvent(eventId: number) {
     try {
-      setActiveEventAssets(await fetchEventAssets(eventId));
+      const [assets, faces] = await Promise.all([
+        fetchEventAssets(eventId),
+        fetchEventFaces(eventId),
+      ]);
+      setActiveEventAssets(assets);
+      setActiveEventFaces(faces);
     } catch {
       setStatus("Could not load assets for the selected event.");
       setActiveEventAssets([]);
+      setActiveEventFaces([]);
+    }
+  }
+
+  async function assignFaceToPerson(faceId: number, personId: number | null, eventId: number) {
+    setAssigningFaceId(faceId);
+    setStatus(personId === null ? "Clearing face assignment..." : "Saving face assignment...");
+    try {
+      await assignFacePerson(faceId, personId);
+      if (activeEventId === eventId) {
+        await loadAssetsForEvent(eventId);
+      }
+      setStatus(personId === null ? "Face assignment cleared." : "Face assignment saved.");
+    } catch {
+      setStatus("Failed to update face assignment.");
+    } finally {
+      setAssigningFaceId(null);
+    }
+  }
+
+  async function discardFace(faceId: number, eventId: number) {
+    setStatus("Discarding face...");
+    try {
+      await deleteFace(faceId);
+      if (activeEventId === eventId) {
+        setActiveEventFaces((prev) => prev.filter((f) => f.id !== faceId));
+      }
+      setStatus("Face discarded.");
+    } catch {
+      setStatus("Failed to discard face.");
     }
   }
 
@@ -612,6 +652,7 @@ export default function HomePage() {
       if (activeEventId === eventId) {
         setActiveEventId(null);
         setActiveEventAssets([]);
+        setActiveEventFaces([]);
       }
       await loadTimeline();
       setStatus("Event removed. Memories and assets were kept.");
@@ -817,17 +858,17 @@ export default function HomePage() {
 
   async function processPhotosForEvent(eventId: number) {
     setProcessingEventPhotosId(eventId);
-    setStatus("Processing event photos...");
+    setStatus("Reprocessing event photos...");
     try {
-      const result = await processEventPhotoAssets(eventId);
+      const result = await processEventPhotoAssets(eventId, true);
       await loadTimeline();
       if (activeEventId === eventId) {
         await loadAssetsForEvent(eventId);
       }
       if (result.photos_processed > 0) {
-        setStatus(`Processed ${result.photos_processed} photo${result.photos_processed === 1 ? "" : "s"} for this event.`);
+        setStatus(`Reprocessed ${result.photos_processed} photo${result.photos_processed === 1 ? "" : "s"} for this event.`);
       } else {
-        setStatus("No unprocessed photos found for this event.");
+        setStatus("No photo files were available to reprocess for this event.");
       }
     } catch {
       setStatus("Failed to process event photos.");
@@ -1359,6 +1400,7 @@ export default function HomePage() {
           if (activeEventId === event.id) {
             setActiveEventId(null);
             setActiveEventAssets([]);
+            setActiveEventFaces([]);
             return;
           }
           setActiveEventId(event.id);
@@ -1419,6 +1461,7 @@ export default function HomePage() {
         isUploadingAsset={isUploadingAsset}
         uploadAssetToActiveEvent={uploadAssetToActiveEvent}
         activeEventAssets={activeEventAssets}
+        eventFaces={activeEventFaces}
         highlightedElementId={highlightedElementId}
         expandedAssetRowIds={expandedAssetRowIds}
         setExpandedAssetRowIds={setExpandedAssetRowIds}
@@ -1437,7 +1480,10 @@ export default function HomePage() {
         resolveApiUrl={resolveApiUrl}
         formatBytes={formatBytes}
         deleteAsset={deleteAsset}
+        assignFaceToPerson={assignFaceToPerson}
+        assigningFaceId={assigningFaceId}
         timeline={timeline}
+          discardFace={discardFace}
         editingMemoryTitleId={editingMemoryTitleId}
         setEditingMemoryTitleId={setEditingMemoryTitleId}
         editingMemoryTitleValue={editingMemoryTitleValue}

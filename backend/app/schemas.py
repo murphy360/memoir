@@ -203,6 +203,24 @@ class UpdateAssetRequest(BaseModel):
     notes: Optional[str] = None
 
 
+class EventFaceResponse(BaseModel):
+    id: int = Field(description="Face detection row id.")
+    asset_id: int = Field(description="Photo asset id that contains the detected face.")
+    asset_title: Optional[str] = Field(default=None, description="Best display title of the source photo asset.")
+    asset_download_url: str = Field(description="Download URL for the source photo.")
+    bbox_x: float = Field(description="Left coordinate normalized to [0, 1] of image width.")
+    bbox_y: float = Field(description="Top coordinate normalized to [0, 1] of image height.")
+    bbox_w: float = Field(description="Box width normalized to [0, 1] of image width.")
+    bbox_h: float = Field(description="Box height normalized to [0, 1] of image height.")
+    confidence: Optional[float] = Field(default=None, description="Detector confidence when available.")
+    person_id: Optional[int] = Field(default=None, description="Assigned person id for this face, if manually linked.")
+    person_name: Optional[str] = Field(default=None, description="Assigned person display name, if manually linked.")
+
+
+class AssignFacePersonRequest(BaseModel):
+    person_id: Optional[int] = Field(default=None, description="Person id to assign, or null to clear assignment.")
+
+
 class QuestionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

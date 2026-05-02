@@ -257,6 +257,24 @@ def ensure_schema_migrations() -> None:
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_event_assets_event_id ON event_assets (event_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_event_assets_asset_id ON event_assets (asset_id)"))
 
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS asset_faces (
+                id INTEGER PRIMARY KEY,
+                asset_id INTEGER NOT NULL,
+                bbox_x REAL NOT NULL,
+                bbox_y REAL NOT NULL,
+                bbox_w REAL NOT NULL,
+                bbox_h REAL NOT NULL,
+                confidence REAL,
+                person_id INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+                FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE SET NULL
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_asset_faces_asset_id ON asset_faces (asset_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_asset_faces_person_id ON asset_faces (person_id)"))
+
         # Ensure questions table has source_memory_id and answer_memory_id columns
         q_columns = {
             row[1]
