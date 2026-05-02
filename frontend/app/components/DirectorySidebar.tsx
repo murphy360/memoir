@@ -21,6 +21,7 @@ type DirectorySidebarProps = {
   onSplitPersonEntry: (sourceId: number, newNames: string[], keepAlias: boolean) => Promise<void>;
   onAddPersonAlias: (personId: number, alias: string) => Promise<void>;
   onRemovePersonAlias: (personId: number, alias: string) => Promise<void>;
+  resolveApiUrl: (path: string) => string;
 };
 
 export function DirectorySidebar({
@@ -43,6 +44,7 @@ export function DirectorySidebar({
   onSplitPersonEntry,
   onAddPersonAlias,
   onRemovePersonAlias,
+  resolveApiUrl,
 }: DirectorySidebarProps) {
   return (
     <>
@@ -128,6 +130,8 @@ export function DirectorySidebar({
             addLabel="Add a person"
             emptyLabel={normalizedDirectorySearch ? "No matching people for this search." : "No people have been added yet."}
             items={filteredPeopleDirectory}
+            showAvatars
+            resolveApiUrl={resolveApiUrl}
             isBusy={isBusy}
             onCreate={(name) => onCreateDirectoryEntry("people", name)}
             onRename={(itemId, name) => onRenameDirectoryEntry("people", itemId, name)}

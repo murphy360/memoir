@@ -8,6 +8,8 @@ type DirectoryManagerProps = {
   addLabel: string;
   emptyLabel: string;
   items: DirectoryEntry[];
+  showAvatars?: boolean;
+  resolveApiUrl?: (path: string) => string;
   isBusy: boolean;
   onCreate: (name: string) => Promise<void>;
   onRename: (itemId: number, name: string) => Promise<void>;
@@ -23,6 +25,8 @@ export function DirectoryManager({
   addLabel,
   emptyLabel,
   items,
+  showAvatars = false,
+  resolveApiUrl,
   isBusy,
   onCreate,
   onRename,
@@ -104,6 +108,19 @@ export function DirectoryManager({
           return (
             <div key={item.id} className="directoryRow">
               <div className="directoryRowMain">
+                {showAvatars && (
+                  <div className="directoryAvatar" aria-hidden="true">
+                    {item.avatar_download_url ? (
+                      <img
+                        src={(resolveApiUrl ?? ((path: string) => path))(`${item.avatar_download_url}?download=false`)}
+                        alt=""
+                        className="directoryAvatarImage"
+                      />
+                    ) : (
+                      <span className="directoryAvatarPlaceholder">{item.name.trim().charAt(0).toUpperCase() || "?"}</span>
+                    )}
+                  </div>
+                )}
                 {isEditing ? (
                   <input
                     className="directoryInput"

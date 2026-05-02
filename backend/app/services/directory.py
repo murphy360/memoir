@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models import MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place
+from app.models import Asset, AssetFace, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place
 from app.schemas import DirectoryEntryResponse
 from app.services.periods import normalize_directory_name
 
@@ -149,12 +149,14 @@ def build_directory_response(
     item_id: int,
     memory_count: int,
     aliases: Optional[list[str]] = None,
+    avatar_download_url: Optional[str] = None,
 ) -> DirectoryEntryResponse:
     return DirectoryEntryResponse(
         id=item_id,
         name=name,
         memory_count=memory_count,
         aliases=aliases or [],
+        avatar_download_url=avatar_download_url,
     )
 
 
@@ -168,6 +170,22 @@ def list_people_directory(db: Session) -> list[DirectoryEntryResponse]:
         for link in memory.people_links:
             counts.setdefault(link.person_id, set()).add(memory.id)
 
+    # Pick one avatar photo per person using their most recent assigned face.
+    avatars_by_person_id: dict[int, str] = {}
+    face_rows = (
+        db.query(AssetFace)
+        .join(Asset, Asset.id == AssetFace.asset_id)
+        .filter(AssetFace.person_id.isnot(None), Asset.kind == "photo")
+        .order_by(AssetFace.created_at.desc(), AssetFace.id.desc())
+        .all()
+    )
+    for face in face_rows:
+        person_id = face.person_id
+        if person_id is None or person_id in avatars_by_person_id:
+            continue
+        if face.asset:
+            avatars_by_person_id[person_id] = face.asset.download_url
+
     people = db.query(Person).order_by(Person.name.asc()).all()
     return [
         build_directory_response(
@@ -175,6 +193,7 @@ def list_people_directory(db: Session) -> list[DirectoryEntryResponse]:
             person.id,
             len(counts.get(person.id, set())),
             [alias.alias for alias in person.aliases],
+            avatars_by_person_id.get(person.id),
         )
         for person in people
     ]

@@ -1526,6 +1526,7 @@ export default function HomePage() {
         onSplitPersonEntry={splitPersonEntry}
         onAddPersonAlias={addPersonAlias}
         onRemovePersonAlias={removePersonAlias}
+        resolveApiUrl={resolveApiUrl}
       />
 
       <div className="workspaceColumn">

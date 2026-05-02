@@ -587,17 +587,17 @@ export function EventCard({
                               onClick={() => void assignFaceToPerson(face.id, null, event.id)}
                             >
                               Clear
-                                                      <button
-                                                        className="ghost"
-                                                        type="button"
-                                                        disabled={assigningFaceId === face.id}
-                                                        onClick={() => void discardFace(face.id, event.id)}
-                                                        title="Not a face — remove this detection"
-                                                      >
-                                                        Discard
-                                                      </button>
                             </button>
                           )}
+                          <button
+                            className="ghost"
+                            type="button"
+                            disabled={assigningFaceId === face.id}
+                            onClick={() => void discardFace(face.id, event.id)}
+                            title="Not a face - remove this detection"
+                          >
+                            Discard
+                          </button>
                         </div>
                       </div>
                     </div>
