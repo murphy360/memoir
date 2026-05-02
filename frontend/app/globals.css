@@ -187,6 +187,12 @@ main {
   flex-wrap: wrap;
 }
 
+.heroActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .hero h1 {
   margin: 0;
   font-size: clamp(1.8rem, 4vw, 2.8rem);
@@ -220,6 +226,11 @@ main {
 
 .inputSection {
   margin-bottom: 0.8rem;
+}
+
+.advancedAudioToggle {
+  width: fit-content;
+  margin-bottom: 0.65rem;
 }
 
 .micSelect {

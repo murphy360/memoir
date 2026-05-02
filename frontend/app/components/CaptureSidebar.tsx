@@ -1,4 +1,4 @@
-import type { ClipboardEventHandler, DragEventHandler, RefObject } from "react";
+import { useState, type ClipboardEventHandler, type DragEventHandler, type RefObject } from "react";
 import type { Question } from "../types";
 
 type PendingRecording = {
@@ -77,6 +77,8 @@ export function CaptureSidebar({
   formatBytes,
   audioDeviceStorageKey,
 }: CaptureSidebarProps) {
+  const [showAdvancedAudio, setShowAdvancedAudio] = useState(false);
+
   return (
     <>
       {isCaptureDrawerOpen && (
@@ -104,38 +106,52 @@ export function CaptureSidebar({
 
         <div className="captureBlock">
           <h3 className="captureBlockTitle">Record Audio</h3>
-          <div className="inputSection">
-            <label className="meta" htmlFor="mic-select">Input device</label>
-            <select
-              id="mic-select"
-              className="micSelect"
-              value={selectedDeviceId}
-              onChange={(event) => {
-                const nextDeviceId = event.target.value;
-                setSelectedDeviceId(nextDeviceId);
-                if (nextDeviceId) {
-                  localStorage.setItem(audioDeviceStorageKey, nextDeviceId);
-                } else {
-                  localStorage.removeItem(audioDeviceStorageKey);
-                }
-              }}
-              disabled={isRecording || isLoading || audioDevices.length === 0}
-            >
-              {audioDevices.length === 0 && <option value="">No microphones found</option>}
-              {audioDevices.map((device) => (
-                <option key={device.deviceId} value={device.deviceId}>
-                  {device.label}
-                </option>
-              ))}
-            </select>
+          {/* Keep device controls optional so the default path stays focused on one-tap capture. */}
+          <button
+            className="ghost advancedAudioToggle"
+            type="button"
+            onClick={() => setShowAdvancedAudio((current) => !current)}
+            aria-expanded={showAdvancedAudio}
+            aria-controls="quick-memory-audio-settings"
+            disabled={isRecording || isLoading}
+          >
+            {showAdvancedAudio ? "Hide Advanced Audio" : "Advanced Audio"}
+          </button>
 
-            <div className="levelWrap" aria-label="audio input level">
-              <div className="levelTrack">
-                <div className="levelFill" style={{ width: `${Math.round(audioLevel * 100)}%` }} />
+          {showAdvancedAudio && (
+            <div className="inputSection" id="quick-memory-audio-settings">
+              <label className="meta" htmlFor="mic-select">Input device</label>
+              <select
+                id="mic-select"
+                className="micSelect"
+                value={selectedDeviceId}
+                onChange={(event) => {
+                  const nextDeviceId = event.target.value;
+                  setSelectedDeviceId(nextDeviceId);
+                  if (nextDeviceId) {
+                    localStorage.setItem(audioDeviceStorageKey, nextDeviceId);
+                  } else {
+                    localStorage.removeItem(audioDeviceStorageKey);
+                  }
+                }}
+                disabled={isRecording || isLoading || audioDevices.length === 0}
+              >
+                {audioDevices.length === 0 && <option value="">No microphones found</option>}
+                {audioDevices.map((device) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label}
+                  </option>
+                ))}
+              </select>
+
+              <div className="levelWrap" aria-label="audio input level">
+                <div className="levelTrack">
+                  <div className="levelFill" style={{ width: `${Math.round(audioLevel * 100)}%` }} />
+                </div>
+                <span className="meta levelText">Input level: {Math.round(audioLevel * 100)}%</span>
               </div>
-              <span className="meta levelText">Input level: {Math.round(audioLevel * 100)}%</span>
             </div>
-          </div>
+          )}
 
           {activeQuestion && (
             <div className="activePrompt">

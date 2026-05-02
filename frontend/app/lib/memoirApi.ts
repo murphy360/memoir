@@ -418,11 +418,22 @@ export async function deleteDirectoryEntry(kind: "people" | "places", itemId: nu
   await expectOk(response, "Delete failed");
 }
 
-export async function createMemoryFromAudioBlob(blob: Blob, eventId?: number): Promise<MemoryEntry> {
+/**
+ * Upload an audio recording as a memory.
+ * quickCapture marks one-tap home-screen captures so backend can apply quick-entry automation.
+ */
+export async function createMemoryFromAudioBlob(
+  blob: Blob,
+  eventId?: number,
+  quickCapture = false,
+): Promise<MemoryEntry> {
   const formData = new FormData();
   formData.append("audio", blob, `memory-${Date.now()}.webm`);
   if (eventId !== undefined) {
     formData.append("event_id", String(eventId));
+  }
+  if (quickCapture) {
+    formData.append("quick_capture", "true");
   }
 
   const response = await fetch(toAbsoluteApiUrl("/api/memories"), {

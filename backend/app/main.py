@@ -92,6 +92,7 @@ from app.services.memory_analysis import (
     build_sort_date,
     fallback_metadata_from_transcript,
     generate_questions_from_memory,
+    summarize_event as summarize_memory_transcript,
 )
 
 logger = logging.getLogger("memoir.api")
@@ -468,12 +469,11 @@ def list_event_assets(event_id: int, db: Session = Depends(get_db)) -> list[Asse
     return [build_asset_response(asset) for asset in assets]
 
 
-@app.post("/api/events/{event_id}/summarize", response_model=LifeEventResponse)
-def summarize_event(event_id: int, db: Session = Depends(get_db)) -> LifeEventResponse:
-    event = db.get(LifeEvent, event_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
+def _refresh_event_summary_and_suggestion(
+    db: Session,
+    event: LifeEvent,
+    auto_apply_title: bool = False,
+) -> None:
     memories = _collect_event_memories(event, db)
     assets = [link.asset for link in event.linked_assets if link.asset]
 
@@ -508,13 +508,33 @@ def summarize_event(event_id: int, db: Session = Depends(get_db)) -> LifeEventRe
         asset_points=asset_points,
     )
     event.summary = summary
+
     suggestion = suggest_event_edit_from_context(
         analysis_text=summary,
         current_title=event.title,
         current_event_date_text=event.event_date_text,
         current_description=event.description,
     )
+
+    if auto_apply_title:
+        suggested_title = (suggestion.title or "").strip() if suggestion else ""
+        if suggested_title:
+            event.title = suggested_title[:180]
+        elif memories:
+            fallback_title = _derive_quick_event_title(memories[0])
+            if fallback_title and fallback_title.lower() != "unspecified memory":
+                event.title = fallback_title[:180]
+
     event.research_suggested_edit_json = json.dumps(dataclasses.asdict(suggestion)) if suggestion else None
+
+
+@app.post("/api/events/{event_id}/summarize", response_model=LifeEventResponse)
+def summarize_event(event_id: int, db: Session = Depends(get_db)) -> LifeEventResponse:
+    event = db.get(LifeEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    _refresh_event_summary_and_suggestion(db, event, auto_apply_title=False)
 
     db.commit()
     db.refresh(event)
@@ -1136,6 +1156,7 @@ def get_memory_document(memory_id: int, download: bool = False, db: Session = De
 async def create_memory(
     audio: UploadFile = File(...),
     event_id: Optional[int] = Form(None),
+    quick_capture: bool = Form(False),
     db: Session = Depends(get_db),
 ) -> MemoryEntry:
     audio_bytes = await audio.read()
@@ -1216,6 +1237,9 @@ async def create_memory(
             ensure_event_asset_link(db, target_event, audio_asset, relation_type="recording")
     else:
         sync_life_hierarchy_for_memory(db, entry)
+        auto_event = db.query(LifeEvent).filter(LifeEvent.legacy_memory_id == entry.id).first()
+        if auto_event:
+            _refresh_event_summary_and_suggestion(db, auto_event, auto_apply_title=True)
 
     db.commit()
     db.refresh(entry)
@@ -1501,6 +1525,51 @@ def _extract_questions_from_research(summary: str) -> list[str]:
                 if text.endswith("?"):
                     questions.append(text)
     return questions[:5]
+
+
+def _possessive_name(name: str) -> str:
+    clean = (name or "").strip()
+    if not clean:
+        return ""
+    if clean.endswith(("s", "S")):
+        return f"{clean}'"
+    return f"{clean}'s"
+
+
+def _derive_quick_event_title(memory: MemoryEntry) -> str:
+    transcript = (memory.transcript or "").strip()
+    if not transcript:
+        return "Unspecified memory"
+
+    lowered = transcript.lower()
+    if "play" in lowered:
+        relationship_label: Optional[str] = None
+        if "daughter" in lowered:
+            relationship_label = "Daughter's Play"
+        elif "son" in lowered:
+            relationship_label = "Son's Play"
+        elif "granddaughter" in lowered:
+            relationship_label = "Granddaughter's Play"
+        elif "grandson" in lowered:
+            relationship_label = "Grandson's Play"
+
+        play_title_match = re.search(r"['\"]([^'\"]{2,80})['\"]", transcript)
+        if play_title_match:
+            play_title = play_title_match.group(1).strip()
+            if relationship_label:
+                return f"{play_title} ({relationship_label})"
+            return play_title
+
+        people = memory.referenced_people
+        if people:
+            first_person = people[0].strip()
+            if first_person:
+                return f"{_possessive_name(first_person)} Play"
+
+        if relationship_label:
+            return relationship_label
+
+    return summarize_memory_transcript(transcript).strip() or "Unspecified memory"
 
 
 def _collect_event_memories(event: LifeEvent, db: Session) -> list[MemoryEntry]:

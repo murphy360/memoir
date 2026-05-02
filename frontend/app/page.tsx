@@ -958,9 +958,10 @@ export default function HomePage() {
     };
   }, []);
 
-  async function startRecording(forEventId?: number) {
+  async function startRecording(forEventId?: number, options?: { quickCapture?: boolean }) {
     try {
       shouldDiscardRecordingRef.current = false;
+      const isQuickCapture = options?.quickCapture === true && forEventId === undefined;
       const audioConstraint = selectedDeviceId
         ? { deviceId: { exact: selectedDeviceId } }
         : true;
@@ -1028,7 +1029,7 @@ export default function HomePage() {
         }
 
         setStatus("Audio recorded. You can play it now while we process it.");
-        await uploadRecording(blob, nextPendingId, targetEventId ?? undefined);
+        await uploadRecording(blob, nextPendingId, targetEventId ?? undefined, isQuickCapture);
       };
 
       recorder.start();
@@ -1037,6 +1038,15 @@ export default function HomePage() {
     } catch (error) {
       setStatus("Microphone permission denied or unavailable.");
     }
+  }
+
+  async function startQuickMemoryCapture() {
+    // Quick Memory is designed to start capture from a single home-screen tap.
+    setIsCaptureDrawerOpen(true);
+    if (isRecording || isLoading) {
+      return;
+    }
+    await startRecording(undefined, { quickCapture: true });
   }
 
   function stopRecording() {
@@ -1066,7 +1076,12 @@ export default function HomePage() {
     setStatus("Canceling recording...");
   }
 
-  async function uploadRecording(blob: Blob, pendingId: string, eventId?: number) {
+  async function uploadRecording(
+    blob: Blob,
+    pendingId: string,
+    eventId?: number,
+    quickCapture = false,
+  ) {
     setIsLoading(true);
 
     const updatePending = (updater: (prev: PendingRecording) => PendingRecording) => {
@@ -1086,7 +1101,7 @@ export default function HomePage() {
     updatePending((p) => ({ ...p, status: "processing", error: undefined }));
 
     try {
-      const created: MemoryEntry = await createMemoryFromAudioBlob(blob, eventId);
+      const created: MemoryEntry = await createMemoryFromAudioBlob(blob, eventId, quickCapture);
       if (activeQuestion) {
         try {
           await answerQuestionWithMemory(activeQuestion.id, created.id);
@@ -1381,13 +1396,23 @@ export default function HomePage() {
         <section className="hero">
           <div className="heroRow">
             <h1>{mainCharacterName ? `${mainCharacterName}'s Memoir` : "Memoir MVP"}</h1>
-            <button
-              type="button"
-              className="secondary captureToggle"
-              onClick={() => setIsCaptureDrawerOpen(true)}
-            >
-              + New Memory
-            </button>
+            <div className="heroActions">
+              <button
+                type="button"
+                className="primary captureToggle"
+                onClick={() => void startQuickMemoryCapture()}
+                disabled={isRecording || isLoading}
+              >
+                Quick Memory
+              </button>
+              <button
+                type="button"
+                className="secondary captureToggle"
+                onClick={() => setIsCaptureDrawerOpen(true)}
+              >
+                + New Memory
+              </button>
+            </div>
           </div>
           <p>Explore your timeline.</p>
           <p className="meta">Tip: start each recording with your name, where this memory happened, and when it happened.</p>
