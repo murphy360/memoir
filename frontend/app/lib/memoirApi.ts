@@ -220,6 +220,16 @@ export async function uploadAsset(formData: FormData): Promise<AssetEntry> {
   return response.json();
 }
 
+export async function processEventPhotoAssets(eventId: number): Promise<{ events_processed: number; photos_processed: number; processed_asset_ids: number[] }> {
+  const response = await fetch(toAbsoluteApiUrl("/api/assets/photos/process-events"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event_id: eventId }),
+  });
+  await expectOk(response, "Process event photos failed");
+  return response.json();
+}
+
 export async function deleteAsset(assetId: number): Promise<void> {
   const response = await fetch(toAbsoluteApiUrl(`/api/assets/${assetId}`), {
     method: "DELETE",

@@ -45,6 +45,7 @@ import {
   updateMemoryTitle as updateMemoryTitleById,
   updateAssetNotes as updateAssetNotesById,
   updateAssetTitle as updateAssetTitleById,
+  processEventPhotoAssets,
   uploadAsset,
 } from "./lib/memoirApi";
 import {
@@ -116,6 +117,7 @@ export default function HomePage() {
   const [editingAssetTitleId, setEditingAssetTitleId] = useState<number | null>(null);
   const [editingAssetTitleValue, setEditingAssetTitleValue] = useState("");
   const [assetTitleSavingId, setAssetTitleSavingId] = useState<number | null>(null);
+  const [processingEventPhotosId, setProcessingEventPhotosId] = useState<number | null>(null);
   const [editingAssetNotesId, setEditingAssetNotesId] = useState<number | null>(null);
   const [editingAssetNotesValue, setEditingAssetNotesValue] = useState("");
   const [assetNotesSavingId, setAssetNotesSavingId] = useState<number | null>(null);
@@ -813,6 +815,27 @@ export default function HomePage() {
     }
   }
 
+  async function processPhotosForEvent(eventId: number) {
+    setProcessingEventPhotosId(eventId);
+    setStatus("Processing event photos...");
+    try {
+      const result = await processEventPhotoAssets(eventId);
+      await loadTimeline();
+      if (activeEventId === eventId) {
+        await loadAssetsForEvent(eventId);
+      }
+      if (result.photos_processed > 0) {
+        setStatus(`Processed ${result.photos_processed} photo${result.photos_processed === 1 ? "" : "s"} for this event.`);
+      } else {
+        setStatus("No unprocessed photos found for this event.");
+      }
+    } catch {
+      setStatus("Failed to process event photos.");
+    } finally {
+      setProcessingEventPhotosId(null);
+    }
+  }
+
   async function saveMemoryTitle(memoryId: number, eventId?: number) {
     const nextTitle = editingMemoryTitleValue.trim();
     if (!nextTitle) {
@@ -1370,6 +1393,8 @@ export default function HomePage() {
         eventActionId={eventActionId}
         summarizeEvent={summarizeEvent}
         deepResearchEvent={deepResearchEvent}
+        processingEventPhotosId={processingEventPhotosId}
+        processEventPhotos={processPhotosForEvent}
         acceptEventResearchSuggestion={acceptEventResearchSuggestion}
         dismissEventResearchSuggestion={dismissEventResearchSuggestion}
         questionsForEvent={questionsByEventId.get(event.id) ?? []}

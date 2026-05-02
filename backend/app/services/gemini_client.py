@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -268,6 +269,85 @@ def suggest_event_edit_from_context(
         )
 
     return None
+
+
+def generate_insightful_questions(
+    transcript: str,
+    event_description: str,
+    metadata: "MemoryMetadata",
+) -> list[str]:
+    """Use Gemini to generate leading, insightful follow-up questions from a memory transcript.
+
+    These questions are meant to carry the conversation forward — probing emotion,
+    significance, relationships, and consequences rather than just filling gaps.
+    Returns an empty list if Gemini is unavailable or the request fails.
+    """
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        return []
+
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
+
+    context_parts: list[str] = []
+    if metadata.recorder_name:
+        context_parts.append(f"Narrator: {metadata.recorder_name}")
+    if metadata.date_text and metadata.date_text != "unknown":
+        context_parts.append(f"Date: {metadata.date_text}")
+    if metadata.people:
+        context_parts.append(f"People mentioned: {', '.join(metadata.people[:5])}")
+    if metadata.locations:
+        context_parts.append(f"Locations: {', '.join(metadata.locations[:3])}")
+    context_block = "\n".join(context_parts)
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": (
+                            "You are helping someone build a personal memoir. They just shared a memory. "
+                            "Your job is to ask 2-3 insightful, leading questions that will carry the conversation forward "
+                            "and help them tell a richer story. "
+                            "Good questions:\n"
+                            "- Probe emotion, significance, or what changed as a result of this moment\n"
+                            "- Ask about key people present and their roles\n"
+                            "- Invite reflection on why this memory has stayed with them\n"
+                            "- Connect to larger life themes (family, ambition, loss, joy, identity)\n"
+                            "- Are specific to what was shared, NOT generic\n\n"
+                            "Bad questions repeat facts already stated, ask for logistics, "
+                            "or say things like 'what happened just before'.\n\n"
+                            "Return exactly 2-3 questions, one per line, no numbering, no bullets, "
+                            "each ending with a question mark.\n\n"
+                            f"Memory transcript:\n{transcript[:1500]}\n\n"
+                            f"Context:\n{context_block}"
+                        )
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 400,
+        },
+    }
+
+    try:
+        response = requests.post(endpoint, params={"key": gemini_key}, json=payload, timeout=30)
+        if not response.ok:
+            logger.warning("Insightful questions request failed: %s", response.text[:200])
+            return []
+        data = response.json()
+        candidate = data.get("candidates", [{}])[0]
+        parts = candidate.get("content", {}).get("parts", [])
+        text = "\n".join(part.get("text", "").strip() for part in parts if part.get("text")).strip()
+        if not text:
+            return []
+        questions = [q.strip() for q in text.split("\n") if q.strip() and q.strip().endswith("?")]
+        return questions[:3]
+    except Exception as exc:
+        logger.warning("generate_insightful_questions exception: %s", exc)
+        return []
 
 
 def generate_research_questions(
@@ -862,6 +942,90 @@ def extract_text_from_document(filename: str, file_bytes: bytes, mime_type: str)
             status_code=502,
             detail=f"Document analysis failed: {str(exc)}",
         )
+
+
+def extract_text_from_photo_batch(photo_payloads: list[tuple[str, bytes, str]]) -> dict[int, str]:
+    """Use one Gemini call to summarize a batch of uploaded photos.
+
+    The return value is keyed by 1-based photo index from `photo_payloads`.
+    If Gemini is unavailable or returns an unparsable response, this returns {}.
+    """
+    if not photo_payloads:
+        return {}
+
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        return {}
+
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
+
+    parts: list[dict] = [
+        {
+            "text": (
+                "You will receive a batch of photos from a memoir app. "
+                "For each photo, produce one concise plain-text summary sentence focused on people, "
+                "location clues, activity, and notable context. Do not invent facts. "
+                "Return strict JSON only with this shape: "
+                "{\"items\":[{\"index\":1,\"summary\":\"...\"}]}. "
+                "Use the exact photo index provided before each image."
+            )
+        }
+    ]
+
+    for index, (filename, file_bytes, mime_type) in enumerate(photo_payloads, start=1):
+        parts.append({"text": f"PHOTO_INDEX={index}; filename={filename}"})
+        parts.append(
+            {
+                "inline_data": {
+                    "mime_type": mime_type,
+                    "data": base64.b64encode(file_bytes).decode("utf-8"),
+                }
+            }
+        )
+
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {
+            "temperature": 0.1,
+            "response_mime_type": "application/json",
+        },
+    }
+
+    try:
+        response = requests.post(endpoint, params={"key": gemini_key}, json=payload, timeout=90)
+        if not response.ok:
+            logger.warning("Gemini photo batch extraction failed: %s", response.text[:300])
+            return {}
+        data = response.json()
+        text_parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+        raw_text = "\n".join(part.get("text", "").strip() for part in text_parts if part.get("text")).strip()
+        if not raw_text:
+            return {}
+
+        cleaned = raw_text
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\\s*", "", cleaned)
+            cleaned = re.sub(r"\\s*```$", "", cleaned)
+
+        parsed = json.loads(cleaned)
+        items = parsed.get("items", []) if isinstance(parsed, dict) else []
+        result: dict[int, str] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            index_value = item.get("index")
+            summary = item.get("summary")
+            if not isinstance(index_value, int) or not isinstance(summary, str):
+                continue
+            cleaned_summary = summary.strip()
+            if not cleaned_summary:
+                continue
+            result[index_value] = cleaned_summary[:1200]
+        return result
+    except Exception as exc:
+        logger.warning("Gemini photo batch extraction exception: %s", exc)
+        return {}
 
 
 def generate_period_biography(

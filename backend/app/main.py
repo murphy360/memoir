@@ -83,17 +83,36 @@ from app.services.periods import (
     refresh_period_summary,
     unique_period_slug,
 )
+from app.services.photo_batch import (
+    QueuedPhotoUpload,
+    enqueue_photo_uploads,
+    get_photo_queue_size,
+    process_events_photo_assets,
+    process_queued_photo_uploads,
+)
 from app.services.questions import (
     add_unique_pending_questions,
     normalize_question_text,
     seed_initial_questions,
 )
+from app.services.gemini_client import generate_insightful_questions
 from app.services.memory_analysis import (
     build_sort_date,
     fallback_metadata_from_transcript,
     generate_questions_from_memory,
     summarize_event as summarize_memory_transcript,
 )
+
+
+def _generate_questions(transcript: str, event_description: str, metadata) -> list[str]:
+    """Generate follow-up questions, using Gemini for insightful content questions."""
+    questions = generate_questions_from_memory(transcript, event_description, metadata)
+    # If only the generic 'what happened just before' fallback fired, use Gemini instead
+    if len(questions) == 1 and questions[0].startswith("You shared:"):
+        gemini_questions = generate_insightful_questions(transcript, event_description, metadata)
+        if gemini_questions:
+            return gemini_questions
+    return questions
 
 logger = logging.getLogger("memoir.api")
 AUDIO_STORAGE_DIR = Path(os.getenv("AUDIO_STORAGE_DIR", "/data/audio"))
@@ -723,6 +742,115 @@ async def upload_asset(
     return build_asset_response(asset)
 
 
+@app.post("/api/assets/photos/queue")
+async def queue_photo_assets(
+    files: list[UploadFile] = File(...),
+    period_id: Optional[int] = Form(None),
+    event_id: Optional[int] = Form(None),
+    notes: Optional[str] = Form(None),
+    auto_process: bool = Form(False),
+    db: Session = Depends(get_db),
+) -> dict:
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    if period_id is not None and not db.get(LifePeriod, period_id):
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    if event_id is not None and not db.get(LifeEvent, event_id):
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    queued_items: list[QueuedPhotoUpload] = []
+    for file in files:
+        file_bytes = await file.read()
+        if not file_bytes:
+            continue
+
+        content_type = (file.content_type or "").split(";")[0].strip().lower()
+        if not content_type.startswith("image/"):
+            raise HTTPException(
+                status_code=415,
+                detail=(
+                    f"Unsupported file type '{content_type}'. "
+                    "Photo batch queue accepts images only"
+                ),
+            )
+
+        queued_items.append(
+            QueuedPhotoUpload(
+                filename=(file.filename or "photo"),
+                content_type=content_type,
+                file_bytes=file_bytes,
+                period_id=period_id,
+                event_id=event_id,
+                notes=notes,
+            )
+        )
+
+    if not queued_items:
+        raise HTTPException(status_code=400, detail="No non-empty photo files provided")
+
+    queue_size = enqueue_photo_uploads(queued_items)
+
+    if not auto_process:
+        return {
+            "queued_count": len(queued_items),
+            "queue_size": queue_size,
+            "processed_count": 0,
+            "assets": [],
+        }
+
+    assets = process_queued_photo_uploads(db, DOCUMENT_STORAGE_DIR)
+    db.commit()
+    for asset in assets:
+        db.refresh(asset)
+
+    return {
+        "queued_count": len(queued_items),
+        "queue_size": get_photo_queue_size(),
+        "processed_count": len(assets),
+        "assets": [build_asset_response(asset).model_dump(mode="json") for asset in assets],
+    }
+
+
+@app.post("/api/assets/photos/queue/process", response_model=list[AssetResponse])
+def process_photo_asset_queue(
+    max_items: Optional[int] = Body(default=None, embed=True),
+    db: Session = Depends(get_db),
+) -> list[AssetResponse]:
+    assets = process_queued_photo_uploads(db, DOCUMENT_STORAGE_DIR, max_items=max_items)
+    if not assets:
+        return []
+
+    db.commit()
+    for asset in assets:
+        db.refresh(asset)
+    return [build_asset_response(asset) for asset in assets]
+
+
+@app.post("/api/assets/photos/process-events")
+def process_photo_assets_by_event(
+    event_id: Optional[int] = Body(default=None, embed=True),
+    include_processed: bool = Body(default=False, embed=True),
+    max_events: Optional[int] = Body(default=None, embed=True),
+    max_items_per_event: Optional[int] = Body(default=None, embed=True),
+    db: Session = Depends(get_db),
+) -> dict:
+    if event_id is not None and not db.get(LifeEvent, event_id):
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    result = process_events_photo_assets(
+        db,
+        DOCUMENT_STORAGE_DIR,
+        event_id=event_id,
+        include_processed=include_processed,
+        max_events=max_events,
+        max_items_per_event=max_items_per_event,
+    )
+    db.commit()
+    return result
+
+
 @app.post("/api/assets/{asset_id}/link-event/{event_id}", response_model=AssetResponse)
 def link_asset_to_event(
     asset_id: int,
@@ -1248,7 +1376,7 @@ async def create_memory(
         try:
             add_unique_pending_questions(
                 db,
-                generate_questions_from_memory(transcript, event_description, metadata),
+                _generate_questions(transcript, event_description, metadata),
                 entry.id,
             )
             db.commit()
@@ -1492,7 +1620,7 @@ def reanalyze_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEnt
     if transcription_enabled and transcript not in ("Transcription failed.", "Transcription disabled."):
         add_unique_pending_questions(
             db,
-            generate_questions_from_memory(transcript, event_description, metadata),
+            _generate_questions(transcript, event_description, metadata),
             memory.id,
         )
 

@@ -64,6 +64,8 @@ type EventCardProps = {
   eventActionId: number | null;
   summarizeEvent: (eventId: number) => Promise<void>;
   deepResearchEvent: (eventId: number) => Promise<void>;
+  processingEventPhotosId: number | null;
+  processEventPhotos: (eventId: number) => Promise<void>;
   acceptEventResearchSuggestion: (eventId: number) => Promise<void>;
   dismissEventResearchSuggestion: (eventId: number) => Promise<void>;
   questionsForEvent: QuestionContext[];
@@ -160,6 +162,8 @@ export function EventCard({
   eventActionId,
   summarizeEvent,
   deepResearchEvent,
+  processingEventPhotosId,
+  processEventPhotos,
   acceptEventResearchSuggestion,
   dismissEventResearchSuggestion,
   questionsForEvent,
@@ -419,6 +423,14 @@ export function EventCard({
               disabled={eventActionId === event.id || isRecording || isLoading || isSavingLifeStructure}
             >
               {event.research_summary ? "Refresh Deep Research" : "Deep Research"}
+            </button>
+            <button
+              className="secondary"
+              type="button"
+              onClick={() => void processEventPhotos(event.id)}
+              disabled={processingEventPhotosId === event.id || isRecording || isLoading || isSavingLifeStructure}
+            >
+              {processingEventPhotosId === event.id ? "Processing Photos..." : "Process Event Photos"}
             </button>
           </div>
           {event.summary && (
