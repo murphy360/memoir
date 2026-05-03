@@ -88,6 +88,7 @@ from app.services.periods import (
     ensure_event_asset_link,
     normalize_directory_name,
     normalize_period_title,
+    period_asset_count_from_events,
     refresh_period_summary,
     unique_period_slug,
 )
@@ -310,7 +311,7 @@ def analyze_life_period(
         .order_by(LifeEvent.event_date_sort.is_(None), LifeEvent.event_date_sort.asc(), LifeEvent.created_at.asc())
         .all()
     )
-    analysis = analyze_period(period, events, len(period.assets), pipeline_stats=pipeline_stats)
+    analysis = analyze_period(period, events, period_asset_count_from_events(events), pipeline_stats=pipeline_stats)
 
     if body.apply_dates and analysis.recommended_start_date_text and analysis.recommended_end_date_text:
         try:
@@ -348,7 +349,7 @@ def analyze_life_period(
             .all()
         )
 
-    return analyze_period(period, events, len(period.assets), pipeline_stats=pipeline_stats)
+    return analyze_period(period, events, period_asset_count_from_events(events), pipeline_stats=pipeline_stats)
 
 
 @app.post("/api/events", response_model=LifeEventResponse)

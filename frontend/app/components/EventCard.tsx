@@ -356,13 +356,13 @@ export function EventCard({
           )}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", alignItems: "stretch" }}>
-          <button className="secondary" type="button" onClick={() => void onToggleOpen()}>
+          <button className="secondary" type="button" style={{ whiteSpace: "nowrap" }} onClick={() => void onToggleOpen()}>
             {isOpen ? "Hide" : "Open"}
           </button>
           <button
             className="secondary"
             type="button"
-            style={{ color: "var(--danger, #c0392b)" }}
+            style={{ color: "var(--danger, #c0392b)", whiteSpace: "nowrap" }}
             onClick={() => void deleteLifeEvent(event.id)}
             disabled={isSavingLifeStructure || isRecording || isLoading}
           >

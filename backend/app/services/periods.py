@@ -44,7 +44,19 @@ def unique_period_slug(db: Session, title: str, existing_id: Optional[int] = Non
         suffix += 1
 
 
+def period_asset_count_from_events(events: list[LifeEvent]) -> int:
+    """Count unique assets linked through events in the period."""
+    asset_ids: set[int] = set()
+    for event in events:
+        for link in event.linked_assets:
+            if link.asset_id is not None:
+                asset_ids.add(link.asset_id)
+    return len(asset_ids)
+
+
 def build_period_response(period: LifePeriod) -> LifePeriodResponse:
+    event_count = len(period.events)
+    asset_count = period_asset_count_from_events(period.events)
     return LifePeriodResponse(
         id=period.id,
         title=period.title,
@@ -52,8 +64,8 @@ def build_period_response(period: LifePeriod) -> LifePeriodResponse:
         start_date_text=period.start_date_text,
         end_date_text=period.end_date_text,
         summary=period.summary,
-        event_count=len(period.events),
-        asset_count=len(period.assets),
+        event_count=event_count,
+        asset_count=asset_count,
         created_at=period.created_at,
         updated_at=period.updated_at,
     )
@@ -372,7 +384,7 @@ def refresh_period_summary(db: Session, period: Optional[LifePeriod], force: boo
         .order_by(LifeEvent.event_date_sort.is_(None), LifeEvent.event_date_sort.asc(), LifeEvent.created_at.asc())
         .all()
     )
-    summary_text, _ = _generate_period_summary(period, events, len(period.assets))
+    summary_text, _ = _generate_period_summary(period, events, period_asset_count_from_events(events))
     period.summary = summary_text
     return summary_text
 
