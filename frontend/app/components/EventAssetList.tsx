@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import {
   formatAssetCaptureDate,
@@ -35,6 +36,33 @@ type EventAssetListProps = {
   isSavingLifeStructure?: boolean;
 };
 
+function isImageAsset(asset: AssetEntry): boolean {
+  const contentType = (asset.content_type || "").toLowerCase();
+  return asset.kind === "photo" || contentType.startsWith("image/");
+}
+
+function isAudioAsset(asset: AssetEntry): boolean {
+  const contentType = (asset.content_type || "").toLowerCase();
+  return asset.kind === "recording" || contentType.startsWith("audio/");
+}
+
+function isDocumentAsset(asset: AssetEntry): boolean {
+  return asset.kind === "document";
+}
+
+function isPdfAsset(asset: AssetEntry): boolean {
+  return (asset.content_type || "").toLowerCase().includes("pdf");
+}
+
+function fileExtension(name: string | null): string {
+  const raw = (name || "").trim();
+  if (!raw || !raw.includes(".")) {
+    return "FILE";
+  }
+  const ext = raw.split(".").pop() || "FILE";
+  return ext.slice(0, 5).toUpperCase();
+}
+
 export function EventAssetList({
   assets,
   highlightedElementId,
@@ -63,194 +91,216 @@ export function EventAssetList({
   linkUnlinkedAssetToEvent,
   isSavingLifeStructure = false,
 }: EventAssetListProps) {
+  const [previewAssetId, setPreviewAssetId] = useState<number | null>(null);
+  const [modalEditingTitleId, setModalEditingTitleId] = useState<number | null>(null);
+  const [modalEditingTitleValue, setModalEditingTitleValue] = useState("");
+  const [modalEditingNotesId, setModalEditingNotesId] = useState<number | null>(null);
+  const [modalEditingNotesValue, setModalEditingNotesValue] = useState("");
+
+  const galleryAssets = useMemo(
+    () => assets.filter((asset) => isImageAsset(asset) || isAudioAsset(asset) || isDocumentAsset(asset)),
+    [assets],
+  );
+
+  const previewAsset = useMemo(
+    () => assets.find((asset) => asset.id === previewAssetId) || null,
+    [assets, previewAssetId],
+  );
+
+  const handleCloseModal = () => {
+    setPreviewAssetId(null);
+    setModalEditingTitleId(null);
+    setModalEditingTitleValue("");
+    setModalEditingNotesId(null);
+    setModalEditingNotesValue("");
+  };
+
   return (
-    <div className="lifeAssetList">
-      {assets.map((asset) => (
-        <div
-          key={asset.id}
-          id={`asset-row-${asset.id}`}
-          className={`lifeAssetRow${highlightedElementId === `asset-row-${asset.id}` ? " focusPulse" : ""}`}
-        >
-          <div className="assetRowHeader">
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <strong>{asset.title || asset.original_filename || `Asset ${asset.id}`}</strong>
-              <span className="meta"> · {asset.kind}{asset.size_bytes ? ` · ${formatBytes(asset.size_bytes)}` : ""}</span>
-            </span>
-            <button
-              className="secondary"
-              type="button"
-              style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
-              onClick={() => setExpandedAssetRowIds((prev) => {
-                const next = new Set(prev);
-                if (next.has(asset.id)) next.delete(asset.id); else next.add(asset.id);
-                return next;
-              })}
-            >
-              {expandedAssetRowIds.has(asset.id) ? "Collapse" : "Expand"}
-            </button>
-          </div>
-          {expandedAssetRowIds.has(asset.id) && <div>
-            {editingAssetTitleId === asset.id ? (
-              <div className="controls" style={{ marginBottom: "0.35rem" }}>
-                <input
-                  className="directoryInput"
-                  type="text"
-                  value={editingAssetTitleValue}
-                  autoFocus
-                  onChange={(e) => setEditingAssetTitleValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      void saveAssetTitle(asset.id, eventId);
-                    }
-                    if (e.key === "Escape") {
-                      setEditingAssetTitleId(null);
-                      setEditingAssetTitleValue("");
-                    }
-                  }}
-                  style={{ flex: 1 }}
-                />
-                <button className="primary" type="button" onClick={() => void saveAssetTitle(asset.id, eventId)} disabled={assetTitleSavingId === asset.id}>Save</button>
-                <button className="secondary" type="button" onClick={() => { setEditingAssetTitleId(null); setEditingAssetTitleValue(""); }}>Cancel</button>
-              </div>
-            ) : (
-              <div className="assetNotesRow" style={{ marginTop: 0 }}>
-                <span className="meta">Title</span>
-                <button
-                  className="secondary"
-                  type="button"
-                  style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
-                  onClick={() => {
-                    setEditingAssetTitleId(asset.id);
-                    setEditingAssetTitleValue(asset.title || "");
-                  }}
-                >
-                  Edit Title
-                </button>
-              </div>
-            )}
-            <p className="meta">Filename: {asset.original_filename || "none"}</p>
-            {asset.kind === "photo" && (
+    <>
+    {galleryAssets.length > 0 && (
+      <div className="assetGridGallery">
+        {galleryAssets.map((asset) => (
+          <button
+            key={asset.id}
+            className="assetGridTile"
+            type="button"
+            onClick={() => setPreviewAssetId(asset.id)}
+            title={asset.title || asset.original_filename || `Asset ${asset.id}`}
+          >
+            {isImageAsset(asset) && (
               <img
                 src={resolveApiUrl(`${asset.download_url}?download=false`)}
                 alt={asset.title || asset.original_filename || `Asset ${asset.id}`}
-                className="assetThumbnail"
               />
             )}
-            <p className="meta">Kind: {asset.kind} {asset.size_bytes ? `| ${formatBytes(asset.size_bytes)}` : ""}</p>
-            {renderImageMetadataBadges(asset)}
-            {(asset.image_width !== null || asset.image_height !== null) && (
-              <p className="meta">Dimensions: {asset.image_width || "?"} x {asset.image_height || "?"}</p>
+            {isAudioAsset(asset) && (
+              <div className="assetAudioTile">🎵</div>
             )}
-            {formatAssetCaptureDate(asset) && (
-              <p className="meta">Captured: {formatAssetCaptureDate(asset)}</p>
+            {isDocumentAsset(asset) && (
+              <div className="assetDocTile">{fileExtension(asset.original_filename)}</div>
             )}
-            {formatAssetGps(asset) && (
-              <p className="meta">Location: {formatAssetGps(asset)}</p>
-            )}
-            {(asset.camera_make || asset.camera_model) && (
-              <p className="meta">Camera: {[asset.camera_make, asset.camera_model].filter(Boolean).join(" ")}</p>
-            )}
-            {editingAssetNotesId === asset.id ? (
-              <div className="controls" style={{ marginTop: "0.35rem" }}>
+          </button>
+        ))}
+      </div>
+    )}
+    {previewAsset && (
+      <div className="assetPreviewOverlay" role="dialog" aria-modal="true" onClick={handleCloseModal}>
+        <div className="assetPreviewModal" onClick={(e) => e.stopPropagation()}>
+          <div className="assetPreviewHeader">
+            {modalEditingTitleId === previewAsset.id ? (
+              <div className="controls" style={{ display: "flex", gap: "0.5rem", flex: 1 }}>
                 <input
                   className="directoryInput"
                   type="text"
-                  value={editingAssetNotesValue}
+                  value={modalEditingTitleValue}
                   autoFocus
-                  onChange={(e) => setEditingAssetNotesValue(e.target.value)}
+                  onChange={(e) => setModalEditingTitleValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      void saveAssetNotes(asset.id, eventId);
+                      void saveAssetTitle(previewAsset.id, eventId);
+                      setModalEditingTitleId(null);
                     }
                     if (e.key === "Escape") {
-                      setEditingAssetNotesId(null);
-                      setEditingAssetNotesValue("");
+                      setModalEditingTitleId(null);
+                      setModalEditingTitleValue("");
                     }
                   }}
-                  style={{ flex: 1 }}
                 />
-                <button className="primary" type="button" onClick={() => void saveAssetNotes(asset.id, eventId)} disabled={assetNotesSavingId === asset.id}>Save</button>
-                <button className="secondary" type="button" onClick={() => { setEditingAssetNotesId(null); setEditingAssetNotesValue(""); }}>Cancel</button>
+                <button className="primary" type="button" onClick={() => { void saveAssetTitle(previewAsset.id, eventId); setModalEditingTitleId(null); }} disabled={assetTitleSavingId === previewAsset.id}>Save</button>
+                <button className="secondary" type="button" onClick={() => { setModalEditingTitleId(null); setModalEditingTitleValue(""); }}>Cancel</button>
               </div>
             ) : (
-              <div className="assetNotesRow">
-                <p className="meta">Notes: {asset.notes || "none"}</p>
-                <button
-                  className="secondary"
-                  type="button"
-                  style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
-                  onClick={() => {
-                    setEditingAssetNotesId(asset.id);
-                    setEditingAssetNotesValue(asset.notes || "");
-                  }}
-                >
-                  Edit Notes
-                </button>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flex: 1 }}>
+                <h3>{previewAsset.title || previewAsset.original_filename || `Asset ${previewAsset.id}`}</h3>
+                <button className="secondary" type="button" style={{ whiteSpace: "nowrap" }} onClick={() => { setModalEditingTitleId(previewAsset.id); setModalEditingTitleValue(previewAsset.title || ""); }}>Edit Title</button>
               </div>
             )}
-            {asset.playback_url && (
-              <audio
-                controls
-                preload="metadata"
-                src={resolveApiUrl(asset.playback_url)}
-                style={{ width: "100%", marginTop: "0.45rem" }}
-              />
+            <button className="secondary" type="button" onClick={handleCloseModal} style={{ marginLeft: "0.5rem" }}>Close</button>
+          </div>
+
+          <p className="meta">
+            {previewAsset.kind}{previewAsset.size_bytes ? ` · ${formatBytes(previewAsset.size_bytes)}` : ""}
+          </p>
+
+          {isImageAsset(previewAsset) && (
+            <img
+              src={resolveApiUrl(`${previewAsset.download_url}?download=false`)}
+              alt={previewAsset.title || previewAsset.original_filename || `Asset ${previewAsset.id}`}
+              className="assetPreviewImage"
+            />
+          )}
+
+          {isAudioAsset(previewAsset) && previewAsset.playback_url && (
+            <audio
+              controls
+              preload="metadata"
+              src={resolveApiUrl(previewAsset.playback_url)}
+              style={{ width: "100%", marginTop: "0.6rem" }}
+            />
+          )}
+
+          {isPdfAsset(previewAsset) && (
+            <iframe
+              title={previewAsset.title || previewAsset.original_filename || `Asset ${previewAsset.id}`}
+              src={resolveApiUrl(`${previewAsset.download_url}?download=false`)}
+              className="assetPreviewFrame"
+            />
+          )}
+
+          {!isImageAsset(previewAsset) && !isAudioAsset(previewAsset) && !isPdfAsset(previewAsset) && (
+            <div className="assetPreviewFallback">
+              <p className="meta">Preview not available for this file type. Use View or Download for full details.</p>
+            </div>
+          )}
+
+          <div className="assetPreviewMeta">
+            <p className="meta"><strong>Filename:</strong> {previewAsset.original_filename || "none"}</p>
+            {formatAssetCaptureDate(previewAsset) && <p className="meta"><strong>Captured:</strong> {formatAssetCaptureDate(previewAsset)}</p>}
+            {formatAssetGps(previewAsset) && <p className="meta"><strong>Location:</strong> {formatAssetGps(previewAsset)}</p>}
+            {renderImageMetadataBadges(previewAsset)}
+            {(previewAsset.image_width !== null || previewAsset.image_height !== null) && (
+              <p className="meta"><strong>Dimensions:</strong> {previewAsset.image_width || "?"} x {previewAsset.image_height || "?"}</p>
             )}
-            {asset.text_excerpt && (
-              <p className="meta assetTranscript">Transcript: {asset.text_excerpt}</p>
+            {(previewAsset.camera_make || previewAsset.camera_model) && (
+              <p className="meta"><strong>Camera:</strong> {[previewAsset.camera_make, previewAsset.camera_model].filter(Boolean).join(" ")}</p>
             )}
-          </div>}
-          {expandedAssetRowIds.has(asset.id) && !showLinkControls && <div className="assetActions">
-            <a className="secondary linkButton" href={resolveApiUrl(`${asset.download_url}?download=false`)} target="_blank" rel="noreferrer">
+            {modalEditingNotesId === previewAsset.id ? (
+              <div className="controls" style={{ marginTop: "0.35rem" }}>
+                <label style={{ display: "block", marginBottom: "0.25rem" }}><strong>Notes</strong></label>
+                <input
+                  className="directoryInput"
+                  type="text"
+                  value={modalEditingNotesValue}
+                  autoFocus
+                  onChange={(e) => setModalEditingNotesValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      void saveAssetNotes(previewAsset.id, eventId);
+                      setModalEditingNotesId(null);
+                    }
+                    if (e.key === "Escape") {
+                      setModalEditingNotesId(null);
+                      setModalEditingNotesValue("");
+                    }
+                  }}
+                  style={{ flex: 1, width: "100%" }}
+                />
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.35rem" }}>
+                  <button className="primary" type="button" onClick={() => { void saveAssetNotes(previewAsset.id, eventId); setModalEditingNotesId(null); }} disabled={assetNotesSavingId === previewAsset.id}>Save</button>
+                  <button className="secondary" type="button" onClick={() => { setModalEditingNotesId(null); setModalEditingNotesValue(""); }}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginTop: "0.5rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <strong>Notes</strong>
+                  <button className="secondary" type="button" style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }} onClick={() => { setModalEditingNotesId(previewAsset.id); setModalEditingNotesValue(previewAsset.notes || ""); }}>Edit</button>
+                </div>
+                <p className="meta">{previewAsset.notes || "none"}</p>
+              </div>
+            )}
+            {previewAsset.text_excerpt && <p className="meta assetTranscript"><strong>Transcript:</strong> {previewAsset.text_excerpt}</p>}
+          </div>
+
+          <div className="assetPreviewActions">
+            <a className="secondary linkButton" href={resolveApiUrl(`${previewAsset.download_url}?download=false`)} target="_blank" rel="noreferrer">
               View
             </a>
-            <a className="secondary linkButton" href={resolveApiUrl(`${asset.download_url}?download=true`)}>
+            <a className="secondary linkButton" href={resolveApiUrl(`${previewAsset.download_url}?download=true`)}>
               Download
             </a>
-            <button
-              className="ghost"
-              type="button"
-              onClick={() => void deleteAsset(asset.id, eventId)}
-            >
+            <button className="ghost" type="button" onClick={() => { void deleteAsset(previewAsset.id, eventId); handleCloseModal(); }}>
               Delete
             </button>
-          </div>}
-          {expandedAssetRowIds.has(asset.id) && showLinkControls && setAssetLinkTargets && linkUnlinkedAssetToEvent && <div className="lifeAssetLinkControls">
-            <select
-              className="directoryInput"
-              value={assetLinkTargets[asset.id] || ""}
-              onChange={(e) => setAssetLinkTargets((current) => ({ ...current, [asset.id]: e.target.value }))}
-              disabled={isSavingLifeStructure || lifeEvents.length === 0}
-            >
-              <option value="">Select event</option>
-              {lifeEvents.map((event) => (
-                <option key={event.id} value={event.id}>{event.title}</option>
-              ))}
-            </select>
-            <button
-              className="secondary"
-              type="button"
-              onClick={() => void linkUnlinkedAssetToEvent(asset.id)}
-              disabled={!assetLinkTargets[asset.id] || isSavingLifeStructure}
-            >
-              Link
-            </button>
-            <a className="ghost linkButton" href={resolveApiUrl(`${asset.download_url}?download=false`)} target="_blank" rel="noreferrer">
-              View
-            </a>
-            <a className="ghost linkButton" href={resolveApiUrl(`${asset.download_url}?download=true`)}>
-              Download
-            </a>
-            <button
-              className="ghost"
-              type="button"
-              onClick={() => void deleteAsset(asset.id)}
-            >
-              Delete
-            </button>
-          </div>}
+          </div>
+
+          {showLinkControls && setAssetLinkTargets && linkUnlinkedAssetToEvent && (
+            <div className="lifeAssetLinkControls" style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem" }}>
+              <select
+                className="directoryInput"
+                value={assetLinkTargets[previewAsset.id] || ""}
+                onChange={(e) => setAssetLinkTargets((current) => ({ ...current, [previewAsset.id]: e.target.value }))}
+                disabled={isSavingLifeStructure || lifeEvents.length === 0}
+              >
+                <option value="">Select event to link to</option>
+                {lifeEvents.map((event) => (
+                  <option key={event.id} value={event.id}>{event.title}</option>
+                ))}
+              </select>
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => { void linkUnlinkedAssetToEvent(previewAsset.id); handleCloseModal(); }}
+                disabled={!assetLinkTargets[previewAsset.id] || isSavingLifeStructure}
+                style={{ marginTop: "0.5rem" }}
+              >
+                Link
+              </button>
+            </div>
+          )}
         </div>
-      ))}
-    </div>
+      </div>
+    )}
+    </>
   );
 }

@@ -1034,6 +1034,70 @@ button.ghost:hover:not(:disabled) {
   border: 1px solid var(--border);
 }
 
+.assetGridGallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f9fffe;
+}
+
+.assetGridTile {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0;
+  overflow: hidden;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.assetGridTile:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(15, 79, 73, 0.1);
+}
+
+.assetGridTile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.assetGridTile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.assetAudioTile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 2.5rem;
+  background: linear-gradient(135deg, #e8f7f3 0%, #d1ede8 100%);
+  color: #0f4f49;
+}
+
+.assetDocTile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #0f4f49;
+  background: linear-gradient(135deg, #e8f7f3 0%, #d1ede8 100%);
+}
+
 .lifePeriodList {
   display: grid;
   gap: 0.75rem;
@@ -1093,6 +1157,40 @@ button.ghost:hover:not(:disabled) {
   align-items: center;
   gap: 0.6rem;
   min-width: 0;
+}
+
+.assetThumbButton {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 8px;
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.assetThumbImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.assetDocThumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #0f4f49;
+  background: #e8f7f3;
 }
 
 .eventCapturePanel {
@@ -1176,6 +1274,78 @@ button.ghost:hover:not(:disabled) {
 
 .lifeAssetLinkControls .directoryInput {
   min-width: 190px;
+}
+
+.assetPreviewOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 26, 32, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 1rem;
+}
+
+.assetPreviewModal {
+  width: min(900px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.9rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.assetPreviewHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.assetPreviewHeader h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.assetPreviewImage,
+.assetPreviewFrame {
+  width: 100%;
+  max-height: 58vh;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  margin-top: 0.55rem;
+}
+
+.assetPreviewImage {
+  object-fit: contain;
+}
+
+.assetPreviewFrame {
+  min-height: 58vh;
+}
+
+.assetPreviewFallback {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 0.8rem;
+  margin-top: 0.55rem;
+}
+
+.assetPreviewMeta {
+  margin-top: 0.65rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.assetPreviewActions {
+  margin-top: 0.65rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .activeEventPanel {
