@@ -95,6 +95,12 @@ export type LifePeriodAnalysis = {
   recommended_end_date_text: string | null;
   generated_summary: string | null;
   summary_reasoning: string;
+  queued_event_count: number;
+  analyzed_event_count: number;
+  skipped_event_count: number;
+  failed_event_count: number;
+  photo_assets_analyzed: number;
+  memories_researched: number;
 };
 
 export type LifeEvent = {
@@ -119,6 +125,9 @@ export type LifeEvent = {
   legacy_audio_url: string | null;
   legacy_audio_size_bytes: number | null;
   linked_asset_count: number;
+  analysis_status: string | null;
+  analysis_last_analyzed_at: string | null;
+  analysis_last_error: string | null;
   created_at: string;
   updated_at: string;
 };

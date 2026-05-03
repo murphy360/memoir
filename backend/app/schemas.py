@@ -79,10 +79,11 @@ class CreateLifePeriodRequest(BaseModel):
 
 
 class AnalyzeLifePeriodRequest(BaseModel):
-    apply_dates: bool = False
-    apply_title: bool = False
-    apply_title_text: Optional[str] = None
-    regenerate_summary: bool = False
+    apply_dates: bool = Field(default=False, description="Apply recommended period start/end dates to the period record.")
+    apply_title: bool = Field(default=False, description="Apply the top recommended period title.")
+    apply_title_text: Optional[str] = Field(default=None, description="Apply this exact title text to the period when provided.")
+    regenerate_summary: bool = Field(default=False, description="Force writing a refreshed period summary back to the period.")
+    reanalyze_events: bool = Field(default=False, description="Force re-running event asset/memory analysis even when inputs are unchanged.")
 
 
 class UpdateLifePeriodRequest(BaseModel):
@@ -110,6 +111,12 @@ class LifePeriodAnalysisResponse(BaseModel):
     recommended_end_date_text: Optional[str] = None
     generated_summary: Optional[str] = None
     summary_reasoning: str
+    queued_event_count: int = Field(default=0, description="How many period events were queued for analysis in this run.")
+    analyzed_event_count: int = Field(default=0, description="How many events were fully analyzed in this run.")
+    skipped_event_count: int = Field(default=0, description="How many events were skipped because their analysis inputs were unchanged.")
+    failed_event_count: int = Field(default=0, description="How many event analysis attempts failed.")
+    photo_assets_analyzed: int = Field(default=0, description="How many photo assets were processed while analyzing queued events.")
+    memories_researched: int = Field(default=0, description="How many linked memories were deeply researched while analyzing queued events.")
 
 
 class LifeEventResponse(BaseModel):
@@ -136,6 +143,9 @@ class LifeEventResponse(BaseModel):
     legacy_audio_url: Optional[str]
     legacy_audio_size_bytes: Optional[int]
     linked_asset_count: int = 0
+    analysis_status: Optional[str] = Field(default=None, description="Latest event analysis state such as running, completed, skipped, or failed.")
+    analysis_last_analyzed_at: Optional[datetime] = Field(default=None, description="UTC timestamp of the most recent successful event analysis.")
+    analysis_last_error: Optional[str] = Field(default=None, description="Truncated error from the most recent failed event analysis attempt.")
     created_at: datetime
     updated_at: datetime
 

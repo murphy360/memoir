@@ -168,7 +168,7 @@ export async function createEvent(payload: {
 
 export async function analyzeLifePeriod(
   periodId: number,
-  payload: { apply_dates: boolean; apply_title: boolean; regenerate_summary: boolean },
+  payload: { apply_dates: boolean; apply_title: boolean; regenerate_summary: boolean; reanalyze_events?: boolean },
 ): Promise<LifePeriodAnalysis> {
   const response = await fetch(toAbsoluteApiUrl(`/api/periods/${periodId}/analyze`), {
     method: "POST",

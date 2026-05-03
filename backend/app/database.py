@@ -177,6 +177,20 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE life_events ADD COLUMN research_suggested_edit_json TEXT"))
         if "location" not in event_columns:
             connection.execute(text("ALTER TABLE life_events ADD COLUMN location VARCHAR(255)"))
+        if "analysis_status" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN analysis_status VARCHAR(20)"))
+        if "analysis_requested_at" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN analysis_requested_at DATETIME"))
+        if "analysis_started_at" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN analysis_started_at DATETIME"))
+        if "analysis_last_analyzed_at" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN analysis_last_analyzed_at DATETIME"))
+        if "analysis_input_hash" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN analysis_input_hash VARCHAR(64)"))
+        if "analysis_last_error" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN analysis_last_error TEXT"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_analysis_status ON life_events (analysis_status)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_analysis_input_hash ON life_events (analysis_input_hash)"))
 
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS assets (

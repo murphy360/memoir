@@ -91,6 +91,9 @@ def build_event_response(event: LifeEvent) -> LifeEventResponse:
         legacy_audio_url=(legacy_memory.audio_url if legacy_memory else None),
         legacy_audio_size_bytes=(legacy_memory.audio_size_bytes if legacy_memory else None),
         linked_asset_count=len(event.linked_assets),
+        analysis_status=event.analysis_status,
+        analysis_last_analyzed_at=event.analysis_last_analyzed_at,
+        analysis_last_error=event.analysis_last_error,
         created_at=event.created_at,
         updated_at=event.updated_at,
     )
@@ -374,7 +377,13 @@ def refresh_period_summary(db: Session, period: Optional[LifePeriod], force: boo
     return summary_text
 
 
-def analyze_period(period: LifePeriod, events: list[LifeEvent], asset_count: int) -> LifePeriodAnalysisResponse:
+def analyze_period(
+    period: LifePeriod,
+    events: list[LifeEvent],
+    asset_count: int,
+    *,
+    pipeline_stats: Optional[dict] = None,
+) -> LifePeriodAnalysisResponse:
     period_start_year, period_end_year = _period_bounds_in_years(period)
     event_min_year, event_max_year = _event_year_bounds(events)
 
@@ -413,6 +422,12 @@ def analyze_period(period: LifePeriod, events: list[LifeEvent], asset_count: int
         recommended_end_date_text=rec_end_text,
         generated_summary=generated_summary,
         summary_reasoning=summary_reasoning,
+        queued_event_count=(pipeline_stats or {}).get("queued_event_count", 0),
+        analyzed_event_count=(pipeline_stats or {}).get("analyzed_event_count", 0),
+        skipped_event_count=(pipeline_stats or {}).get("skipped_event_count", 0),
+        failed_event_count=(pipeline_stats or {}).get("failed_event_count", 0),
+        photo_assets_analyzed=(pipeline_stats or {}).get("photo_assets_analyzed", 0),
+        memories_researched=(pipeline_stats or {}).get("memories_researched", 0),
     )
 
 

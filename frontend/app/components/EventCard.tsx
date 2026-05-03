@@ -236,6 +236,11 @@ export function EventCard({
   const [faceAssignTargets, setFaceAssignTargets] = useState<Record<number, string>>({});
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [isResearchOpen, setIsResearchOpen] = useState(false);
+  const isAnalyzed = Boolean(
+    event.analysis_last_analyzed_at
+    || event.analysis_status === "completed"
+    || event.analysis_status === "skipped",
+  );
 
   return (
     <article
@@ -246,10 +251,11 @@ export function EventCard({
         <div>
           <p className="entitySectionLabel" style={{ marginBottom: "0.2rem" }}>
             <span className="entityPill entityPillEvent">Event</span>
-            <span className="entityFlowArrow">contains</span>
-            <span className="entityPill entityPillMemory">Memory</span>
-            <span className="entityFlowArrow">+</span>
-            <span className="entityPill entityPillAsset">Assets</span>
+            {isAnalyzed && (
+              <span className="entityPill" style={{ marginLeft: "0.35rem", background: "#dff6e8", color: "#0b6b36", border: "1px solid #93d5ad" }}>
+                Analyzed
+              </span>
+            )}
           </p>
           {editingEventTitleId === event.id ? (
             <div className="controls" style={{ marginBottom: "0.35rem" }}>

@@ -52,8 +52,6 @@ from app.services.gemini_client import (
     extract_metadata_with_gemini_function_call,
     research_memory_details,
     suggest_event_edit_from_context,
-    summarize_event_details,
-    suggest_date_from_research,
 )
 from app.services.gemini_client import extract_text_from_document
 from app.services.image_metadata import extract_and_apply_image_metadata
@@ -74,6 +72,13 @@ from app.services.life_hierarchy import (
     backfill_normalized_directory,
     sync_life_hierarchy_for_memory,
 )
+from app.services.event_analysis import (
+    collect_event_memories,
+    event_research_source_memory_id,
+    extract_questions_from_research,
+    refresh_event_summary_and_suggestion,
+    research_memory_entry,
+)
 from app.services.memory_ingest import analyze_memory_audio
 from app.services.periods import (
     analyze_period,
@@ -86,6 +91,7 @@ from app.services.periods import (
     refresh_period_summary,
     unique_period_slug,
 )
+from app.services.period_analysis_pipeline import queue_and_process_period_event_analysis
 from app.services.photo_batch import (
     QueuedPhotoUpload,
     enqueue_photo_uploads,
@@ -103,7 +109,6 @@ from app.services.memory_analysis import (
     build_sort_date,
     fallback_metadata_from_transcript,
     generate_questions_from_memory,
-    summarize_event as summarize_memory_transcript,
 )
 
 
@@ -289,7 +294,23 @@ def analyze_life_period(
         .all()
     )
 
-    analysis = analyze_period(period, events, len(period.assets))
+    pipeline_stats = queue_and_process_period_event_analysis(
+        db,
+        period,
+        events,
+        document_storage_dir=DOCUMENT_STORAGE_DIR,
+        force_reanalyze=body.reanalyze_events,
+    )
+    db.commit()
+    db.refresh(period)
+
+    events = (
+        db.query(LifeEvent)
+        .filter(LifeEvent.period_id == period.id)
+        .order_by(LifeEvent.event_date_sort.is_(None), LifeEvent.event_date_sort.asc(), LifeEvent.created_at.asc())
+        .all()
+    )
+    analysis = analyze_period(period, events, len(period.assets), pipeline_stats=pipeline_stats)
 
     if body.apply_dates and analysis.recommended_start_date_text and analysis.recommended_end_date_text:
         try:
@@ -327,7 +348,7 @@ def analyze_life_period(
             .all()
         )
 
-    return analyze_period(period, events, len(period.assets))
+    return analyze_period(period, events, len(period.assets), pipeline_stats=pipeline_stats)
 
 
 @app.post("/api/events", response_model=LifeEventResponse)
@@ -546,72 +567,13 @@ def delete_event_face(face_id: int, db: Session = Depends(get_db)) -> None:
     db.commit()
 
 
-def _refresh_event_summary_and_suggestion(
-    db: Session,
-    event: LifeEvent,
-    auto_apply_title: bool = False,
-) -> None:
-    memories = _collect_event_memories(event, db)
-    assets = [link.asset for link in event.linked_assets if link.asset]
-
-    memory_points: list[str] = []
-    for memory in memories:
-        heading = (memory.event_description or "").strip() or f"Memory {memory.id}"
-        transcript = " ".join((memory.transcript or "").split())
-        if transcript:
-            memory_points.append(f"{heading}: {transcript[:280]}")
-        else:
-            memory_points.append(heading)
-
-    asset_points: list[str] = []
-    for asset in assets:
-        title = (asset.title or asset.original_filename or f"Asset {asset.id}").strip()
-        details = []
-        if asset.notes:
-            details.append(" ".join(asset.notes.split())[:180])
-        if asset.text_excerpt:
-            details.append(" ".join(asset.text_excerpt.split())[:180])
-        if asset.captured_at_text:
-            details.append(asset.captured_at_text)
-        if details:
-            asset_points.append(f"{title}: {' | '.join(details)}")
-        else:
-            asset_points.append(title)
-
-    summary = summarize_event_details(
-        event_title=event.title,
-        event_date_text=event.event_date_text,
-        memory_points=memory_points,
-        asset_points=asset_points,
-    )
-    event.summary = summary
-
-    suggestion = suggest_event_edit_from_context(
-        analysis_text=summary,
-        current_title=event.title,
-        current_event_date_text=event.event_date_text,
-        current_description=event.description,
-    )
-
-    if auto_apply_title:
-        suggested_title = (suggestion.title or "").strip() if suggestion else ""
-        if suggested_title:
-            event.title = suggested_title[:180]
-        elif memories:
-            fallback_title = _derive_quick_event_title(memories[0])
-            if fallback_title and fallback_title.lower() != "unspecified memory":
-                event.title = fallback_title[:180]
-
-    event.research_suggested_edit_json = json.dumps(dataclasses.asdict(suggestion)) if suggestion else None
-
-
 @app.post("/api/events/{event_id}/summarize", response_model=LifeEventResponse)
 def summarize_event(event_id: int, db: Session = Depends(get_db)) -> LifeEventResponse:
     event = db.get(LifeEvent, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    _refresh_event_summary_and_suggestion(db, event, auto_apply_title=False)
+    refresh_event_summary_and_suggestion(db, event, auto_apply_title=False)
 
     db.commit()
     db.refresh(event)
@@ -624,7 +586,7 @@ def research_event(event_id: int, db: Session = Depends(get_db)) -> LifeEventRes
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    memories = _collect_event_memories(event, db)
+    memories = collect_event_memories(event, db)
     assets = [link.asset for link in event.linked_assets if link.asset]
 
     transcript_sections: list[str] = [f"Event title: {event.title}"]
@@ -672,11 +634,11 @@ def research_event(event_id: int, db: Session = Depends(get_db)) -> LifeEventRes
     )
     event.research_suggested_edit_json = json.dumps(dataclasses.asdict(suggestion)) if suggestion else None
 
-    source_memory_id = _event_research_source_memory_id(event, memories)
+    source_memory_id = event_research_source_memory_id(event, memories)
     if source_memory_id is not None:
         add_unique_pending_questions(
             db,
-            _extract_questions_from_research(research.summary),
+            extract_questions_from_research(research.summary),
             source_memory_id,
         )
 
@@ -1420,7 +1382,7 @@ async def create_memory(
         sync_life_hierarchy_for_memory(db, entry)
         auto_event = db.query(LifeEvent).filter(LifeEvent.legacy_memory_id == entry.id).first()
         if auto_event:
-            _refresh_event_summary_and_suggestion(db, auto_event, auto_apply_title=True)
+            refresh_event_summary_and_suggestion(db, auto_event, auto_apply_title=True)
 
     db.commit()
     db.refresh(entry)
@@ -1682,154 +1644,20 @@ def reanalyze_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEnt
     return memory
 
 
-def _extract_questions_from_research(summary: str) -> list[str]:
-    """Extract bullet-point questions from the 'Questions worth exploring' section."""
-    import re
-    lines = summary.splitlines()
-    in_section = False
-    questions: list[str] = []
-    section_headers = re.compile(r"^#{1,3}\s*questions worth exploring", re.IGNORECASE)
-    next_section = re.compile(r"^#{1,3}\s+\w", re.IGNORECASE)
-    bullet = re.compile(r"^[\*\-]\s+(.+)")
-
-    for line in lines:
-        stripped = line.strip()
-        if section_headers.match(stripped):
-            in_section = True
-            continue
-        if in_section:
-            if next_section.match(stripped) and not section_headers.match(stripped):
-                break
-            m = bullet.match(stripped)
-            if m:
-                text = m.group(1).strip()
-                if text.endswith("?"):
-                    questions.append(text)
-    return questions[:5]
-
-
-def _possessive_name(name: str) -> str:
-    clean = (name or "").strip()
-    if not clean:
-        return ""
-    if clean.endswith(("s", "S")):
-        return f"{clean}'"
-    return f"{clean}'s"
-
-
-def _derive_quick_event_title(memory: MemoryEntry) -> str:
-    transcript = (memory.transcript or "").strip()
-    if not transcript:
-        return "Unspecified memory"
-
-    lowered = transcript.lower()
-    if "play" in lowered:
-        relationship_label: Optional[str] = None
-        if "daughter" in lowered:
-            relationship_label = "Daughter's Play"
-        elif "son" in lowered:
-            relationship_label = "Son's Play"
-        elif "granddaughter" in lowered:
-            relationship_label = "Granddaughter's Play"
-        elif "grandson" in lowered:
-            relationship_label = "Grandson's Play"
-
-        play_title_match = re.search(r"['\"]([^'\"]{2,80})['\"]", transcript)
-        if play_title_match:
-            play_title = play_title_match.group(1).strip()
-            if relationship_label:
-                return f"{play_title} ({relationship_label})"
-            return play_title
-
-        people = memory.referenced_people
-        if people:
-            first_person = people[0].strip()
-            if first_person:
-                return f"{_possessive_name(first_person)} Play"
-
-        if relationship_label:
-            return relationship_label
-
-    return summarize_memory_transcript(transcript).strip() or "Unspecified memory"
-
-
-def _collect_event_memories(event: LifeEvent, db: Session) -> list[MemoryEntry]:
-    memory_ids: list[int] = []
-    if event.legacy_memory_id is not None:
-        memory_ids.append(event.legacy_memory_id)
-
-    for link in event.linked_assets:
-        asset = link.asset
-        if asset and asset.legacy_memory_id is not None:
-            memory_ids.append(asset.legacy_memory_id)
-
-    seen: set[int] = set()
-    memories: list[MemoryEntry] = []
-    for memory_id in memory_ids:
-        if memory_id in seen:
-            continue
-        seen.add(memory_id)
-        memory = db.get(MemoryEntry, memory_id)
-        if memory:
-            memories.append(memory)
-    return memories
-
-
-def _event_research_source_memory_id(event: LifeEvent, memories: list[MemoryEntry]) -> Optional[int]:
-    if event.legacy_memory_id is not None:
-        return event.legacy_memory_id
-    if memories:
-        return memories[0].id
-    return None
-
-
 @app.post("/api/memories/{memory_id}/research", response_model=MemoryResponse)
 def research_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEntry:
     memory = db.get(MemoryEntry, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
 
-    # If memory has a document, read it to pass to research
-    document_bytes = None
-    document_mime_type = None
-    if memory.document_filename:
-        doc_path = DOCUMENT_STORAGE_DIR / memory.document_filename
-        if doc_path.exists():
-            with open(doc_path, "rb") as f:
-                document_bytes = f.read()
-            document_mime_type = memory.document_content_type or "application/octet-stream"
-
-    research = research_memory_details(
-        transcript=memory.transcript,
-        event_description=memory.event_description,
-        estimated_date_text=memory.estimated_date_text,
-        referenced_locations=memory.referenced_locations,
-        referenced_people=memory.referenced_people,
-        document_bytes=document_bytes,
-        document_mime_type=document_mime_type,
-    )
-    memory.research_summary = research.summary
-    memory.research_queries_json = json.dumps(research.queries)
-    memory.research_sources_json = json.dumps(
-        [{"title": source.title, "url": source.url} for source in research.sources]
-    )
-
-    suggestion = suggest_date_from_research(
-        research_summary=research.summary,
-        current_date_text=memory.estimated_date_text,
-        current_date_precision=memory.date_precision,
-    )
-    if suggestion:
-        memory.research_suggested_metadata_json = json.dumps(dataclasses.asdict(suggestion))
-    else:
-        memory.research_suggested_metadata_json = None
+    research_memory_entry(memory, DOCUMENT_STORAGE_DIR)
 
     db.commit()
     db.refresh(memory)
 
     # Extract follow-up questions from the 'Questions worth exploring' section
     # already present in the research summary, rather than making a redundant Gemini call
-    follow_up_questions = _extract_questions_from_research(research.summary)
+    follow_up_questions = extract_questions_from_research(memory.research_summary or "")
     logger.info("Extracted %d questions from research summary", len(follow_up_questions))
     for question_text in follow_up_questions:
         logger.info("Adding question: %s", question_text[:80])
