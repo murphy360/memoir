@@ -1064,12 +1064,15 @@ export default function HomePage() {
       if (activeEventId === eventId) {
         await loadAssetsForEvent(eventId);
       }
-      const locationPart = result.location_name
-        ? `Location: ${result.location_name}.`
+      const exifPlacePart = result.exif_place_name ? `EXIF place: ${result.exif_place_name}.` : "";
+      const reverseGeocodePart = result.reverse_geocode_location_name
+        ? `Reverse geocode: ${result.reverse_geocode_location_name}.`
         : (result.has_gps ? "GPS found (reverse geocode unavailable)." : "No GPS EXIF found.");
+      const analyzedPlacePart = result.analyzed_place_name ? `Gemini assessed place: ${result.analyzed_place_name}.` : "";
       const capturePart = result.captured_at_text ? `Captured: ${result.captured_at_text}.` : "";
+      const titlePart = result.suggested_title ? `Gemini suggests title: "${result.suggested_title}".` : "";
       setStatus(
-        `Photo analyzed. Found ${result.face_count} face${result.face_count === 1 ? "" : "s"}. ${locationPart} ${capturePart}`.trim(),
+        `Photo analyzed. Found ${result.face_count} face${result.face_count === 1 ? "" : "s"}. ${exifPlacePart} ${reverseGeocodePart} ${analyzedPlacePart} ${capturePart} ${titlePart}`.trim(),
       );
     } catch {
       setStatus("Failed to analyze photo.");

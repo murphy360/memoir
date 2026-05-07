@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.models import Asset, EventAsset, LifeEvent, LifePeriod
 from app.services.document_storage import save_document_file
 from app.services.faces import sync_asset_faces_for_photo
-from app.services.gemini_client import extract_text_from_photo_batch
+from app.services.gemini_client import PhotoSummary, extract_text_from_photo_batch
 from app.services.image_metadata import extract_and_apply_image_metadata, extract_image_metadata
 from app.services.periods import refresh_period_summary
 
@@ -54,7 +54,8 @@ def _build_photo_metadata_hint(
     captured_at: Optional[object],
     gps_latitude: Optional[float],
     gps_longitude: Optional[float],
-    location_name: Optional[str],
+    exif_place_name: Optional[str],
+    reverse_geocode_location_name: Optional[str],
     camera_make: Optional[str],
     camera_model: Optional[str],
 ) -> str:
@@ -65,8 +66,10 @@ def _build_photo_metadata_hint(
         parts.append(f"captured_at={captured_at}")
     if gps_latitude is not None and gps_longitude is not None:
         parts.append(f"gps={gps_latitude:.6f},{gps_longitude:.6f}")
-    if location_name:
-        parts.append(f"location_name={location_name}")
+    if exif_place_name:
+        parts.append(f"exif_place_name={exif_place_name}")
+    if reverse_geocode_location_name:
+        parts.append(f"reverse_geocode_location_name={reverse_geocode_location_name}")
     if camera_make or camera_model:
         camera_label = " ".join(part for part in [camera_make, camera_model] if part)
         parts.append(f"camera={camera_label}")
@@ -120,7 +123,8 @@ def process_queued_photo_uploads(
             captured_at=metadata.captured_at,
             gps_latitude=metadata.gps_latitude,
             gps_longitude=metadata.gps_longitude,
-            location_name=metadata.location_name,
+            exif_place_name=metadata.exif_place_name,
+            reverse_geocode_location_name=metadata.reverse_geocode_location_name,
             camera_make=metadata.camera_make,
             camera_model=metadata.camera_model,
         )
@@ -149,8 +153,14 @@ def process_queued_photo_uploads(
             size_bytes=size_bytes,
             fingerprint_sha256=hashlib.sha256(item.file_bytes).hexdigest(),
             notes=item.notes,
-            text_excerpt=batch_summaries.get(index),
+            text_excerpt=batch_summaries.get(index, PhotoSummary("")).summary or None,
         )
+        # Prefer Gemini's suggested title over the filename-derived one when available
+        photo_result = batch_summaries.get(index)
+        if photo_result and photo_result.suggested_title:
+            asset.title = photo_result.suggested_title
+        if photo_result and photo_result.assessed_place:
+            asset.analyzed_place_name = photo_result.assessed_place
         extract_and_apply_image_metadata(asset, item.file_bytes, content_type)
 
         db.add(asset)
@@ -191,31 +201,31 @@ def process_single_photo_asset(
     *,
     asset: Asset,
     include_processed: bool = True,
-) -> bool:
+) -> tuple[bool, Optional[str]]:
     """Process one stored photo asset and refresh linked period summaries.
 
-    Returns True when processing ran and the asset was updated. Returns False when
-    the asset is not eligible (non-photo, missing file, or already processed when
-    include_processed is False).
+    Returns (True, suggested_title) when processing ran and the asset was updated.
+    Returns (False, None) when the asset is not eligible (non-photo, missing file,
+    or already processed when include_processed is False).
     """
     if asset.kind != "photo":
-        return False
+        return False, None
     if not include_processed and _has_text_excerpt(asset):
-        return False
+        return False, None
     if not asset.storage_filename:
-        return False
+        return False, None
 
     file_path = document_storage_dir / asset.storage_filename
     if not file_path.exists():
-        return False
+        return False, None
 
     try:
         file_bytes = file_path.read_bytes()
     except OSError:
-        return False
+        return False, None
 
     if not file_bytes:
-        return False
+        return False, None
 
     mime_type = (asset.content_type or "image/jpeg").strip().lower() or "image/jpeg"
     extract_and_apply_image_metadata(asset, file_bytes, mime_type)
@@ -224,7 +234,8 @@ def process_single_photo_asset(
         captured_at=asset.captured_at,
         gps_latitude=asset.gps_latitude,
         gps_longitude=asset.gps_longitude,
-        location_name=asset.location_name,
+        exif_place_name=asset.exif_place_name,
+        reverse_geocode_location_name=asset.reverse_geocode_location_name,
         camera_make=asset.camera_make,
         camera_model=asset.camera_model,
     )
@@ -233,9 +244,12 @@ def process_single_photo_asset(
     ])
 
     sync_asset_faces_for_photo(db, asset, file_bytes)
-    summary = summaries.get(1)
-    if summary:
-        asset.text_excerpt = summary
+    photo_result = summaries.get(1)
+    suggested_title: Optional[str] = None
+    if photo_result:
+        asset.text_excerpt = photo_result.summary
+        suggested_title = photo_result.suggested_title
+        asset.analyzed_place_name = photo_result.assessed_place
 
     period_ids_to_refresh: set[int] = set()
     if asset.period_id is not None:
@@ -249,7 +263,7 @@ def process_single_photo_asset(
         period = db.get(LifePeriod, period_id)
         refresh_period_summary(db, period)
 
-    return True
+    return True, suggested_title
 
 
 def process_event_photo_assets(
@@ -298,7 +312,8 @@ def process_event_photo_assets(
             captured_at=asset.captured_at,
             gps_latitude=asset.gps_latitude,
             gps_longitude=asset.gps_longitude,
-            location_name=asset.location_name,
+            exif_place_name=asset.exif_place_name,
+            reverse_geocode_location_name=asset.reverse_geocode_location_name,
             camera_make=asset.camera_make,
             camera_model=asset.camera_model,
         )
@@ -312,10 +327,13 @@ def process_event_photo_assets(
     updated_assets: list[Asset] = []
     for index, asset in enumerate(valid_assets, start=1):
         sync_asset_faces_for_photo(db, asset, payloads[index - 1][1])
-        summary = summaries.get(index)
-        if not summary:
+        photo_result = summaries.get(index)
+        if not photo_result:
             continue
-        asset.text_excerpt = summary
+        asset.text_excerpt = photo_result.summary
+        if photo_result.suggested_title:
+            asset.title = photo_result.suggested_title
+        asset.analyzed_place_name = photo_result.assessed_place
         updated_assets.append(asset)
 
     if updated_assets and event.period_id is not None:

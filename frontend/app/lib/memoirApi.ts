@@ -378,8 +378,12 @@ export async function processSinglePhotoAsset(
   has_text_excerpt: boolean;
   face_count: number;
   has_gps: boolean;
+  exif_place_name: string | null;
+  reverse_geocode_location_name: string | null;
+  analyzed_place_name: string | null;
   location_name: string | null;
   captured_at_text: string | null;
+  suggested_title: string | null;
 }> {
   const response = await fetch(toAbsoluteApiUrl(`/api/assets/${assetId}/process-photo`), {
     method: "POST",

@@ -374,7 +374,14 @@ export function EventAssetList({
           <div className="assetPreviewMeta">
             <p className="meta"><strong>Filename:</strong> {previewAsset.original_filename || "none"}</p>
             {formatAssetCaptureDate(previewAsset) && <p className="meta"><strong>Captured:</strong> {formatAssetCaptureDate(previewAsset)}</p>}
-            {previewAsset.location_name && <p className="meta"><strong>Place:</strong> {previewAsset.location_name}</p>}
+            {previewAsset.exif_place_name && <p className="meta"><strong>EXIF Place:</strong> {previewAsset.exif_place_name}</p>}
+            {previewAsset.reverse_geocode_location_name && (
+              <p className="meta"><strong>Reverse Geocode:</strong> {previewAsset.reverse_geocode_location_name}</p>
+            )}
+            {previewAsset.analyzed_place_name && <p className="meta"><strong>Gemini Assessed Place:</strong> {previewAsset.analyzed_place_name}</p>}
+            {!previewAsset.reverse_geocode_location_name && previewAsset.location_name && (
+              <p className="meta"><strong>Place:</strong> {previewAsset.location_name}</p>
+            )}
             <p className="meta">
               <strong>Position:</strong> {previewPositionText}
               {previewMapUrl && (
@@ -384,7 +391,9 @@ export function EventAssetList({
                 </>
               )}
             </p>
-            {!previewAsset.location_name && formatAssetGps(previewAsset) && <p className="meta"><strong>Location:</strong> {formatAssetGps(previewAsset)}</p>}
+            {!previewAsset.reverse_geocode_location_name && formatAssetGps(previewAsset) && (
+              <p className="meta"><strong>Location:</strong> {formatAssetGps(previewAsset)}</p>
+            )}
             {renderImageMetadataBadges(previewAsset)}
             {(previewAsset.image_width !== null || previewAsset.image_height !== null) && (
               <p className="meta"><strong>Dimensions:</strong> {previewAsset.image_width || "?"} x {previewAsset.image_height || "?"}</p>

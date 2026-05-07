@@ -2,7 +2,6 @@ import base64
 import json
 import logging
 import os
-import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -25,6 +24,13 @@ class ResearchResult:
     summary: str
     queries: list[str] = field(default_factory=list)
     sources: list[ResearchSource] = field(default_factory=list)
+
+
+@dataclass
+class PhotoSummary:
+    summary: str
+    suggested_title: Optional[str] = None
+    assessed_place: Optional[str] = None
 
 
 @dataclass
@@ -946,11 +952,12 @@ def extract_text_from_document(filename: str, file_bytes: bytes, mime_type: str)
 
 def extract_text_from_photo_batch(
     photo_payloads: list[tuple[str, bytes, str] | tuple[str, bytes, str, str | None]]
-) -> dict[int, str]:
+) -> dict[int, "PhotoSummary"]:
     """Use one Gemini call to summarize a batch of uploaded photos.
 
     The return value is keyed by 1-based photo index from `photo_payloads`.
-    If Gemini is unavailable or returns an unparsable response, this returns {}.
+    Each value is a PhotoSummary with a plain-text description and an optional
+    suggested title. Returns {} if Gemini is unavailable or parsing fails.
     """
     if not photo_payloads:
         return {}
@@ -966,15 +973,17 @@ def extract_text_from_photo_batch(
         {
             "text": (
                 "You will receive a batch of photos from a memoir app. "
-                "For each photo, produce a rich plain-text description in 3-5 sentences focused on people, "
-                "setting, activity, visible objects/landmarks, and notable context. Do not invent facts. "
+                "For each photo produce a rich description, a suggested asset title, and an assessed place. "
+                "Description: 3-5 sentences covering people, setting, activity, visible objects/landmarks, and notable context. "
+                "Do not invent facts. "
                 "You may receive PHOTO_METADATA lines containing EXIF-derived date/location/camera context. "
                 "Treat metadata as supporting hints and reconcile with visual evidence. "
                 "If a place, landmark, object, sign, or event appears identifiable with high confidence, include "
                 "1 short background/history sentence about it; otherwise skip history. "
                 "When uncertain, say likely/possibly rather than stating certainty. "
-                "Return strict JSON only with this shape: "
-                "{\"items\":[{\"index\":1,\"summary\":\"...\"}]}. "
+                "Suggested title: 4-8 words, descriptive, suitable as a short asset label (e.g. 'Family picnic at Griffith Park'). "
+                "Assessed place: return the best location guess (locality/landmark/region) inferred from visual evidence and metadata. "
+                "If uncertain, use cautious phrasing like 'likely ...'. If no credible guess exists, return an empty string. "
                 "Use the exact photo index provided before each image."
             )
         }
@@ -999,7 +1008,38 @@ def extract_text_from_photo_batch(
         "contents": [{"parts": parts}],
         "generationConfig": {
             "temperature": 0.1,
-            "response_mime_type": "application/json",
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "index": {
+                                    "type": "integer",
+                                    "description": "1-based photo index matching the PHOTO_INDEX provided",
+                                },
+                                "summary": {
+                                    "type": "string",
+                                    "description": "Rich 3-5 sentence description covering people, setting, activity, and notable context",
+                                },
+                                "suggested_title": {
+                                    "type": "string",
+                                    "description": "Short descriptive title for this photo, 4-8 words, suitable as an asset label",
+                                },
+                                "assessed_place": {
+                                    "type": "string",
+                                    "description": "Best-effort location assessment inferred from visual and metadata clues, or empty string when unknown",
+                                },
+                            },
+                            "required": ["index", "summary", "suggested_title", "assessed_place"],
+                        },
+                    }
+                },
+                "required": ["items"],
+            },
         },
     }
 
@@ -1014,14 +1054,9 @@ def extract_text_from_photo_batch(
         if not raw_text:
             return {}
 
-        cleaned = raw_text
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r"^```(?:json)?\\s*", "", cleaned)
-            cleaned = re.sub(r"\\s*```$", "", cleaned)
-
-        parsed = json.loads(cleaned)
+        parsed = json.loads(raw_text)
         items = parsed.get("items", []) if isinstance(parsed, dict) else []
-        result: dict[int, str] = {}
+        result: dict[int, PhotoSummary] = {}
         for item in items:
             if not isinstance(item, dict):
                 continue
@@ -1032,7 +1067,15 @@ def extract_text_from_photo_batch(
             cleaned_summary = summary.strip()
             if not cleaned_summary:
                 continue
-            result[index_value] = cleaned_summary[:1200]
+            raw_title = str(item.get("suggested_title") or "").strip()
+            suggested_title: Optional[str] = raw_title[:180] if raw_title else None
+            raw_assessed_place = str(item.get("assessed_place") or "").strip()
+            assessed_place: Optional[str] = raw_assessed_place[:200] if raw_assessed_place else None
+            result[index_value] = PhotoSummary(
+                summary=cleaned_summary[:1200],
+                suggested_title=suggested_title,
+                assessed_place=assessed_place,
+            )
         return result
     except Exception as exc:
         logger.warning("Gemini photo batch extraction exception: %s", exc)

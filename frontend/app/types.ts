@@ -176,6 +176,12 @@ export type AssetEntry = {
   captured_at_text: string | null;
   gps_latitude: number | null;
   gps_longitude: number | null;
+  // Place text read directly from EXIF tags when present.
+  exif_place_name: string | null;
+  // Human-readable locality from reverse geocoding EXIF GPS coordinates.
+  reverse_geocode_location_name: string | null;
+  // Gemini best-effort place inference from image content + metadata.
+  analyzed_place_name: string | null;
   location_name: string | null;
   camera_make: string | null;
   camera_model: string | null;

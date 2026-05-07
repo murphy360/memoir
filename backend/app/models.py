@@ -299,6 +299,13 @@ class Asset(Base):
     captured_at_text: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     gps_latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     gps_longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Place text found directly in EXIF metadata when present (often empty).
+    exif_place_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    # Human-readable locality resolved from GPS coordinates.
+    reverse_geocode_location_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    # Gemini's best-effort place assessment from visual + metadata cues.
+    analyzed_place_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    # Legacy combined place field kept for backward compatibility.
     location_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     camera_make: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     camera_model: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)

@@ -1089,7 +1089,7 @@ def process_single_photo(
     if asset.kind != "photo":
         raise HTTPException(status_code=400, detail="Asset is not a photo")
 
-    processed = process_single_photo_asset(
+    processed, suggested_title = process_single_photo_asset(
         db,
         DOCUMENT_STORAGE_DIR,
         asset=asset,
@@ -1106,8 +1106,12 @@ def process_single_photo(
         "has_text_excerpt": bool((asset.text_excerpt or "").strip()),
         "face_count": len(asset.faces),
         "has_gps": asset.gps_latitude is not None and asset.gps_longitude is not None,
+        "exif_place_name": asset.exif_place_name,
+        "reverse_geocode_location_name": asset.reverse_geocode_location_name,
+        "analyzed_place_name": asset.analyzed_place_name,
         "location_name": asset.location_name,
         "captured_at_text": asset.captured_at_text,
+        "suggested_title": suggested_title,
     }
 
 

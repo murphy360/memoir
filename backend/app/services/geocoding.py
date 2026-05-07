@@ -64,32 +64,37 @@ def reverse_geocode(lat: float, lon: float) -> Optional[str]:
 
 
 def backfill_asset_location_names(db: "Session") -> None:
-    """One-time backfill: geocode assets that have GPS coords but no location_name."""
+    """One-time backfill: geocode assets that have GPS coords but no reverse-geocoded locality."""
     from sqlalchemy import text
 
     rows = db.execute(
         text(
             "SELECT id, gps_latitude, gps_longitude FROM assets "
             "WHERE gps_latitude IS NOT NULL AND gps_longitude IS NOT NULL "
-            "AND (location_name IS NULL OR location_name = '')"
+            "AND (reverse_geocode_location_name IS NULL OR reverse_geocode_location_name = '')"
         )
     ).fetchall()
 
     if not rows:
         return
 
-    logger.info("Backfilling location_name for %d asset(s)...", len(rows))
+    logger.info("Backfilling reverse_geocode_location_name for %d asset(s)...", len(rows))
     updated = 0
     for row in rows:
         asset_id, lat, lon = row[0], row[1], row[2]
         name = reverse_geocode(lat, lon)
         if name:
             db.execute(
-                text("UPDATE assets SET location_name = :name WHERE id = :id"),
+                text(
+                    "UPDATE assets "
+                    "SET reverse_geocode_location_name = :name, "
+                    "location_name = COALESCE(location_name, :name) "
+                    "WHERE id = :id"
+                ),
                 {"name": name, "id": asset_id},
             )
             updated += 1
 
     if updated:
         db.commit()
-    logger.info("Backfilled location_name for %d asset(s).", updated)
+    logger.info("Backfilled reverse_geocode_location_name for %d asset(s).", updated)

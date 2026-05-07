@@ -257,6 +257,9 @@ class AssetResponse(BaseModel):
     captured_at_text: Optional[str]
     gps_latitude: Optional[float]
     gps_longitude: Optional[float]
+    exif_place_name: Optional[str] = Field(default=None, description="Place text derived directly from EXIF tags when available.")
+    reverse_geocode_location_name: Optional[str] = Field(default=None, description="Locality resolved from EXIF GPS coordinates via reverse geocoding.")
+    analyzed_place_name: Optional[str] = Field(default=None, description="Gemini-assessed place inferred from visual and metadata context.")
     location_name: Optional[str] = None
     camera_make: Optional[str]
     camera_model: Optional[str]

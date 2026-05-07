@@ -255,6 +255,9 @@ def ensure_schema_migrations() -> None:
                 captured_at_text VARCHAR(100),
                 gps_latitude REAL,
                 gps_longitude REAL,
+                exif_place_name VARCHAR(200),
+                reverse_geocode_location_name VARCHAR(200),
+                analyzed_place_name VARCHAR(200),
                 camera_make VARCHAR(80),
                 camera_model VARCHAR(120),
                 lens_model VARCHAR(120),
@@ -287,6 +290,12 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE assets ADD COLUMN gps_latitude REAL"))
         if "gps_longitude" not in asset_columns:
             connection.execute(text("ALTER TABLE assets ADD COLUMN gps_longitude REAL"))
+        if "exif_place_name" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN exif_place_name VARCHAR(200)"))
+        if "reverse_geocode_location_name" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN reverse_geocode_location_name VARCHAR(200)"))
+        if "analyzed_place_name" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN analyzed_place_name VARCHAR(200)"))
         if "camera_make" not in asset_columns:
             connection.execute(text("ALTER TABLE assets ADD COLUMN camera_make VARCHAR(80)"))
         if "camera_model" not in asset_columns:

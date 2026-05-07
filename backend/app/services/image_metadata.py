@@ -19,7 +19,8 @@ class ImageMetadata:
     captured_at_text: Optional[str] = None
     gps_latitude: Optional[float] = None
     gps_longitude: Optional[float] = None
-    location_name: Optional[str] = None
+    exif_place_name: Optional[str] = None
+    reverse_geocode_location_name: Optional[str] = None
     camera_make: Optional[str] = None
     camera_model: Optional[str] = None
     lens_model: Optional[str] = None
@@ -170,9 +171,10 @@ def extract_image_metadata(file_bytes: bytes, content_type: Optional[str]) -> Im
 
                 metadata.gps_latitude = _dms_to_decimal(gps.get("GPSLatitude"), _coerce_text(gps.get("GPSLatitudeRef"), max_len=2))
                 metadata.gps_longitude = _dms_to_decimal(gps.get("GPSLongitude"), _coerce_text(gps.get("GPSLongitudeRef"), max_len=2))
+                metadata.exif_place_name = _coerce_text(gps.get("GPSAreaInformation"), max_len=200)
 
                 if metadata.gps_latitude is not None and metadata.gps_longitude is not None:
-                    metadata.location_name = reverse_geocode(metadata.gps_latitude, metadata.gps_longitude)
+                    metadata.reverse_geocode_location_name = reverse_geocode(metadata.gps_latitude, metadata.gps_longitude)
 
                 if gps:
                     exif["GPSInfo"] = {key: str(value) for key, value in gps.items()}
@@ -189,7 +191,9 @@ def apply_image_metadata_to_asset(asset: Any, metadata: ImageMetadata) -> None:
     asset.captured_at_text = metadata.captured_at_text
     asset.gps_latitude = metadata.gps_latitude
     asset.gps_longitude = metadata.gps_longitude
-    asset.location_name = metadata.location_name
+    asset.exif_place_name = metadata.exif_place_name
+    asset.reverse_geocode_location_name = metadata.reverse_geocode_location_name
+    asset.location_name = metadata.reverse_geocode_location_name or metadata.exif_place_name
     asset.camera_make = metadata.camera_make
     asset.camera_model = metadata.camera_model
     asset.lens_model = metadata.lens_model
