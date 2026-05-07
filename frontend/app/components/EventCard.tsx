@@ -252,6 +252,7 @@ export function EventCard({
   onAssignThread,
 }: EventCardProps) {
   const [faceAssignTargets, setFaceAssignTargets] = useState<Record<number, string>>({});
+  const [isPeopleOpen, setIsPeopleOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [isResearchOpen, setIsResearchOpen] = useState(false);
   const [showThreadPicker, setShowThreadPicker] = useState(false);
@@ -639,11 +640,17 @@ export function EventCard({
 
           {eventFaces.length > 0 && (
             <section className="memory" style={{ marginBottom: "0.55rem" }}>
-              <h3 style={{ marginTop: 0 }}>People in Photos</h3>
-              <p className="meta" style={{ marginTop: "0.2rem" }}>
-                {eventFaces.filter((face) => face.person_id !== null).length} tagged, {eventFaces.filter((face) => face.person_id === null).length} untagged
-              </p>
-              <div className="controls" style={{ flexWrap: "wrap" }}>
+              <h3
+                style={{ marginTop: 0, cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: "0.4rem" }}
+                onClick={() => setIsPeopleOpen((prev) => !prev)}
+              >
+                <span>{isPeopleOpen ? "▾" : "▸"}</span>
+                People in Photos
+                <span className="meta" style={{ fontWeight: "normal", fontSize: "0.82em", marginLeft: "0.25rem" }}>
+                  {eventFaces.filter((face) => face.person_id !== null).length} tagged, {eventFaces.filter((face) => face.person_id === null).length} untagged
+                </span>
+              </h3>
+              {isPeopleOpen && <div className="controls" style={{ flexWrap: "wrap" }}>
                 {eventFaces.map((face, index) => {
                   const faceCx = face.bbox_x + face.bbox_w / 2;
                   const faceCy = face.bbox_y + face.bbox_h / 2;
@@ -726,7 +733,7 @@ export function EventCard({
                     </div>
                   );
                 })}
-              </div>
+              </div>}
             </section>
           )}
 
