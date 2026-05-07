@@ -373,6 +373,9 @@ export function EventAssetList({
 
           <div className="assetPreviewMeta">
             <p className="meta"><strong>Filename:</strong> {previewAsset.original_filename || "none"}</p>
+            {previewAsset.gemini_suggested_title && (
+              <p className="meta"><strong>Gemini Suggested Title:</strong> {previewAsset.gemini_suggested_title}</p>
+            )}
             {formatAssetCaptureDate(previewAsset) && <p className="meta"><strong>Captured:</strong> {formatAssetCaptureDate(previewAsset)}</p>}
             {previewAsset.exif_place_name && <p className="meta"><strong>EXIF Place:</strong> {previewAsset.exif_place_name}</p>}
             {previewAsset.reverse_geocode_location_name && (

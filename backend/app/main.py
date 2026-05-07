@@ -1111,6 +1111,7 @@ def process_single_photo(
         "analyzed_place_name": asset.analyzed_place_name,
         "location_name": asset.location_name,
         "captured_at_text": asset.captured_at_text,
+        "gemini_suggested_title": asset.gemini_suggested_title,
         "suggested_title": suggested_title,
     }
 

@@ -158,6 +158,7 @@ def process_queued_photo_uploads(
         # Prefer Gemini's suggested title over the filename-derived one when available
         photo_result = batch_summaries.get(index)
         if photo_result and photo_result.suggested_title:
+            asset.gemini_suggested_title = photo_result.suggested_title
             asset.title = photo_result.suggested_title
         if photo_result and photo_result.assessed_place:
             asset.analyzed_place_name = photo_result.assessed_place
@@ -249,6 +250,9 @@ def process_single_photo_asset(
     if photo_result:
         asset.text_excerpt = photo_result.summary
         suggested_title = photo_result.suggested_title
+        asset.gemini_suggested_title = photo_result.suggested_title
+        if photo_result.suggested_title:
+            asset.title = photo_result.suggested_title
         asset.analyzed_place_name = photo_result.assessed_place
 
     period_ids_to_refresh: set[int] = set()
@@ -332,6 +336,7 @@ def process_event_photo_assets(
             continue
         asset.text_excerpt = photo_result.summary
         if photo_result.suggested_title:
+            asset.gemini_suggested_title = photo_result.suggested_title
             asset.title = photo_result.suggested_title
         asset.analyzed_place_name = photo_result.assessed_place
         updated_assets.append(asset)

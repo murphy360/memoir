@@ -383,6 +383,7 @@ export async function processSinglePhotoAsset(
   analyzed_place_name: string | null;
   location_name: string | null;
   captured_at_text: string | null;
+  gemini_suggested_title: string | null;
   suggested_title: string | null;
 }> {
   const response = await fetch(toAbsoluteApiUrl(`/api/assets/${assetId}/process-photo`), {

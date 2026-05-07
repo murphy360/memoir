@@ -502,6 +502,7 @@ def build_asset_response(asset: Asset) -> AssetResponse:
         period_id=asset.period_id,
         kind=asset.kind,
         title=asset.title,
+        gemini_suggested_title=asset.gemini_suggested_title,
         legacy_memory_id=asset.legacy_memory_id,
         original_filename=asset.original_filename,
         content_type=asset.content_type,

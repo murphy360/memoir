@@ -991,7 +991,9 @@ def extract_text_from_photo_batch(
                 "Description: 3-5 sentences covering people, setting, activity, visible objects/landmarks, and notable context. "
                 "Do not invent facts. "
                 "You may receive PHOTO_METADATA lines containing EXIF-derived date/location/camera context. "
+                "You may also receive PHOTO_CAPTURED_AT for the capture timestamp/date. "
                 "Treat metadata as supporting hints and reconcile with visual evidence. "
+                "If PHOTO_CAPTURED_AT is present, naturally reference the day/date context in the description when it adds clarity. "
                 "If a place, landmark, object, sign, or event appears identifiable with high confidence, include "
                 "1 short background/history sentence about it; otherwise skip history. "
                 "When uncertain, say likely/possibly rather than stating certainty. "
@@ -1015,6 +1017,9 @@ def extract_text_from_photo_batch(
         if reverse_geocode_name:
             reverse_geocode_by_index[index] = reverse_geocode_name
         parts.append({"text": f"PHOTO_INDEX={index}; filename={filename}"})
+        captured_at_hint = _extract_metadata_field(metadata_hint, "captured_at")
+        if captured_at_hint:
+            parts.append({"text": f"PHOTO_CAPTURED_AT={captured_at_hint}"})
         if metadata_hint:
             parts.append({"text": f"PHOTO_METADATA={metadata_hint}"})
         parts.append(

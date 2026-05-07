@@ -249,6 +249,7 @@ class AssetResponse(BaseModel):
     period_id: Optional[int]
     kind: str
     title: Optional[str]
+    gemini_suggested_title: Optional[str] = Field(default=None, description="Most recent Gemini-recommended title for this asset.")
     legacy_memory_id: Optional[int]
     original_filename: Optional[str]
     content_type: Optional[str]
