@@ -4,7 +4,7 @@ import { EventAssetList } from "./EventAssetList";
 import { EventCapturePanel } from "./EventCapturePanel";
 import { EventLinkedMemories } from "./EventLinkedMemories";
 import { UNASSIGNED_PERIOD_VALUE } from "../lib/homePageHelpers";
-import type { AssetEntry, DirectoryEntry, EventFaceEntry, LifeEvent, LifePeriod, MemoryEntry, Question } from "../types";
+import type { AssetEntry, DirectoryEntry, EventFaceEntry, LifeEpic, LifeEvent, LifePeriod, LifeThread, MemoryEntry, Question } from "../types";
 
 type QuestionContext = {
   question: Question;
@@ -59,6 +59,8 @@ type EventCardProps = {
   setEventMoveTargets: Dispatch<SetStateAction<Record<number, string>>>;
   moveEventToPeriod: (event: LifeEvent) => Promise<void>;
   sortedLifePeriods: LifePeriod[];
+  epicsInPeriod: LifeEpic[];
+  moveEventToEpic: (event: LifeEvent, epicId: number | null) => Promise<void>;
   eventMergeTargets: Record<number, string>;
   setEventMergeTargets: Dispatch<SetStateAction<Record<number, string>>>;
   mergeLifeEvent: (sourceId: number) => Promise<void>;
@@ -132,6 +134,8 @@ type EventCardProps = {
   deleteMemory: (memoryId: number) => Promise<void>;
   assignRecorder: (memoryId: number, personId: number) => Promise<void>;
   memoryActionId: number | null;
+  threads: LifeThread[];
+  onAssignThread: (threadId: number | null) => void;
 };
 
 export function EventCard({
@@ -163,6 +167,8 @@ export function EventCard({
   setEventMoveTargets,
   moveEventToPeriod,
   sortedLifePeriods,
+  epicsInPeriod,
+  moveEventToEpic,
   eventMergeTargets,
   setEventMergeTargets,
   mergeLifeEvent,
@@ -236,10 +242,14 @@ export function EventCard({
   deleteMemory,
   assignRecorder,
   memoryActionId,
+  threads,
+  onAssignThread,
 }: EventCardProps) {
   const [faceAssignTargets, setFaceAssignTargets] = useState<Record<number, string>>({});
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [isResearchOpen, setIsResearchOpen] = useState(false);
+  const [showThreadPicker, setShowThreadPicker] = useState(false);
+  const assignedThread = threads.find((t) => t.id === event.thread_id) ?? null;
   const isAnalyzed = Boolean(
     event.analysis_last_analyzed_at
     || event.analysis_status === "completed"
@@ -255,6 +265,11 @@ export function EventCard({
         <div>
           <p className="entitySectionLabel" style={{ marginBottom: "0.2rem" }}>
             <span className="entityPill entityPillEvent">Event</span>
+            {assignedThread && (
+              <span className="entityPill entityPillThread" style={{ marginLeft: "0.35rem", fontSize: "0.75rem" }}>
+                {assignedThread.title}
+              </span>
+            )}
             {isAnalyzed && (
               <span className="entityPill" style={{ marginLeft: "0.35rem", background: "#dff6e8", color: "#0b6b36", border: "1px solid #93d5ad" }}>
                 Analyzed
@@ -290,6 +305,46 @@ export function EventCard({
               >
                 ✏️
               </button>
+              {threads.length > 0 && (
+                <button
+                  className="secondary"
+                  type="button"
+                  title="Assign thread"
+                  style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem" }}
+                  onClick={() => setShowThreadPicker((v) => !v)}
+                >
+                  🧵
+                </button>
+              )}
+            </div>
+          )}
+          {showThreadPicker && (
+            <div className="controls" style={{ marginTop: "0.25rem", flexWrap: "wrap", gap: "0.4rem" }}>
+              <span style={{ fontSize: "0.85rem", color: "var(--text-muted, #888)" }}>Tag thread:</span>
+              {threads.map((t) => (
+                <button
+                  key={t.id}
+                  className={`secondary${event.thread_id === t.id ? " active" : ""}`}
+                  type="button"
+                  style={{ fontSize: "0.8rem", padding: "0.15rem 0.5rem" }}
+                  onClick={() => {
+                    onAssignThread(event.thread_id === t.id ? null : t.id);
+                    setShowThreadPicker(false);
+                  }}
+                >
+                  {t.title}
+                </button>
+              ))}
+              {event.thread_id !== null && (
+                <button
+                  className="secondary"
+                  type="button"
+                  style={{ fontSize: "0.8rem", padding: "0.15rem 0.5rem", color: "var(--danger, #c0392b)" }}
+                  onClick={() => { onAssignThread(null); setShowThreadPicker(false); }}
+                >
+                  Clear
+                </button>
+              )}
             </div>
           )}
           {editingEventDateId === event.id ? (
@@ -397,6 +452,33 @@ export function EventCard({
               Move to Period
             </button>
           </div>
+          {epicsInPeriod.length > 0 && (
+            <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
+              <select
+                className="directoryInput"
+                value={event.epic_id ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  void moveEventToEpic(event, val === "" ? null : Number(val));
+                }}
+                disabled={isSavingLifeStructure}
+              >
+                <option value="">No epic (ungrouped)</option>
+                {epicsInPeriod.map((ep) => (
+                  <option key={ep.id} value={ep.id}>{ep.title}</option>
+                ))}
+              </select>
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => void moveEventToEpic(event, event.epic_id)}
+                disabled={isSavingLifeStructure}
+                style={{ whiteSpace: "nowrap" }}
+              >
+                Assign to Epic
+              </button>
+            </div>
+          )}
           {editingEventTitleId === event.id && (
             <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
               <select

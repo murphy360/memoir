@@ -121,8 +121,22 @@ def ensure_schema_migrations() -> None:
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_person_aliases_alias ON person_aliases (alias)"))
 
         connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS life_threads (
+                id INTEGER PRIMARY KEY,
+                title VARCHAR(160) NOT NULL UNIQUE,
+                slug VARCHAR(180) UNIQUE,
+                summary TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_threads_title ON life_threads (title)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_threads_slug ON life_threads (slug)"))
+
+        connection.execute(text("""
             CREATE TABLE IF NOT EXISTS life_periods (
                 id INTEGER PRIMARY KEY,
+                thread_id INTEGER,
                 title VARCHAR(160) NOT NULL,
                 slug VARCHAR(180) UNIQUE,
                 start_date_text VARCHAR(100),
@@ -131,18 +145,45 @@ def ensure_schema_migrations() -> None:
                 end_sort DATE,
                 summary TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (thread_id) REFERENCES life_threads(id) ON DELETE SET NULL
             )
         """))
+        period_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(life_periods)")).fetchall()
+        }
+        if "thread_id" not in period_columns:
+            connection.execute(text("ALTER TABLE life_periods ADD COLUMN thread_id INTEGER"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_periods_thread_id ON life_periods (thread_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_periods_title ON life_periods (title)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_periods_slug ON life_periods (slug)"))
+
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS life_epics (
+                id INTEGER PRIMARY KEY,
+                period_id INTEGER NOT NULL,
+                title VARCHAR(180) NOT NULL,
+                description TEXT,
+                weight INTEGER NOT NULL DEFAULT 5 CHECK(weight >= 1 AND weight <= 10),
+                start_date_text VARCHAR(100),
+                end_date_text VARCHAR(100),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (period_id) REFERENCES life_periods(id) ON DELETE CASCADE
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_epics_period_id ON life_epics (period_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_epics_title ON life_epics (title)"))
 
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS life_events (
                 id INTEGER PRIMARY KEY,
                 period_id INTEGER,
+                epic_id INTEGER,
                 title VARCHAR(180) NOT NULL,
                 description TEXT,
+                weight INTEGER NOT NULL DEFAULT 5,
                 event_date_text VARCHAR(100),
                 event_date_sort DATE,
                 date_precision VARCHAR(20),
@@ -154,6 +195,7 @@ def ensure_schema_migrations() -> None:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (period_id) REFERENCES life_periods(id) ON DELETE SET NULL,
+                FOREIGN KEY (epic_id) REFERENCES life_epics(id) ON DELETE SET NULL,
                 FOREIGN KEY (legacy_memory_id) REFERENCES memories(id) ON DELETE SET NULL
             )
         """))
@@ -189,8 +231,13 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE life_events ADD COLUMN analysis_input_hash VARCHAR(64)"))
         if "analysis_last_error" not in event_columns:
             connection.execute(text("ALTER TABLE life_events ADD COLUMN analysis_last_error TEXT"))
+        if "epic_id" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN epic_id INTEGER"))
+        if "weight" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN weight INTEGER NOT NULL DEFAULT 5"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_analysis_status ON life_events (analysis_status)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_analysis_input_hash ON life_events (analysis_input_hash)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_epic_id ON life_events (epic_id)"))
 
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS assets (
@@ -306,6 +353,20 @@ def ensure_schema_migrations() -> None:
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """))
+
+        # Add thread_id to life_epics (threads now tag epics, not periods)
+        epic_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(life_epics)")).fetchall()
+        }
+        if "thread_id" not in epic_columns:
+            connection.execute(text("ALTER TABLE life_epics ADD COLUMN thread_id INTEGER REFERENCES life_threads(id) ON DELETE SET NULL"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_epics_thread_id ON life_epics (thread_id)"))
+
+        # Add thread_id to life_events (threads now tag events, not periods)
+        if "thread_id" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN thread_id INTEGER REFERENCES life_threads(id) ON DELETE SET NULL"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_thread_id ON life_events (thread_id)"))
 
 
 def get_db():

@@ -799,6 +799,51 @@ button:disabled {
   border-color: #e8c5d2;
 }
 
+.entityPillEpic {
+  color: #5a3a7a;
+  background: #f0ebff;
+  border-color: #d2bdf5;
+}
+
+.entityPillThread {
+  color: #3a5a2a;
+  background: #edf7ea;
+  border-color: #bddeb7;
+}
+
+.epicSection {
+  border-left: 3px solid #d2bdf5;
+  margin: 0.65rem 0;
+  padding-left: 0.75rem;
+}
+
+.epicHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.epicTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.epicEventList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.unepicedEventList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
 @media (max-width: 640px) {
   main {
     padding: 0.9rem;

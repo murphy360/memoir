@@ -3,9 +3,11 @@ import {
   AssetEntry,
   DirectoryEntry,
   EventFaceEntry,
+  LifeEpic,
   LifeEvent,
   LifePeriod,
   LifePeriodAnalysis,
+  LifeThread,
   MemoryEntry,
   Question,
 } from "../types";
@@ -47,7 +49,9 @@ export type TimelineBundle = {
   people?: DirectoryEntry[];
   places?: DirectoryEntry[];
   settings?: AppSettings;
+  threads?: LifeThread[];
   periods?: LifePeriod[];
+  epics?: LifeEpic[];
   events?: LifeEvent[];
   unlinkedAssets?: AssetEntry[];
 };
@@ -59,7 +63,9 @@ export async function fetchTimelineBundle(): Promise<TimelineBundle> {
     peopleRes,
     placesRes,
     settingsRes,
+    threadsRes,
     periodsRes,
+    epicsRes,
     eventsRes,
     unlinkedAssetsRes,
   ] = await Promise.all([
@@ -68,7 +74,9 @@ export async function fetchTimelineBundle(): Promise<TimelineBundle> {
     fetch(toAbsoluteApiUrl("/api/people"), { cache: "no-store" }),
     fetch(toAbsoluteApiUrl("/api/places"), { cache: "no-store" }),
     fetch(toAbsoluteApiUrl("/api/settings"), { cache: "no-store" }),
+    fetch(toAbsoluteApiUrl("/api/threads"), { cache: "no-store" }),
     fetch(toAbsoluteApiUrl("/api/periods"), { cache: "no-store" }),
+    fetch(toAbsoluteApiUrl("/api/epics"), { cache: "no-store" }),
     fetch(toAbsoluteApiUrl("/api/events"), { cache: "no-store" }),
     fetch(toAbsoluteApiUrl("/api/assets/unlinked"), { cache: "no-store" }),
   ]);
@@ -91,8 +99,14 @@ export async function fetchTimelineBundle(): Promise<TimelineBundle> {
   if (settingsRes.ok) {
     bundle.settings = await settingsRes.json();
   }
+  if (threadsRes.ok) {
+    bundle.threads = await threadsRes.json();
+  }
   if (periodsRes.ok) {
     bundle.periods = await periodsRes.json();
+  }
+  if (epicsRes.ok) {
+    bundle.epics = await epicsRes.json();
   }
   if (eventsRes.ok) {
     bundle.events = await eventsRes.json();
@@ -150,9 +164,94 @@ export async function createPeriod(payload: {
   return response.json();
 }
 
+/** Create a top-level thread via POST /api/threads. */
+export async function createThread(payload: { title: string; summary: string | null }): Promise<LifeThread> {
+  const response = await fetch(toAbsoluteApiUrl("/api/threads"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  await expectOk(response, "Create thread failed");
+  return response.json();
+}
+
+/** Create an epic inside a period via POST /api/epics. */
+export async function createEpic(payload: {
+  period_id: number;
+  title: string;
+  description: string | null;
+  weight: number;
+  start_date_text: string | null;
+  end_date_text: string | null;
+}): Promise<LifeEpic> {
+  const response = await fetch(toAbsoluteApiUrl("/api/epics"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  await expectOk(response, "Create epic failed");
+  return response.json();
+}
+
+/** Delete a thread via DELETE /api/threads/{thread_id}. */
+export async function deleteThread(threadId: number): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/threads/${threadId}`), { method: "DELETE" });
+  await expectOk(response, "Delete thread failed");
+}
+
+/** Delete an epic via DELETE /api/epics/{epic_id}. */
+export async function deleteEpic(epicId: number): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/epics/${epicId}`), { method: "DELETE" });
+  await expectOk(response, "Delete epic failed");
+}
+
+/** Assign or clear a thread on an epic via PATCH /api/epics/{epic_id}. */
+export async function assignEpicToThread(epicId: number, threadId: number | null): Promise<LifeEpic> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/epics/${epicId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ thread_id: threadId }),
+  });
+  await expectOk(response, "Failed to assign epic to thread");
+  return response.json();
+}
+
+/** Assign or clear a thread on an event via PATCH /api/events/{event_id}. */
+export async function assignEventToThread(eventId: number, threadId: number | null): Promise<LifeEvent> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ thread_id: threadId }),
+  });
+  await expectOk(response, "Failed to assign event to thread");
+  return response.json();
+}
+
+/** Rename a thread via PATCH /api/threads/{thread_id}. */
+export async function renameThread(threadId: number, title: string): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/threads/${threadId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  await expectOk(response, "Failed to rename thread");
+}
+
+/** Rename an epic via PATCH /api/epics/{epic_id}. */
+export async function renameEpic(epicId: number, title: string): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/epics/${epicId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  await expectOk(response, "Failed to rename epic");
+}
+
 export async function createEvent(payload: {
   title: string;
   period_id: number | null;
+  epic_id: number | null;
+  weight: number;
   description: string | null;
   location: string | null;
   event_date_text: string | null;
@@ -190,7 +289,16 @@ export async function renameEventTitle(eventId: number, title: string): Promise<
 
 export async function updateEventById(
   eventId: number,
-  payload: { title?: string; event_date_text?: string | null; description?: string | null; location?: string | null; period_id?: number | null },
+  payload: {
+    title?: string;
+    event_date_text?: string | null;
+    description?: string | null;
+    location?: string | null;
+    period_id?: number | null;
+    epic_id?: number | null;
+    thread_id?: number | null;
+    weight?: number;
+  },
 ): Promise<LifeEvent> {
   const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}`), {
     method: "PATCH",

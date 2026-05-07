@@ -75,7 +75,35 @@ export type LifePeriod = {
   end_date_text: string | null;
   summary: string | null;
   event_count: number;
+  epic_count: number;
   asset_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Top-level parallel life track that groups multiple periods. */
+export type LifeThread = {
+  id: number;
+  title: string;
+  slug: string | null;
+  summary: string | null;
+  event_count: number;
+  epic_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Mid-level event grouping inside a period; used for arcs like deployment or vacation. */
+export type LifeEpic = {
+  id: number;
+  period_id: number;
+  thread_id: number | null;
+  title: string;
+  description: string | null;
+  weight: number;
+  start_date_text: string | null;
+  end_date_text: string | null;
+  event_count: number;
   created_at: string;
   updated_at: string;
 };
@@ -106,8 +134,11 @@ export type LifePeriodAnalysis = {
 export type LifeEvent = {
   id: number;
   period_id: number | null;
+  epic_id: number | null;
+  thread_id: number | null;
   title: string;
   description: string | null;
+  weight: number;
   summary: string | null;
   research_summary: string | null;
   research_queries: string[];

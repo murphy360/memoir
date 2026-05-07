@@ -2,7 +2,7 @@ import json
 from datetime import date, datetime
 from typing import Any, Optional
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -166,17 +166,60 @@ class LifePeriod(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    epics: Mapped[list["LifeEpic"]] = relationship(back_populates="period", cascade="all, delete-orphan")
     events: Mapped[list["LifeEvent"]] = relationship(back_populates="period", cascade="all, delete-orphan")
     assets: Mapped[list["Asset"]] = relationship(back_populates="period", cascade="all, delete-orphan")
 
 
+class LifeThread(Base):
+    __tablename__ = "life_threads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String(160), nullable=False, unique=True, index=True)
+    slug: Mapped[Optional[str]] = mapped_column(String(180), nullable=True, unique=True, index=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    epics: Mapped[list["LifeEpic"]] = relationship(back_populates="thread")
+    events: Mapped[list["LifeEvent"]] = relationship(back_populates="thread")
+
+
+class LifeEpic(Base):
+    __tablename__ = "life_epics"
+    __table_args__ = (
+        CheckConstraint("weight >= 1 AND weight <= 10", name="ck_life_epics_weight_1_10"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    period_id: Mapped[int] = mapped_column(ForeignKey("life_periods.id", ondelete="CASCADE"), nullable=False, index=True)
+    thread_id: Mapped[Optional[int]] = mapped_column(ForeignKey("life_threads.id", ondelete="SET NULL"), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    weight: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    start_date_text: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    end_date_text: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    period: Mapped["LifePeriod"] = relationship(back_populates="epics")
+    thread: Mapped[Optional["LifeThread"]] = relationship(back_populates="epics")
+    events: Mapped[list["LifeEvent"]] = relationship(back_populates="epic")
+
+
 class LifeEvent(Base):
     __tablename__ = "life_events"
+    __table_args__ = (
+        CheckConstraint("weight >= 1 AND weight <= 10", name="ck_life_events_weight_1_10"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     period_id: Mapped[Optional[int]] = mapped_column(ForeignKey("life_periods.id", ondelete="SET NULL"), nullable=True, index=True)
+    epic_id: Mapped[Optional[int]] = mapped_column(ForeignKey("life_epics.id", ondelete="SET NULL"), nullable=True, index=True)
+    thread_id: Mapped[Optional[int]] = mapped_column(ForeignKey("life_threads.id", ondelete="SET NULL"), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    weight: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     research_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     research_sources_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -201,6 +244,8 @@ class LifeEvent(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     period: Mapped[Optional["LifePeriod"]] = relationship(back_populates="events")
+    epic: Mapped[Optional["LifeEpic"]] = relationship(back_populates="events")
+    thread: Mapped[Optional["LifeThread"]] = relationship(back_populates="events")
     linked_assets: Mapped[list["EventAsset"]] = relationship(back_populates="event", cascade="all, delete-orphan")
     legacy_memory: Mapped[Optional["MemoryEntry"]] = relationship(foreign_keys=[legacy_memory_id])
 

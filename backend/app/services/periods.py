@@ -4,8 +4,15 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models import Asset, EventAsset, LifeEvent, LifePeriod, MemoryEntry
-from app.schemas import AssetResponse, LifeEventResponse, LifePeriodAnalysisResponse, LifePeriodResponse
+from app.models import Asset, EventAsset, LifeEpic, LifeEvent, LifePeriod, LifeThread, MemoryEntry
+from app.schemas import (
+    AssetResponse,
+    LifeEpicResponse,
+    LifeEventResponse,
+    LifePeriodAnalysisResponse,
+    LifePeriodResponse,
+    LifeThreadResponse,
+)
 from app.services.gemini_client import generate_period_biography
 
 
@@ -44,6 +51,18 @@ def unique_period_slug(db: Session, title: str, existing_id: Optional[int] = Non
         suffix += 1
 
 
+def unique_thread_slug(db: Session, title: str, existing_id: Optional[int] = None) -> str:
+    base = slugify_period_title(title)
+    candidate = base
+    suffix = 2
+    while True:
+        match = db.query(LifeThread).filter(LifeThread.slug == candidate).first()
+        if not match or (existing_id is not None and match.id == existing_id):
+            return candidate
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+
+
 def period_asset_count_from_events(events: list[LifeEvent]) -> int:
     """Count unique assets linked through events in the period."""
     asset_ids: set[int] = set()
@@ -56,6 +75,7 @@ def period_asset_count_from_events(events: list[LifeEvent]) -> int:
 
 def build_period_response(period: LifePeriod) -> LifePeriodResponse:
     event_count = len(period.events)
+    epic_count = len(period.epics)
     asset_count = period_asset_count_from_events(period.events)
     return LifePeriodResponse(
         id=period.id,
@@ -65,9 +85,39 @@ def build_period_response(period: LifePeriod) -> LifePeriodResponse:
         end_date_text=period.end_date_text,
         summary=period.summary,
         event_count=event_count,
+        epic_count=epic_count,
         asset_count=asset_count,
         created_at=period.created_at,
         updated_at=period.updated_at,
+    )
+
+
+def build_thread_response(thread: LifeThread) -> LifeThreadResponse:
+    return LifeThreadResponse(
+        id=thread.id,
+        title=thread.title,
+        slug=thread.slug,
+        summary=thread.summary,
+        event_count=len(thread.events),
+        epic_count=len(thread.epics),
+        created_at=thread.created_at,
+        updated_at=thread.updated_at,
+    )
+
+
+def build_epic_response(epic: LifeEpic) -> LifeEpicResponse:
+    return LifeEpicResponse(
+        id=epic.id,
+        period_id=epic.period_id,
+        thread_id=epic.thread_id,
+        title=epic.title,
+        description=epic.description,
+        weight=epic.weight,
+        start_date_text=epic.start_date_text,
+        end_date_text=epic.end_date_text,
+        event_count=len(epic.events),
+        created_at=epic.created_at,
+        updated_at=epic.updated_at,
     )
 
 
@@ -84,8 +134,11 @@ def build_event_response(event: LifeEvent) -> LifeEventResponse:
     return LifeEventResponse(
         id=event.id,
         period_id=event.period_id,
+        epic_id=event.epic_id,
+        thread_id=event.thread_id,
         title=event.title,
         description=event.description,
+        weight=event.weight,
         summary=event.summary,
         research_summary=event.research_summary,
         research_queries=event.research_queries,

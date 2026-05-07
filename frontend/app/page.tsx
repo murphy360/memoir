@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CaptureSidebar } from "./components/CaptureSidebar";
 import { DirectorySidebar } from "./components/DirectorySidebar";
+import { EpicCard } from "./components/EpicCard";
 import { EventCard } from "./components/EventCard";
 import { LifePeriodCard } from "./components/LifePeriodCard";
 import { MemoryCard } from "./components/MemoryCard";
 import { PeriodComposer } from "./components/PeriodComposer";
 import { UnlinkedAssetsInbox } from "./components/UnlinkedAssetsInbox";
-import { AssetEntry, EventFaceEntry, LifeEvent, MemoryEntry, Question, LifePeriodAnalysis } from "./types";
+import { AssetEntry, EventFaceEntry, LifeEpic, LifeEvent, LifeThread, MemoryEntry, Question, LifePeriodAnalysis } from "./types";
 import {
   type TimelineBundle,
   analyzeLifePeriod,
@@ -51,6 +52,14 @@ import {
   processEventPhotoAssets,
   processSinglePhotoAsset,
   uploadAsset,
+  createThread,
+  createEpic,
+  deleteThread,
+  deleteEpic,
+  renameThread,
+  renameEpic,
+  assignEpicToThread,
+  assignEventToThread,
 } from "./lib/memoirApi";
 import {
   AUDIO_DEVICE_STORAGE_KEY,
@@ -92,6 +101,10 @@ export default function HomePage() {
   const {
     timeline,
     lifePeriods,
+    lifeThreads,
+    setLifeThreads,
+    lifeEpics,
+    setLifeEpics,
     lifeEvents,
     unlinkedAssets,
     setUnlinkedAssets,
@@ -164,6 +177,18 @@ export default function HomePage() {
   const [eventDocumentUploadProgressByEventId, setEventDocumentUploadProgressByEventId] = useState<Record<number, EventDocumentUploadProgressItem[]>>({});
   const [mergingPeriodId, setMergingPeriodId] = useState<number | null>(null);
   const [periodSortMode, setPeriodSortMode] = useState<PeriodSortMode>("timeline-asc");
+
+  // Threads state
+  const [isThreadComposerOpen, setIsThreadComposerOpen] = useState(false);
+  const [newThreadTitle, setNewThreadTitle] = useState("");
+  const [isSavingThread, setIsSavingThread] = useState(false);
+  const [editingThreadTitleId, setEditingThreadTitleId] = useState<number | null>(null);
+  const [editingThreadTitleValue, setEditingThreadTitleValue] = useState("");
+
+  // Epics state
+  const [epicDraftsByPeriod, setEpicDraftsByPeriod] = useState<Record<number, string>>({});
+  const [editingEpicTitleId, setEditingEpicTitleId] = useState<number | null>(null);
+  const [editingEpicTitleValue, setEditingEpicTitleValue] = useState("");
 
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
 
@@ -413,6 +438,8 @@ export default function HomePage() {
       const created = await createEvent({
         title: title.trim(),
         period_id: periodId,
+        epic_id: null,
+        weight: 5,
         description: description.trim() || null,
         location: location.trim() || null,
         event_date_text: eventDateText.trim() || null,
@@ -570,6 +597,147 @@ export default function HomePage() {
       setStatus("Period deleted.");
     } catch {
       setStatus("Failed to delete period.");
+    }
+  }
+
+  async function createLifeThread() {
+    if (!newThreadTitle.trim()) return;
+    setIsSavingThread(true);
+    setStatus("Creating thread...");
+    try {
+      const created = await createThread({ title: newThreadTitle.trim(), summary: null });
+      setNewThreadTitle("");
+      setIsThreadComposerOpen(false);
+      setLifeThreads((prev) => [...prev, created]);
+      setStatus("Thread created.");
+    } catch {
+      setStatus("Failed to create thread.");
+    } finally {
+      setIsSavingThread(false);
+    }
+  }
+
+  async function doDeleteThread(threadId: number, threadTitle: string) {
+    if (!confirm(`Delete thread "${threadTitle}"? Events and epics in this thread will be untagged but not deleted.`)) return;
+    setStatus("Deleting thread...");
+    try {
+      await deleteThread(threadId);
+      await loadTimeline();
+      setStatus("Thread deleted.");
+    } catch {
+      setStatus("Failed to delete thread.");
+    }
+  }
+
+  async function saveThreadTitle(threadId: number, title: string) {
+    if (!title.trim()) return;
+    setStatus("Renaming thread...");
+    try {
+      await renameThread(threadId, title.trim());
+      setEditingThreadTitleId(null);
+      setEditingThreadTitleValue("");
+      await loadTimeline();
+      setStatus("Thread renamed.");
+    } catch {
+      setStatus("Failed to rename thread.");
+    }
+  }
+
+  async function doAssignEpicToThread(epicId: number, threadId: number | null) {
+    setStatus("Updating epic thread...");
+    try {
+      const updated = await assignEpicToThread(epicId, threadId);
+      setLifeEpics((prev) => prev.map((e) => (e.id === epicId ? updated : e)));
+      setStatus("Epic thread updated.");
+    } catch {
+      setStatus("Failed to update epic thread.");
+    }
+  }
+
+  async function doAssignEventToThread(eventId: number, threadId: number | null) {
+    setStatus("Updating event thread...");
+    try {
+      await assignEventToThread(eventId, threadId);
+      await loadTimeline();
+      setStatus("Event thread updated.");
+    } catch {
+      setStatus("Failed to update event thread.");
+    }
+  }
+
+  async function doAssignPeriodToThread(_periodId: number, _threadId: number | null) {
+    // No-op: threads are no longer assigned to periods
+  }
+
+  async function createLifeEpic(periodId: number) {
+    const title = epicDraftsByPeriod[periodId]?.trim();
+    if (!title) return;
+    setIsSavingLifeStructure(true);
+    setStatus("Creating epic...");
+    try {
+      const created = await createEpic({ period_id: periodId, title, description: null, weight: 5, start_date_text: null, end_date_text: null });
+      setEpicDraftsByPeriod((prev) => ({ ...prev, [periodId]: "" }));
+      setLifeEpics((prev) => [...prev, created]);
+      setStatus("Epic created.");
+    } catch {
+      setStatus("Failed to create epic.");
+    } finally {
+      setIsSavingLifeStructure(false);
+    }
+  }
+
+  async function createLifeEventInEpic(epicId: number, periodId: number, title: string) {
+    if (!title.trim()) return;
+    setIsSavingLifeStructure(true);
+    setStatus("Creating event...");
+    try {
+      await createEvent({ title: title.trim(), period_id: periodId, epic_id: epicId, weight: 5, description: null, location: null, event_date_text: null });
+      await loadTimeline();
+      setStatus("Event created.");
+    } catch {
+      setStatus("Failed to create event.");
+    } finally {
+      setIsSavingLifeStructure(false);
+    }
+  }
+
+  async function moveEventToEpic(event: LifeEvent, epicId: number | null) {
+    setIsSavingLifeStructure(true);
+    setStatus("Assigning event to epic...");
+    try {
+      await updateEventById(event.id, { epic_id: epicId });
+      await loadTimeline();
+      setStatus("Event assigned.");
+    } catch {
+      setStatus("Failed to assign event.");
+    } finally {
+      setIsSavingLifeStructure(false);
+    }
+  }
+
+  async function doDeleteEpic(epicId: number, epicTitle: string) {
+    if (!confirm(`Delete epic "${epicTitle}"? Its events will be moved to the period.`)) return;
+    setStatus("Deleting epic...");
+    try {
+      await deleteEpic(epicId);
+      await loadTimeline();
+      setStatus("Epic deleted.");
+    } catch {
+      setStatus("Failed to delete epic.");
+    }
+  }
+
+  async function saveEpicTitle(epicId: number, title: string) {
+    if (!title.trim()) return;
+    setStatus("Renaming epic...");
+    try {
+      await renameEpic(epicId, title.trim());
+      setEditingEpicTitleId(null);
+      setEditingEpicTitleValue("");
+      await loadTimeline();
+      setStatus("Epic renamed.");
+    } catch {
+      setStatus("Failed to rename epic.");
     }
   }
 
@@ -1151,6 +1319,8 @@ export default function HomePage() {
       const createdEvent = await createEvent({
         title: "Quick memory",
         period_id: period.id,
+        epic_id: null,
+        weight: 5,
         description: null,
         location: null,
         event_date_text: null,
@@ -1434,7 +1604,7 @@ export default function HomePage() {
   const unassignedEvents = lifeEvents.filter((event) => event.period_id === null);
   const timelineStandaloneMemories = timeline.filter((memory) => !lifeEventMemoryIds.has(memory.id));
 
-  function renderEventCard(event: LifeEvent, mergeCandidates: LifeEvent[]) {
+  function renderEventCard(event: LifeEvent, mergeCandidates: LifeEvent[], epicsInPeriod: LifeEpic[] = []) {
     return (
       <EventCard
         key={event.id}
@@ -1475,6 +1645,8 @@ export default function HomePage() {
         setEventMoveTargets={setEventMoveTargets}
         moveEventToPeriod={moveEventToPeriod}
         sortedLifePeriods={sortedLifePeriods}
+        epicsInPeriod={epicsInPeriod}
+        moveEventToEpic={moveEventToEpic}
         eventMergeTargets={eventMergeTargets}
         setEventMergeTargets={setEventMergeTargets}
         mergeLifeEvent={mergeLifeEvent}
@@ -1548,6 +1720,8 @@ export default function HomePage() {
         deleteMemory={deleteMemory}
         assignRecorder={assignRecorder}
         memoryActionId={memoryActionId}
+        threads={lifeThreads}
+        onAssignThread={(threadId) => void doAssignEventToThread(event.id, threadId)}
       />
     );
   }
@@ -1604,6 +1778,98 @@ export default function HomePage() {
         </section>
 
         <>
+            <section className="panel" style={{ marginTop: "1rem" }}>
+              <div className="periodsHeader">
+                <div>
+                  <h2>Life Threads</h2>
+                  <p className="meta">Threads group related periods across time — e.g. "Military Career" or "Family".</p>
+                </div>
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => setIsThreadComposerOpen((c) => !c)}
+                >
+                  {isThreadComposerOpen ? "Hide thread form" : "New thread"}
+                </button>
+              </div>
+
+              {isThreadComposerOpen && (
+                <div className="controls" style={{ marginBottom: "0.75rem", flexWrap: "wrap" }}>
+                  <input
+                    className="directoryInput"
+                    type="text"
+                    placeholder="Thread title (e.g. Military Career)"
+                    value={newThreadTitle}
+                    onChange={(e) => setNewThreadTitle(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") void createLifeThread(); }}
+                    disabled={isSavingThread}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    className="primary"
+                    type="button"
+                    onClick={() => void createLifeThread()}
+                    disabled={!newThreadTitle.trim() || isSavingThread}
+                  >
+                    Create Thread
+                  </button>
+                </div>
+              )}
+
+              {lifeThreads.length === 0 ? (
+                <p className="meta">No threads yet.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                  {lifeThreads.map((thread) => (
+                    <article key={thread.id} className="memory" style={{ padding: "0.55rem 0.75rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+                        <span className="entityPill entityPillThread">Thread</span>
+                        {editingThreadTitleId === thread.id ? (
+                          <div className="controls" style={{ flex: 1 }}>
+                            <input
+                              className="directoryInput"
+                              type="text"
+                              value={editingThreadTitleValue}
+                              autoFocus
+                              onChange={(e) => setEditingThreadTitleValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") void saveThreadTitle(thread.id, editingThreadTitleValue);
+                                if (e.key === "Escape") { setEditingThreadTitleId(null); setEditingThreadTitleValue(""); }
+                              }}
+                              style={{ flex: 1 }}
+                            />
+                            <button className="primary" type="button" onClick={() => void saveThreadTitle(thread.id, editingThreadTitleValue)} disabled={!editingThreadTitleValue.trim()}>Save</button>
+                            <button className="secondary" type="button" onClick={() => { setEditingThreadTitleId(null); setEditingThreadTitleValue(""); }}>Cancel</button>
+                          </div>
+                        ) : (
+                          <>
+                            <strong>{thread.title}</strong>
+                            <span className="badge">{thread.event_count} event{thread.event_count === 1 ? "" : "s"}</span>
+                            <span className="badge">{thread.epic_count} epic{thread.epic_count === 1 ? "" : "s"}</span>
+                            <button
+                              className="secondary"
+                              type="button"
+                              title="Rename thread"
+                              style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem" }}
+                              onClick={() => { setEditingThreadTitleId(thread.id); setEditingThreadTitleValue(thread.title); }}
+                            >✏️</button>
+                            <button
+                              className="secondary"
+                              type="button"
+                              title="Delete thread"
+                              style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem", color: "var(--danger, #c0392b)" }}
+                              onClick={() => void doDeleteThread(thread.id, thread.title)}
+                            >🗑</button>
+                          </>
+                        )}
+                      </div>
+                      {thread.summary && <p className="meta" style={{ marginTop: "0.25rem" }}>{thread.summary}</p>}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
             <section className="panel" style={{ marginTop: "1rem" }}>
               <div className="periodsHeader">
                 <div>
@@ -1697,7 +1963,7 @@ export default function HomePage() {
                               <button className="secondary" type="button" onClick={() => { setEditingPeriodTitleId(null); setEditingPeriodTitleValue(""); }}>Cancel</button>
                             </div>
                           ) : (
-                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
                               <span className="entityPill entityPillPeriod">Period</span>
                               <h3 style={{ margin: 0 }}>{period.title}</h3>
                               <button
@@ -1952,6 +2218,31 @@ export default function HomePage() {
                             </div>
                           </article>
 
+                          <article className="memory" style={{ marginBottom: "0.65rem" }}>
+                            <h3>Add Epic to {period.title}</h3>
+                            <p className="meta">Epics group related events within this period — e.g. "Deployment to Bahrain" or "Summer Vacation 2010".</p>
+                            <div className="controls">
+                              <input
+                                className="directoryInput"
+                                type="text"
+                                placeholder="Epic title"
+                                value={epicDraftsByPeriod[period.id] ?? ""}
+                                onChange={(e) => setEpicDraftsByPeriod((prev) => ({ ...prev, [period.id]: e.target.value }))}
+                                onKeyDown={(e) => { if (e.key === "Enter") void createLifeEpic(period.id); }}
+                                disabled={isSavingLifeStructure || isRecording || isLoading}
+                                style={{ flex: 1 }}
+                              />
+                              <button
+                                className="primary"
+                                type="button"
+                                onClick={() => void createLifeEpic(period.id)}
+                                disabled={!(epicDraftsByPeriod[period.id] ?? "").trim() || isSavingLifeStructure || isRecording || isLoading}
+                              >
+                                Create Epic
+                              </button>
+                            </div>
+                          </article>
+
                           {(questionsByPeriodNoEvent.get(period.id)?.length ?? 0) > 0 && (
                             <div className="inlineQuestionList">
                               <p className="inlineQuestionListLabel">Open questions for this period</p>
@@ -1984,10 +2275,46 @@ export default function HomePage() {
                             </div>
                           )}
 
-                          <div className="lifeEventList">
-                            {eventsForPeriod.length === 0 && <p className="meta">No events in this period yet.</p>}
-                            {eventsForPeriod.map((event) => renderEventCard(event, eventsForPeriod))}
-                          </div>
+                          {(() => {
+                            const epicsForPeriod = lifeEpics.filter((e) => e.period_id === period.id);
+                            const ungroupedEvents = eventsForPeriod.filter((ev) => ev.epic_id === null || !epicsForPeriod.some((ep) => ep.id === ev.epic_id));
+                            return (
+                              <div className="lifeEventList">
+                                {eventsForPeriod.length === 0 && <p className="meta">No events in this period yet.</p>}
+                                {ungroupedEvents.length > 0 && (
+                                  <div className="unepicedEventList">
+                                    {ungroupedEvents.map((event) => renderEventCard(event, eventsForPeriod, epicsForPeriod))}
+                                  </div>
+                                )}
+                                {epicsForPeriod.map((epic) => {
+                                  const epicEvents = eventsForPeriod.filter((ev) => ev.epic_id === epic.id);
+                                  return (
+                                    <EpicCard
+                                      key={epic.id}
+                                      epic={epic}
+                                      threads={lifeThreads}
+                                      isRenamingTitle={editingEpicTitleId === epic.id}
+                                      renamingTitleValue={editingEpicTitleValue}
+                                      setRenamingTitleValue={setEditingEpicTitleValue}
+                                      onStartRenameTitle={() => { setEditingEpicTitleId(epic.id); setEditingEpicTitleValue(epic.title); }}
+                                      onSaveRenameTitle={() => void saveEpicTitle(epic.id, editingEpicTitleValue)}
+                                      onCancelRenameTitle={() => { setEditingEpicTitleId(null); setEditingEpicTitleValue(""); }}
+                                      onDelete={() => void doDeleteEpic(epic.id, epic.title)}
+                                      onAssignThread={(threadId) => void doAssignEpicToThread(epic.id, threadId)}
+                                      onCreateEvent={(title) => createLifeEventInEpic(epic.id, period.id, title)}
+                                      isBusy={isSavingLifeStructure || isRecording || isLoading}
+                                    >
+                                      {epicEvents.length === 0 ? (
+                                        <p className="meta">No events assigned to this epic yet.</p>
+                                      ) : (
+                                        epicEvents.map((event) => renderEventCard(event, eventsForPeriod, epicsForPeriod))
+                                      )}
+                                    </EpicCard>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </>
                       )}
                     </LifePeriodCard>

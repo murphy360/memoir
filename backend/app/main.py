@@ -15,29 +15,35 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine, ensure_schema_migrations, get_db
-from app.models import Asset, AssetFace, Base, EventAsset, LifeEvent, LifePeriod, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place, Question, Setting
+from app.models import Asset, AssetFace, Base, EventAsset, LifeEpic, LifeEvent, LifePeriod, LifeThread, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place, Question, Setting
 from app.schemas import (
     AnalyzeLifePeriodRequest,
     AssetResponse,
     AssignFacePersonRequest,
+    CreateLifeEpicRequest,
     EventFaceResponse,
     AddAliasRequest,
     AnswerQuestionRequest,
     CreateLifeEventRequest,
     CreateLifePeriodRequest,
+    CreateLifeThreadRequest,
     CreateDirectoryEntryRequest,
+    LifeEpicResponse,
     DirectoryEntryResponse,
     LifeEventResponse,
     LifePeriodAnalysisResponse,
     LifePeriodResponse,
+    LifeThreadResponse,
     MergeLifeEventRequest,
     LinkAssetToEventRequest,
     MemoryResponse,
     MergePersonRequest,
     QuestionResponse,
+    UpdateLifeEpicRequest,
     UpdateAssetRequest,
     UpdateLifeEventRequest,
     UpdateLifePeriodRequest,
+    UpdateLifeThreadRequest,
     MergePeriodsRequest,
     SettingsResponse,
     SplitPersonRequest,
@@ -83,14 +89,17 @@ from app.services.memory_ingest import analyze_memory_audio
 from app.services.periods import (
     analyze_period,
     build_asset_response,
+    build_epic_response,
     build_event_response,
     build_period_response,
+    build_thread_response,
     ensure_event_asset_link,
     normalize_directory_name,
     normalize_period_title,
     period_asset_count_from_events,
     refresh_period_summary,
     unique_period_slug,
+    unique_thread_slug,
 )
 from app.services.period_analysis_pipeline import queue_and_process_period_event_analysis
 from app.services.photo_batch import (
@@ -178,6 +187,62 @@ def derive_asset_title(filename: Optional[str]) -> Optional[str]:
         return None
     stem = Path(candidate).stem.strip() or candidate
     return stem[:180]
+
+
+@app.get("/api/threads", response_model=list[LifeThreadResponse])
+def list_threads(db: Session = Depends(get_db)) -> list[LifeThreadResponse]:
+    threads = db.query(LifeThread).order_by(LifeThread.created_at.asc()).all()
+    return [build_thread_response(thread) for thread in threads]
+
+
+@app.post("/api/threads", response_model=LifeThreadResponse)
+def create_thread(body: CreateLifeThreadRequest, db: Session = Depends(get_db)) -> LifeThreadResponse:
+    title = normalize_period_title(body.title)
+    if not title:
+        raise HTTPException(status_code=400, detail="Thread title is required")
+
+    thread = LifeThread(
+        title=title,
+        slug=unique_thread_slug(db, title),
+        summary=(body.summary or None),
+    )
+    db.add(thread)
+    db.commit()
+    db.refresh(thread)
+    return build_thread_response(thread)
+
+
+@app.patch("/api/threads/{thread_id}", response_model=LifeThreadResponse)
+def update_thread(thread_id: int, body: UpdateLifeThreadRequest, db: Session = Depends(get_db)) -> LifeThreadResponse:
+    thread = db.get(LifeThread, thread_id)
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+    if body.title is not None:
+        clean_title = normalize_period_title(body.title)
+        if not clean_title:
+            raise HTTPException(status_code=400, detail="Thread title cannot be empty")
+        thread.title = clean_title
+        thread.slug = unique_thread_slug(db, clean_title, existing_id=thread.id)
+
+    if "summary" in body.model_fields_set:
+        thread.summary = (body.summary or "").strip()[:2000] or None
+
+    db.commit()
+    db.refresh(thread)
+    return build_thread_response(thread)
+
+
+@app.delete("/api/threads/{thread_id}", status_code=204)
+def delete_thread(thread_id: int, db: Session = Depends(get_db)) -> None:
+    thread = db.get(LifeThread, thread_id)
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    # Detach events and epics from thread before deleting
+    db.query(LifeEvent).filter(LifeEvent.thread_id == thread_id).update({"thread_id": None})
+    db.query(LifeEpic).filter(LifeEpic.thread_id == thread_id).update({"thread_id": None})
+    db.delete(thread)
+    db.commit()
 
 
 @app.get("/api/periods", response_model=list[LifePeriodResponse])
@@ -279,6 +344,99 @@ def list_period_events(period_id: int, db: Session = Depends(get_db)) -> list[Li
     return [build_event_response(event) for event in events]
 
 
+@app.get("/api/periods/{period_id}/epics", response_model=list[LifeEpicResponse])
+def list_period_epics(period_id: int, db: Session = Depends(get_db)) -> list[LifeEpicResponse]:
+    period = db.get(LifePeriod, period_id)
+    if not period:
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    epics = (
+        db.query(LifeEpic)
+        .filter(LifeEpic.period_id == period_id)
+        .order_by(LifeEpic.created_at.asc())
+        .all()
+    )
+    return [build_epic_response(epic) for epic in epics]
+
+
+@app.get("/api/epics", response_model=list[LifeEpicResponse])
+def list_epics(period_id: Optional[int] = None, db: Session = Depends(get_db)) -> list[LifeEpicResponse]:
+    query = db.query(LifeEpic)
+    if period_id is not None:
+        query = query.filter(LifeEpic.period_id == period_id)
+    epics = query.order_by(LifeEpic.created_at.asc()).all()
+    return [build_epic_response(epic) for epic in epics]
+
+
+@app.post("/api/epics", response_model=LifeEpicResponse)
+def create_epic(body: CreateLifeEpicRequest, db: Session = Depends(get_db)) -> LifeEpicResponse:
+    period = db.get(LifePeriod, body.period_id)
+    if not period:
+        raise HTTPException(status_code=404, detail="Period not found")
+
+    title = normalize_directory_name(body.title)
+    if not title:
+        raise HTTPException(status_code=400, detail="Epic title is required")
+
+    epic = LifeEpic(
+        period_id=period.id,
+        title=title,
+        description=body.description,
+        weight=body.weight,
+        start_date_text=body.start_date_text,
+        end_date_text=body.end_date_text,
+    )
+    db.add(epic)
+    db.commit()
+    db.refresh(epic)
+    return build_epic_response(epic)
+
+
+@app.patch("/api/epics/{epic_id}", response_model=LifeEpicResponse)
+def update_epic(epic_id: int, body: UpdateLifeEpicRequest, db: Session = Depends(get_db)) -> LifeEpicResponse:
+    epic = db.get(LifeEpic, epic_id)
+    if not epic:
+        raise HTTPException(status_code=404, detail="Epic not found")
+
+    if body.title is not None:
+        clean_title = normalize_directory_name(body.title)
+        if not clean_title:
+            raise HTTPException(status_code=400, detail="Epic title cannot be empty")
+        epic.title = clean_title
+
+    if "thread_id" in body.model_fields_set:
+        if body.thread_id is not None and not db.get(LifeThread, body.thread_id):
+            raise HTTPException(status_code=404, detail="Thread not found")
+        epic.thread_id = body.thread_id
+
+    if "description" in body.model_fields_set:
+        epic.description = (body.description or "").strip()[:2000] or None
+
+    if body.weight is not None:
+        epic.weight = body.weight
+
+    if "start_date_text" in body.model_fields_set:
+        epic.start_date_text = (body.start_date_text or "").strip()[:100] or None
+
+    if "end_date_text" in body.model_fields_set:
+        epic.end_date_text = (body.end_date_text or "").strip()[:100] or None
+
+    db.commit()
+    db.refresh(epic)
+    return build_epic_response(epic)
+
+
+@app.delete("/api/epics/{epic_id}", status_code=204)
+def delete_epic(epic_id: int, db: Session = Depends(get_db)) -> None:
+    epic = db.get(LifeEpic, epic_id)
+    if not epic:
+        raise HTTPException(status_code=404, detail="Epic not found")
+    # Detach events from epic before deleting
+    db.query(LifeEvent).filter(LifeEvent.epic_id == epic_id).update({"epic_id": None})
+    db.delete(epic)
+    db.commit()
+
+
 @app.post("/api/periods/{period_id}/analyze", response_model=LifePeriodAnalysisResponse)
 def analyze_life_period(
     period_id: int,
@@ -359,13 +517,33 @@ def create_event(body: CreateLifeEventRequest, db: Session = Depends(get_db)) ->
     if not title:
         raise HTTPException(status_code=400, detail="Event title is required")
 
-    if body.period_id is not None and not db.get(LifePeriod, body.period_id):
-        raise HTTPException(status_code=404, detail="Period not found")
+    period_id = body.period_id
+    epic_id = body.epic_id
+
+    period: Optional[LifePeriod] = None
+    epic: Optional[LifeEpic] = None
+    if period_id is not None:
+        period = db.get(LifePeriod, period_id)
+        if not period:
+            raise HTTPException(status_code=404, detail="Period not found")
+
+    if epic_id is not None:
+        epic = db.get(LifeEpic, epic_id)
+        if not epic:
+            raise HTTPException(status_code=404, detail="Epic not found")
+        if period_id is not None and epic.period_id != period_id:
+            raise HTTPException(status_code=400, detail="Epic does not belong to the provided period")
+        period_id = epic.period_id
+
+    if period_id is None:
+        raise HTTPException(status_code=400, detail="Event requires period_id or epic_id")
 
     event = LifeEvent(
-        period_id=body.period_id,
+        period_id=period_id,
+        epic_id=epic_id,
         title=title,
         description=body.description,
+        weight=body.weight,
         location=body.location,
         event_date_text=body.event_date_text,
         date_precision=body.date_precision,
@@ -421,11 +599,40 @@ def update_event(event_id: int, body: UpdateLifeEventRequest, db: Session = Depe
         next_date_text = (body.event_date_text or "").strip()[:100]
         event.event_date_text = next_date_text or None
 
+    next_period_id = event.period_id
+    next_epic_id = event.epic_id
+
     if "period_id" in body.model_fields_set:
-        if body.period_id is not None:
-            if not db.get(LifePeriod, body.period_id):
-                raise HTTPException(status_code=404, detail="Target period not found")
-        event.period_id = body.period_id
+        next_period_id = body.period_id
+
+    if "epic_id" in body.model_fields_set:
+        next_epic_id = body.epic_id
+
+    resolved_epic: Optional[LifeEpic] = None
+    if next_epic_id is not None:
+        resolved_epic = db.get(LifeEpic, next_epic_id)
+        if not resolved_epic:
+            raise HTTPException(status_code=404, detail="Epic not found")
+        if next_period_id is not None and resolved_epic.period_id != next_period_id:
+            raise HTTPException(status_code=400, detail="Epic does not belong to the provided period")
+        next_period_id = resolved_epic.period_id
+
+    if next_period_id is not None and not db.get(LifePeriod, next_period_id):
+        raise HTTPException(status_code=404, detail="Target period not found")
+
+    if next_period_id is None:
+        raise HTTPException(status_code=400, detail="Event requires period_id or epic_id")
+
+    event.period_id = next_period_id
+    event.epic_id = next_epic_id
+
+    if "thread_id" in body.model_fields_set:
+        if body.thread_id is not None and not db.get(LifeThread, body.thread_id):
+            raise HTTPException(status_code=404, detail="Thread not found")
+        event.thread_id = body.thread_id
+
+    if body.weight is not None:
+        event.weight = body.weight
 
     if event.period_id != previous_period_id:
         if previous_period_id is not None:

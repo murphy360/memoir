@@ -66,6 +66,7 @@ class LifePeriodResponse(BaseModel):
     end_date_text: Optional[str]
     summary: Optional[str]
     event_count: int = 0
+    epic_count: int = Field(default=0, description="How many epics belong to this period.")
     asset_count: int = 0
     created_at: datetime
     updated_at: datetime
@@ -90,6 +91,64 @@ class UpdateLifePeriodRequest(BaseModel):
     title: Optional[str] = None
     start_date_text: Optional[str] = None
     end_date_text: Optional[str] = None
+
+
+class LifeThreadResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    slug: Optional[str]
+    summary: Optional[str]
+    event_count: int = 0
+    epic_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class CreateLifeThreadRequest(BaseModel):
+    title: str = Field(description="Display title for this top-level life track.")
+    summary: Optional[str] = Field(default=None, description="Optional narrative summary for the thread.")
+
+
+class UpdateLifeThreadRequest(BaseModel):
+    title: Optional[str] = Field(default=None, description="Updated display title for the life thread.")
+    summary: Optional[str] = Field(default=None, description="Updated optional narrative summary for the thread.")
+
+
+class LifeEpicResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    period_id: int
+    thread_id: Optional[int] = Field(default=None, description="Optional parent thread id for cross-period tagging.")
+    title: str
+    description: Optional[str]
+    weight: int = Field(description="Visual prominence from 1 (light) to 10 (high).")
+    start_date_text: Optional[str]
+    end_date_text: Optional[str]
+    event_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class CreateLifeEpicRequest(BaseModel):
+    period_id: int = Field(description="Parent period id for this epic.")
+    thread_id: Optional[int] = Field(default=None, description="Optional thread id for cross-period tagging.")
+    title: str = Field(description="Display title for this event grouping.")
+    description: Optional[str] = Field(default=None, description="Optional details about this grouping.")
+    weight: int = Field(default=5, ge=1, le=10, description="Visual prominence from 1 (light) to 10 (high).")
+    start_date_text: Optional[str] = Field(default=None, description="Optional textual start date for this epic.")
+    end_date_text: Optional[str] = Field(default=None, description="Optional textual end date for this epic.")
+
+
+class UpdateLifeEpicRequest(BaseModel):
+    title: Optional[str] = Field(default=None, description="Updated epic title.")
+    thread_id: Optional[int] = Field(default=None, description="Set or clear the thread association for this epic.")
+    description: Optional[str] = Field(default=None, description="Updated epic description.")
+    weight: Optional[int] = Field(default=None, ge=1, le=10, description="Updated visual prominence from 1 to 10.")
+    start_date_text: Optional[str] = Field(default=None, description="Updated textual start date.")
+    end_date_text: Optional[str] = Field(default=None, description="Updated textual end date.")
 
 
 class MergePeriodsRequest(BaseModel):
@@ -124,8 +183,11 @@ class LifeEventResponse(BaseModel):
 
     id: int
     period_id: Optional[int]
+    epic_id: Optional[int] = Field(default=None, description="Parent epic id when this event is grouped into an epic.")
+    thread_id: Optional[int] = Field(default=None, description="Parent thread id for cross-period narrative tagging.")
     title: str
     description: Optional[str]
+    weight: int = Field(description="Visual prominence from 1 (light) to 10 (high).")
     summary: Optional[str]
     research_summary: Optional[str]
     research_queries: list[str] = Field(default_factory=list)
@@ -152,7 +214,9 @@ class LifeEventResponse(BaseModel):
 
 class CreateLifeEventRequest(BaseModel):
     title: str
-    period_id: Optional[int] = None
+    period_id: Optional[int] = Field(default=None, description="Direct parent period id when this event is not grouped under an epic.")
+    epic_id: Optional[int] = Field(default=None, description="Optional epic id; when provided, period_id resolves from the epic.")
+    weight: int = Field(default=5, ge=1, le=10, description="Visual prominence from 1 (light) to 10 (high).")
     description: Optional[str] = None
     location: Optional[str] = None
     event_date_text: Optional[str] = None
@@ -173,6 +237,9 @@ class UpdateLifeEventRequest(BaseModel):
     location: Optional[str] = None
     event_date_text: Optional[str] = None
     period_id: Optional[int] = None
+    epic_id: Optional[int] = Field(default=None, description="Set or clear epic membership for this event.")
+    thread_id: Optional[int] = Field(default=None, description="Set or clear thread association for this event.")
+    weight: Optional[int] = Field(default=None, ge=1, le=10, description="Updated visual prominence from 1 to 10.")
 
 
 class AssetResponse(BaseModel):
