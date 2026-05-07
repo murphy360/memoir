@@ -16,7 +16,7 @@ from app.models import Asset, EventAsset, LifeEvent, LifePeriod
 from app.services.document_storage import save_document_file
 from app.services.faces import sync_asset_faces_for_photo
 from app.services.gemini_client import extract_text_from_photo_batch
-from app.services.image_metadata import extract_and_apply_image_metadata
+from app.services.image_metadata import extract_and_apply_image_metadata, extract_image_metadata
 from app.services.periods import refresh_period_summary
 
 
@@ -46,6 +46,31 @@ def _derive_asset_title(filename: str) -> Optional[str]:
         return None
     stem = Path(candidate).stem.strip() or candidate
     return stem[:180]
+
+
+def _build_photo_metadata_hint(
+    *,
+    captured_at_text: Optional[str],
+    captured_at: Optional[object],
+    gps_latitude: Optional[float],
+    gps_longitude: Optional[float],
+    location_name: Optional[str],
+    camera_make: Optional[str],
+    camera_model: Optional[str],
+) -> str:
+    parts: list[str] = []
+    if captured_at_text:
+        parts.append(f"captured_at={captured_at_text}")
+    elif captured_at is not None:
+        parts.append(f"captured_at={captured_at}")
+    if gps_latitude is not None and gps_longitude is not None:
+        parts.append(f"gps={gps_latitude:.6f},{gps_longitude:.6f}")
+    if location_name:
+        parts.append(f"location_name={location_name}")
+    if camera_make or camera_model:
+        camera_label = " ".join(part for part in [camera_make, camera_model] if part)
+        parts.append(f"camera={camera_label}")
+    return "; ".join(parts)
 
 
 def enqueue_photo_uploads(items: list[QueuedPhotoUpload]) -> int:
@@ -87,7 +112,19 @@ def process_queued_photo_uploads(
     if not queued:
         return []
 
-    payloads = [(item.filename, item.file_bytes, item.content_type) for item in queued]
+    payloads: list[tuple[str, bytes, str, str | None]] = []
+    for item in queued:
+        metadata = extract_image_metadata(item.file_bytes, item.content_type)
+        metadata_hint = _build_photo_metadata_hint(
+            captured_at_text=metadata.captured_at_text,
+            captured_at=metadata.captured_at,
+            gps_latitude=metadata.gps_latitude,
+            gps_longitude=metadata.gps_longitude,
+            location_name=metadata.location_name,
+            camera_make=metadata.camera_make,
+            camera_model=metadata.camera_model,
+        )
+        payloads.append((item.filename, item.file_bytes, item.content_type, metadata_hint or None))
     batch_summaries = extract_text_from_photo_batch(payloads)
 
     assets: list[Asset] = []
@@ -181,8 +218,18 @@ def process_single_photo_asset(
         return False
 
     mime_type = (asset.content_type or "image/jpeg").strip().lower() or "image/jpeg"
+    extract_and_apply_image_metadata(asset, file_bytes, mime_type)
+    metadata_hint = _build_photo_metadata_hint(
+        captured_at_text=asset.captured_at_text,
+        captured_at=asset.captured_at,
+        gps_latitude=asset.gps_latitude,
+        gps_longitude=asset.gps_longitude,
+        location_name=asset.location_name,
+        camera_make=asset.camera_make,
+        camera_model=asset.camera_model,
+    )
     summaries = extract_text_from_photo_batch([
-        (asset.original_filename or asset.storage_filename, file_bytes, mime_type),
+        (asset.original_filename or asset.storage_filename, file_bytes, mime_type, metadata_hint or None),
     ])
 
     sync_asset_faces_for_photo(db, asset, file_bytes)
@@ -232,7 +279,7 @@ def process_event_photo_assets(
     if not candidates:
         return []
 
-    payloads: list[tuple[str, bytes, str]] = []
+    payloads: list[tuple[str, bytes, str, str | None]] = []
     valid_assets: list[Asset] = []
     for asset in candidates:
         file_path = document_storage_dir / asset.storage_filename
@@ -245,7 +292,17 @@ def process_event_photo_assets(
         if not file_bytes:
             continue
         mime_type = (asset.content_type or "image/jpeg").strip().lower() or "image/jpeg"
-        payloads.append((asset.original_filename or asset.storage_filename, file_bytes, mime_type))
+        extract_and_apply_image_metadata(asset, file_bytes, mime_type)
+        metadata_hint = _build_photo_metadata_hint(
+            captured_at_text=asset.captured_at_text,
+            captured_at=asset.captured_at,
+            gps_latitude=asset.gps_latitude,
+            gps_longitude=asset.gps_longitude,
+            location_name=asset.location_name,
+            camera_make=asset.camera_make,
+            camera_model=asset.camera_model,
+        )
+        payloads.append((asset.original_filename or asset.storage_filename, file_bytes, mime_type, metadata_hint or None))
         valid_assets.append(asset)
 
     if not payloads:

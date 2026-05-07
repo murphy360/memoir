@@ -61,6 +61,7 @@ from app.services.gemini_client import (
 )
 from app.services.gemini_client import extract_text_from_document
 from app.services.image_metadata import extract_and_apply_image_metadata
+from app.services.geocoding import backfill_asset_location_names
 from app.services.faces import assign_face_to_person, list_faces_for_event, sync_asset_faces_for_photo
 from app.services.directory import (
     assign_recorder_person,
@@ -166,6 +167,7 @@ def on_startup() -> None:
     try:
         backfill_normalized_directory(db)
         backfill_life_hierarchy(db)
+        backfill_asset_location_names(db)
         seed_initial_questions(db)
     finally:
         db.close()

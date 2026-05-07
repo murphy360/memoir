@@ -257,6 +257,7 @@ class AssetResponse(BaseModel):
     captured_at_text: Optional[str]
     gps_latitude: Optional[float]
     gps_longitude: Optional[float]
+    location_name: Optional[str] = None
     camera_make: Optional[str]
     camera_model: Optional[str]
     lens_model: Optional[str]

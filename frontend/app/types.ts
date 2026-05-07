@@ -176,6 +176,7 @@ export type AssetEntry = {
   captured_at_text: string | null;
   gps_latitude: number | null;
   gps_longitude: number | null;
+  location_name: string | null;
   camera_make: string | null;
   camera_model: string | null;
   lens_model: string | null;

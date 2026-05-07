@@ -944,7 +944,9 @@ def extract_text_from_document(filename: str, file_bytes: bytes, mime_type: str)
         )
 
 
-def extract_text_from_photo_batch(photo_payloads: list[tuple[str, bytes, str]]) -> dict[int, str]:
+def extract_text_from_photo_batch(
+    photo_payloads: list[tuple[str, bytes, str] | tuple[str, bytes, str, str | None]]
+) -> dict[int, str]:
     """Use one Gemini call to summarize a batch of uploaded photos.
 
     The return value is keyed by 1-based photo index from `photo_payloads`.
@@ -966,6 +968,8 @@ def extract_text_from_photo_batch(photo_payloads: list[tuple[str, bytes, str]]) 
                 "You will receive a batch of photos from a memoir app. "
                 "For each photo, produce one concise plain-text summary sentence focused on people, "
                 "location clues, activity, and notable context. Do not invent facts. "
+                "You may receive PHOTO_METADATA lines containing EXIF-derived date/location/camera context. "
+                "Treat metadata as supporting hints and reconcile with visual evidence. "
                 "Return strict JSON only with this shape: "
                 "{\"items\":[{\"index\":1,\"summary\":\"...\"}]}. "
                 "Use the exact photo index provided before each image."
@@ -973,8 +977,12 @@ def extract_text_from_photo_batch(photo_payloads: list[tuple[str, bytes, str]]) 
         }
     ]
 
-    for index, (filename, file_bytes, mime_type) in enumerate(photo_payloads, start=1):
+    for index, payload in enumerate(photo_payloads, start=1):
+        filename, file_bytes, mime_type = payload[0], payload[1], payload[2]
+        metadata_hint = payload[3] if len(payload) > 3 else None
         parts.append({"text": f"PHOTO_INDEX={index}; filename={filename}"})
+        if metadata_hint:
+            parts.append({"text": f"PHOTO_METADATA={metadata_hint}"})
         parts.append(
             {
                 "inline_data": {

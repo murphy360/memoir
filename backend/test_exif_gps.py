@@ -38,6 +38,7 @@ def run(photo_path: Path) -> None:
     # ── Print all extracted fields ────────────────────────────────────────────
     print(f"  gps_latitude   : {meta.gps_latitude}")
     print(f"  gps_longitude  : {meta.gps_longitude}")
+    print(f"  location_name  : {meta.location_name}")
     print(f"  captured_at    : {meta.captured_at}")
     print(f"  captured_at_txt: {meta.captured_at_text}")
     print(f"  camera_make    : {meta.camera_make}")

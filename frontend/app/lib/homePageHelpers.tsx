@@ -27,7 +27,11 @@ export function formatAssetGps(asset: AssetEntry): string | null {
   if (asset.gps_latitude === null || asset.gps_longitude === null) {
     return null;
   }
-  return `${asset.gps_latitude.toFixed(5)}, ${asset.gps_longitude.toFixed(5)}`;
+  const coords = `${asset.gps_latitude.toFixed(5)}, ${asset.gps_longitude.toFixed(5)}`;
+  if (asset.location_name) {
+    return `${asset.location_name} (${coords})`;
+  }
+  return coords;
 }
 
 export function renderImageMetadataBadges(asset: AssetEntry): JSX.Element | null {

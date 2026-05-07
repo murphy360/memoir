@@ -301,6 +301,8 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE assets ADD COLUMN image_height INTEGER"))
         if "exif_json" not in asset_columns:
             connection.execute(text("ALTER TABLE assets ADD COLUMN exif_json TEXT"))
+        if "location_name" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN location_name VARCHAR(200)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_assets_captured_at ON assets (captured_at)"))
 
         connection.execute(text("""

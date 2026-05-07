@@ -510,6 +510,7 @@ def build_asset_response(asset: Asset) -> AssetResponse:
         captured_at_text=asset.captured_at_text,
         gps_latitude=asset.gps_latitude,
         gps_longitude=asset.gps_longitude,
+        location_name=asset.location_name,
         camera_make=asset.camera_make,
         camera_model=asset.camera_model,
         lens_model=asset.lens_model,
