@@ -150,6 +150,7 @@ export default function HomePage() {
   const [directoryBusyKey, setDirectoryBusyKey] = useState<string | null>(null);
   const [isPeriodComposerOpen, setIsPeriodComposerOpen] = useState(false);
   const [expandedPeriods, setExpandedPeriods] = useState<Record<number, boolean>>({});
+  const [expandedEpics, setExpandedEpics] = useState<Record<number, boolean>>({});
   const [eventDraftsByPeriod, setEventDraftsByPeriod] = useState<
     Record<number, { title: string; dateText: string; description: string; location: string }>
   >({});
@@ -499,6 +500,10 @@ export default function HomePage() {
     setExpandedPeriods((current) => ({ ...current, [periodId]: !current[periodId] }));
   }
 
+  function toggleEpicExpanded(epicId: number) {
+    setExpandedEpics((current) => ({ ...current, [epicId]: !current[epicId] }));
+  }
+
   function updateEventDraftForPeriod(
     periodId: number,
     patch: Partial<{ title: string; dateText: string; description: string; location: string }>,
@@ -678,6 +683,7 @@ export default function HomePage() {
       const created = await createEpic({ period_id: periodId, title, description: null, weight: 5, start_date_text: null, end_date_text: null });
       setEpicDraftsByPeriod((prev) => ({ ...prev, [periodId]: "" }));
       setLifeEpics((prev) => [...prev, created]);
+      setExpandedEpics((current) => ({ ...current, [created.id]: true }));
       setStatus("Epic created.");
     } catch {
       setStatus("Failed to create epic.");
@@ -2288,14 +2294,17 @@ export default function HomePage() {
                                 )}
                                 {epicsForPeriod.map((epic) => {
                                   const epicEvents = eventsForPeriod.filter((ev) => ev.epic_id === epic.id);
+                                  const isEpicExpanded = Boolean(expandedEpics[epic.id]);
                                   return (
                                     <EpicCard
                                       key={epic.id}
                                       epic={epic}
                                       threads={lifeThreads}
+                                      isOpen={isEpicExpanded}
                                       isRenamingTitle={editingEpicTitleId === epic.id}
                                       renamingTitleValue={editingEpicTitleValue}
                                       setRenamingTitleValue={setEditingEpicTitleValue}
+                                      onToggleOpen={() => toggleEpicExpanded(epic.id)}
                                       onStartRenameTitle={() => { setEditingEpicTitleId(epic.id); setEditingEpicTitleValue(epic.title); }}
                                       onSaveRenameTitle={() => void saveEpicTitle(epic.id, editingEpicTitleValue)}
                                       onCancelRenameTitle={() => { setEditingEpicTitleId(null); setEditingEpicTitleValue(""); }}

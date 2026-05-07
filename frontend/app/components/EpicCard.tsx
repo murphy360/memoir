@@ -5,9 +5,11 @@ import type { LifeEpic, LifeThread } from "../types";
 type EpicCardProps = {
   epic: LifeEpic;
   threads: LifeThread[];
+  isOpen: boolean;
   isRenamingTitle: boolean;
   renamingTitleValue: string;
   setRenamingTitleValue: (value: string) => void;
+  onToggleOpen: () => void;
   onStartRenameTitle: () => void;
   onSaveRenameTitle: () => void;
   onCancelRenameTitle: () => void;
@@ -21,9 +23,11 @@ type EpicCardProps = {
 export function EpicCard({
   epic,
   threads,
+  isOpen,
   isRenamingTitle,
   renamingTitleValue,
   setRenamingTitleValue,
+  onToggleOpen,
   onStartRenameTitle,
   onSaveRenameTitle,
   onCancelRenameTitle,
@@ -90,6 +94,14 @@ export function EpicCard({
               <button
                 className="secondary"
                 type="button"
+                style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem", whiteSpace: "nowrap" }}
+                onClick={onToggleOpen}
+              >
+                {isOpen ? "Hide" : "Open"}
+              </button>
+              <button
+                className="secondary"
+                type="button"
                 title="Assign thread"
                 style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem" }}
                 onClick={() => setShowThreadPicker((v) => !v)}
@@ -121,7 +133,7 @@ export function EpicCard({
           </>
         )}
       </div>
-      {showThreadPicker && (
+      {isOpen && showThreadPicker && (
         <div className="controls" style={{ padding: "0.4rem 0.8rem", gap: "0.4rem", flexWrap: "wrap" }}>
           <span style={{ fontSize: "0.85rem", color: "var(--text-muted, #888)" }}>Tag thread:</span>
           {threads.map((t) => (
@@ -155,36 +167,40 @@ export function EpicCard({
           )}
         </div>
       )}
-      <div className="epicEventList">{children}</div>
-      <div className="controls" style={{ padding: "0.4rem 0.8rem", gap: "0.4rem" }}>
-        <input
-          className="directoryInput"
-          type="text"
-          placeholder="New event title…"
-          value={newEventDraft}
-          onChange={(e) => setNewEventDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && newEventDraft.trim()) {
-              void onCreateEvent(newEventDraft.trim()).then(() => setNewEventDraft(""));
-            }
-          }}
-          disabled={isBusy}
-          style={{ flex: 1, fontSize: "0.85rem" }}
-        />
-        <button
-          className="primary"
-          type="button"
-          onClick={() => {
-            if (newEventDraft.trim()) {
-              void onCreateEvent(newEventDraft.trim()).then(() => setNewEventDraft(""));
-            }
-          }}
-          disabled={!newEventDraft.trim() || isBusy}
-          style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}
-        >
-          + Add Event
-        </button>
-      </div>
+      {isOpen && (
+        <>
+          <div className="epicEventList">{children}</div>
+          <div className="controls" style={{ padding: "0.4rem 0.8rem", gap: "0.4rem" }}>
+            <input
+              className="directoryInput"
+              type="text"
+              placeholder="New event title…"
+              value={newEventDraft}
+              onChange={(e) => setNewEventDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newEventDraft.trim()) {
+                  void onCreateEvent(newEventDraft.trim()).then(() => setNewEventDraft(""));
+                }
+              }}
+              disabled={isBusy}
+              style={{ flex: 1, fontSize: "0.85rem" }}
+            />
+            <button
+              className="primary"
+              type="button"
+              onClick={() => {
+                if (newEventDraft.trim()) {
+                  void onCreateEvent(newEventDraft.trim()).then(() => setNewEventDraft(""));
+                }
+              }}
+              disabled={!newEventDraft.trim() || isBusy}
+              style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}
+            >
+              + Add Event
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
