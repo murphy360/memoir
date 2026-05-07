@@ -594,17 +594,22 @@ export async function deleteDirectoryEntry(kind: "people" | "places", itemId: nu
 
 /**
  * Upload an audio recording as a memory.
+ * relatedAssetId links the saved memory directly to a specific photo asset.
  * quickCapture marks one-tap home-screen captures so backend can apply quick-entry automation.
  */
 export async function createMemoryFromAudioBlob(
   blob: Blob,
   eventId?: number,
+  relatedAssetId?: number,
   quickCapture = false,
 ): Promise<MemoryEntry> {
   const formData = new FormData();
   formData.append("audio", blob, `memory-${Date.now()}.webm`);
   if (eventId !== undefined) {
     formData.append("event_id", String(eventId));
+  }
+  if (relatedAssetId !== undefined) {
+    formData.append("related_asset_id", String(relatedAssetId));
   }
   if (quickCapture) {
     formData.append("quick_capture", "true");

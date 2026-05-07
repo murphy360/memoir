@@ -143,7 +143,9 @@ export default function HomePage() {
   const [assetNotesSavingId, setAssetNotesSavingId] = useState<number | null>(null);
   const [pendingRecording, setPendingRecording] = useState<PendingRecording | null>(null);
   const [recordingForEventId, setRecordingForEventId] = useState<number | null>(null);
+  const [recordingForAssetId, setRecordingForAssetId] = useState<number | null>(null);
   const [eventRecordingPending, setEventRecordingPending] = useState<Record<number, PendingRecording>>({});
+  const [assetRecordingPending, setAssetRecordingPending] = useState<Record<number, PendingRecording>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [highlightedElementId, setHighlightedElementId] = useState<string | null>(null);
   const [memoryActionId, setMemoryActionId] = useState<number | null>(null);
@@ -692,12 +694,12 @@ export default function HomePage() {
     }
   }
 
-  async function createLifeEventInEpic(epicId: number, periodId: number, title: string) {
+  async function createLifeEventInEpic(epicId: number, title: string) {
     if (!title.trim()) return;
     setIsSavingLifeStructure(true);
     setStatus("Creating event...");
     try {
-      await createEvent({ title: title.trim(), period_id: periodId, epic_id: epicId, weight: 5, description: null, location: null, event_date_text: null });
+      await createEvent({ title: title.trim(), period_id: null, epic_id: epicId, weight: 5, description: null, location: null, event_date_text: null });
       await loadTimeline();
       setStatus("Event created.");
     } catch {
@@ -1222,10 +1224,14 @@ export default function HomePage() {
     };
   }, []);
 
-  async function startRecording(forEventId?: number, options?: { quickCapture?: boolean }) {
+  async function startRecording(
+    forEventId?: number,
+    options?: { quickCapture?: boolean; relatedAssetId?: number },
+  ) {
     try {
       shouldDiscardRecordingRef.current = false;
       const isQuickCapture = options?.quickCapture === true && forEventId === undefined;
+      const targetAssetId = options?.relatedAssetId;
       const audioConstraint = selectedDeviceId
         ? { deviceId: { exact: selectedDeviceId } }
         : true;
@@ -1238,6 +1244,7 @@ export default function HomePage() {
 
       const targetEventId = forEventId ?? null;
       setRecordingForEventId(targetEventId);
+      setRecordingForAssetId(targetAssetId ?? null);
 
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
@@ -1255,6 +1262,7 @@ export default function HomePage() {
         if (shouldDiscard) {
           chunksRef.current = [];
           setRecordingForEventId(null);
+          setRecordingForAssetId(null);
           setStatus(
             activeQuestion
               ? "Recording canceled. Your question is still waiting for an answer."
@@ -1267,7 +1275,17 @@ export default function HomePage() {
         const nextAudioUrl = URL.createObjectURL(blob);
         const nextPendingId = `${Date.now()}`;
 
-        if (targetEventId !== null) {
+        if (targetAssetId !== undefined) {
+          setAssetRecordingPending((prev) => ({
+            ...prev,
+            [targetAssetId]: {
+              id: nextPendingId,
+              audioUrl: nextAudioUrl,
+              sizeBytes: blob.size,
+              status: "recorded",
+            },
+          }));
+        } else if (targetEventId !== null) {
           setEventRecordingPending((prev) => ({
             ...prev,
             [targetEventId]: {
@@ -1293,7 +1311,7 @@ export default function HomePage() {
         }
 
         setStatus("Audio recorded. You can play it now while we process it.");
-        await uploadRecording(blob, nextPendingId, targetEventId ?? undefined, isQuickCapture);
+        await uploadRecording(blob, nextPendingId, targetEventId ?? undefined, targetAssetId, isQuickCapture);
       };
 
       recorder.start();
@@ -1366,19 +1384,34 @@ export default function HomePage() {
     stopAudioLevelMonitoring();
     setIsRecording(false);
     setRecordingForEventId(null);
+    setRecordingForAssetId(null);
     setStatus("Canceling recording...");
+  }
+
+  async function startRecordingForAsset(assetId: number, eventId: number) {
+    if (isRecording || isLoading) {
+      return;
+    }
+    await startRecording(eventId, { relatedAssetId: assetId });
   }
 
   async function uploadRecording(
     blob: Blob,
     pendingId: string,
     eventId?: number,
+    relatedAssetId?: number,
     quickCapture = false,
   ) {
     setIsLoading(true);
 
     const updatePending = (updater: (prev: PendingRecording) => PendingRecording) => {
-      if (eventId !== undefined) {
+      if (relatedAssetId !== undefined) {
+        setAssetRecordingPending((prev) => {
+          const current = prev[relatedAssetId];
+          if (!current || current.id !== pendingId) return prev;
+          return { ...prev, [relatedAssetId]: updater(current) };
+        });
+      } else if (eventId !== undefined) {
         setEventRecordingPending((prev) => {
           const current = prev[eventId];
           if (!current || current.id !== pendingId) return prev;
@@ -1394,7 +1427,7 @@ export default function HomePage() {
     updatePending((p) => ({ ...p, status: "processing", error: undefined }));
 
     try {
-      const created: MemoryEntry = await createMemoryFromAudioBlob(blob, eventId, quickCapture);
+      const created: MemoryEntry = await createMemoryFromAudioBlob(blob, eventId, relatedAssetId, quickCapture);
       if (activeQuestion) {
         try {
           await answerQuestionWithMemory(activeQuestion.id, created.id);
@@ -1410,10 +1443,12 @@ export default function HomePage() {
       }
       setStatus("Memory saved and analyzed.");
       setRecordingForEventId(null);
+      setRecordingForAssetId(null);
       updatePending((p) => ({ ...p, status: "saved", error: undefined }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to process recording.";
       setStatus(message);
+      setRecordingForAssetId(null);
       updatePending((p) => ({
         ...p,
         status: "failed",
@@ -1671,6 +1706,7 @@ export default function HomePage() {
         eventCapturePanelOpenIds={eventCapturePanelOpenIds}
         setEventCapturePanelOpenIds={setEventCapturePanelOpenIds}
         recordingForEventId={recordingForEventId}
+        recordingForAssetId={recordingForAssetId}
         audioDevices={audioDevices}
         selectedDeviceId={selectedDeviceId}
         setSelectedDeviceId={setSelectedDeviceId}
@@ -1679,6 +1715,8 @@ export default function HomePage() {
         stopRecording={stopRecording}
         cancelRecording={cancelRecording}
         eventRecordingPending={eventRecordingPending}
+        assetRecordingPending={assetRecordingPending}
+        startRecordingForAsset={startRecordingForAsset}
         eventDocumentUploadingId={eventDocumentUploadingId}
         eventDocumentErrors={eventDocumentErrors}
         eventDocumentUploadProgressByEventId={eventDocumentUploadProgressByEventId}
@@ -2310,7 +2348,7 @@ export default function HomePage() {
                                       onCancelRenameTitle={() => { setEditingEpicTitleId(null); setEditingEpicTitleValue(""); }}
                                       onDelete={() => void doDeleteEpic(epic.id, epic.title)}
                                       onAssignThread={(threadId) => void doAssignEpicToThread(epic.id, threadId)}
-                                      onCreateEvent={(title) => createLifeEventInEpic(epic.id, period.id, title)}
+                                      onCreateEvent={(title) => createLifeEventInEpic(epic.id, title)}
                                       isBusy={isSavingLifeStructure || isRecording || isLoading}
                                     >
                                       {epicEvents.length === 0 ? (

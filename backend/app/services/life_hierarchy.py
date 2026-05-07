@@ -4,7 +4,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.models import Asset, LifeEvent, LifePeriod, MemoryEntry
+from app.models import Asset, EventAsset, LifeEvent, LifePeriod, MemoryEntry
 from app.services.directory import assign_recorder_person, sync_memory_people, sync_memory_places
 from app.services.image_metadata import extract_and_apply_image_metadata
 from app.services.periods import ensure_event_asset_link, get_or_create_period_for_memory
@@ -41,9 +41,55 @@ def _has_reliable_memory_date(memory: MemoryEntry) -> bool:
     return precision in {"day", "month", "year", "decade", "approximate"}
 
 
-def _should_auto_create_event_for_memory(memory: MemoryEntry, existing_event: LifeEvent | None) -> bool:
+def _find_canonical_event_from_memory_assets(db: Session, memory: MemoryEntry) -> tuple[LifeEvent | None, list[int]]:
+    """Return the preferred linked event for this memory's assets and those asset ids."""
+    memory_asset_ids = [
+        row[0]
+        for row in (
+            db.query(Asset.id)
+            .filter(Asset.legacy_memory_id == memory.id)
+            .all()
+        )
+    ]
+    if not memory_asset_ids:
+        return None, []
+
+    linked_events = (
+        db.query(LifeEvent)
+        .join(EventAsset, EventAsset.event_id == LifeEvent.id)
+        .filter(EventAsset.asset_id.in_(memory_asset_ids))
+        .distinct()
+        .order_by(LifeEvent.created_at.asc(), LifeEvent.id.asc())
+        .all()
+    )
+    if not linked_events:
+        return None, memory_asset_ids
+
+    asset_period_ids = {
+        row[0]
+        for row in (
+            db.query(Asset.period_id)
+            .filter(Asset.id.in_(memory_asset_ids), Asset.period_id.isnot(None))
+            .all()
+        )
+    }
+    if asset_period_ids:
+        for candidate in linked_events:
+            if candidate.period_id in asset_period_ids:
+                return candidate, memory_asset_ids
+
+    return linked_events[0], memory_asset_ids
+
+
+def _should_auto_create_event_for_memory(
+    memory: MemoryEntry,
+    existing_event: LifeEvent | None,
+    canonical_asset_event: LifeEvent | None,
+) -> bool:
     if existing_event is not None:
         return True
+    if canonical_asset_event is not None:
+        return False
 
     # For new document/photo memories with unknown timing, keep the asset unlinked
     # so it lands in the Unlinked Asset Inbox for manual event assignment.
@@ -59,8 +105,23 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
         .filter(LifeEvent.legacy_memory_id == memory.id)
         .first()
     )
+    canonical_asset_event, memory_asset_ids = _find_canonical_event_from_memory_assets(db, memory)
+
+    if event is not None and canonical_asset_event is not None and event.id != canonical_asset_event.id:
+        # This memory is already represented by assets linked to a different event.
+        # Clear the duplicate legacy pointer and remove duplicate asset links from
+        # the auto-created event so the memory only appears under one event/period.
+        db.query(EventAsset).filter(
+            EventAsset.event_id == event.id,
+            EventAsset.asset_id.in_(memory_asset_ids),
+        ).delete(synchronize_session=False)
+        event.legacy_memory_id = None
+        event = canonical_asset_event
+    elif event is None and canonical_asset_event is not None:
+        event = canonical_asset_event
+
     period = None
-    should_create_event = _should_auto_create_event_for_memory(memory, event)
+    should_create_event = _should_auto_create_event_for_memory(memory, event, canonical_asset_event)
 
     if not event and should_create_event:
         period = get_or_create_period_for_memory(db, memory)
@@ -117,7 +178,7 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
             db.add(audio_asset)
             db.flush()
         else:
-            if audio_asset.period_id is None and period is not None:
+            if period is not None and audio_asset.period_id != period.id:
                 audio_asset.period_id = period.id
             if not audio_asset.text_excerpt and memory.transcript:
                 audio_asset.text_excerpt = memory.transcript[:1200]
@@ -146,7 +207,7 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
             )
             db.add(document_asset)
             db.flush()
-        elif document_asset.period_id is None and period is not None:
+        elif period is not None and document_asset.period_id != period.id:
             document_asset.period_id = period.id
 
         _sync_document_asset_image_metadata(memory, document_asset)

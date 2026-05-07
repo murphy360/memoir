@@ -31,6 +31,20 @@ type EventAssetListProps = {
   eventFaces?: EventFaceEntry[];
   processPhotoAsset?: (assetId: number, eventId: number) => Promise<void>;
   processingPhotoAssetId?: number | null;
+  recordingForAssetId?: number | null;
+  startRecordingForAsset?: (assetId: number, eventId: number) => Promise<void>;
+  stopRecording?: () => void;
+  cancelRecording?: () => void;
+  assetRecordingPending?: Record<number, {
+    id: string;
+    audioUrl: string;
+    sizeBytes: number;
+    status: "recorded" | "processing" | "saved" | "failed";
+    error?: string;
+  }>;
+  isRecording?: boolean;
+  isLoading?: boolean;
+  audioDevices?: Array<{ deviceId: string; label: string }>;
   showLinkControls?: boolean;
   lifeEvents?: Array<{ id: number; title: string }>;
   assetLinkTargets?: Record<number, string>;
@@ -90,6 +104,14 @@ export function EventAssetList({
   eventFaces = [],
   processPhotoAsset,
   processingPhotoAssetId = null,
+  recordingForAssetId = null,
+  startRecordingForAsset,
+  stopRecording,
+  cancelRecording,
+  assetRecordingPending = {},
+  isRecording = false,
+  isLoading = false,
+  audioDevices = [],
   showLinkControls = false,
   lifeEvents = [],
   assetLinkTargets = {},
@@ -137,6 +159,14 @@ export function EventAssetList({
     && processPhotoAsset
     && eventId !== undefined,
   );
+  const canRecordPreviewPhoto = Boolean(
+    previewAsset
+    && isImageAsset(previewAsset)
+    && startRecordingForAsset
+    && eventId !== undefined,
+  );
+  const isRecordingThisAsset = Boolean(previewAsset && recordingForAssetId === previewAsset.id);
+  const previewPendingRecording = previewAsset ? assetRecordingPending[previewAsset.id] : undefined;
 
   return (
     <>
@@ -234,6 +264,51 @@ export function EventAssetList({
                       {showFaceBoxes ? "Hide Face Boxes" : `Show Face Boxes (${previewAssetFaces.length})`}
                     </button>
                   )}
+                  {canRecordPreviewPhoto && !isRecordingThisAsset && (
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() => {
+                        if (!previewAsset || !startRecordingForAsset || eventId === undefined) {
+                          return;
+                        }
+                        void startRecordingForAsset(previewAsset.id, eventId);
+                      }}
+                      disabled={isRecording || isLoading || audioDevices.length === 0}
+                    >
+                      Record Voice Memory
+                    </button>
+                  )}
+                  {canRecordPreviewPhoto && isRecordingThisAsset && (
+                    <>
+                      <button
+                        className="secondary"
+                        type="button"
+                        onClick={stopRecording}
+                        disabled={!isRecording || isLoading}
+                      >
+                        Stop &amp; Save
+                      </button>
+                      <button
+                        className="ghost"
+                        type="button"
+                        onClick={cancelRecording}
+                        disabled={!isRecording || isLoading}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              {previewPendingRecording && (
+                <div className="pendingRecordingInline" style={{ marginTop: "0.6rem" }}>
+                  <audio controls preload="metadata" src={previewPendingRecording.audioUrl} style={{ flex: 1 }} />
+                  <span className="meta">
+                    {previewPendingRecording.status === "processing" && "Processing..."}
+                    {previewPendingRecording.status === "saved" && "Saved to photo ✓"}
+                    {previewPendingRecording.status === "failed" && (previewPendingRecording.error ?? "Failed")}
+                  </span>
                 </div>
               )}
               <div className="assetPreviewImageWrap">

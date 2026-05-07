@@ -157,10 +157,11 @@ def extract_image_metadata(file_bytes: bytes, content_type: Optional[str]) -> Im
             metadata.captured_at = captured_at
             metadata.captured_at_text = captured_text
 
-            gps_info = exif.get("GPSInfo")
-            if isinstance(gps_info, dict):
+            GPS_IFD_TAG = 0x8825
+            gps_ifd = exif_raw.get_ifd(GPS_IFD_TAG)
+            if gps_ifd:
                 gps: dict[str, Any] = {}
-                for gps_tag_id, value in gps_info.items():
+                for gps_tag_id, value in gps_ifd.items():
                     gps_name = GPS_TAGS.get(gps_tag_id, str(gps_tag_id))
                     gps[gps_name] = value
 

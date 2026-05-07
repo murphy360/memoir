@@ -1539,6 +1539,7 @@ def get_memory_document(memory_id: int, download: bool = False, db: Session = De
 async def create_memory(
     audio: UploadFile = File(...),
     event_id: Optional[int] = Form(None),
+    related_asset_id: Optional[int] = Form(None),
     quick_capture: bool = Form(False),
     db: Session = Depends(get_db),
 ) -> MemoryEntry:
@@ -1547,6 +1548,17 @@ async def create_memory(
         raise HTTPException(status_code=400, detail="Audio payload is empty")
 
     audio_filename, audio_content_type, audio_size_bytes, mp3_bytes = save_audio_file(audio, audio_bytes, AUDIO_STORAGE_DIR)
+
+    related_asset: Optional[Asset] = None
+    if related_asset_id is not None:
+        related_asset = db.get(Asset, related_asset_id)
+        if not related_asset:
+            raise HTTPException(status_code=404, detail="Related asset not found")
+        content_type = (related_asset.content_type or "").lower()
+        if related_asset.kind != "photo" and not content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="Related asset must be a photo")
+        if event_id is None:
+            raise HTTPException(status_code=400, detail="event_id is required when related_asset_id is provided")
 
     transcription_enabled = os.getenv("TRANSCRIPTION_ENABLED", "true").lower() == "true"
 
@@ -1591,7 +1603,13 @@ async def create_memory(
         # Skip sync_life_hierarchy_for_memory (which would create an unwanted
         # second event) and instead create the audio asset + link it manually.
         target_event = db.query(LifeEvent).filter(LifeEvent.id == event_id).first()
-        if target_event:
+        if not target_event:
+            raise HTTPException(status_code=404, detail="Event not found")
+
+        if related_asset:
+            ensure_event_asset_link(db, target_event, related_asset, relation_type="evidence")
+            related_asset.legacy_memory_id = entry.id
+        else:
             conflicting_asset = db.query(Asset).filter(Asset.legacy_memory_id == entry.id).first()
             if conflicting_asset and conflicting_asset.kind != "audio":
                 conflicting_asset.legacy_memory_id = None
@@ -1735,37 +1753,39 @@ async def create_memory_from_document(
 
     if event_id is not None:
         target_event = db.query(LifeEvent).filter(LifeEvent.id == event_id).first()
-        if target_event:
-            asset_kind = "photo" if (document_content_type or "").startswith("image/") else "document"
-            conflicting_asset = db.query(Asset).filter(Asset.legacy_memory_id == entry.id).first()
-            if conflicting_asset and conflicting_asset.kind != asset_kind:
-                conflicting_asset.legacy_memory_id = None
-                db.flush()
+        if not target_event:
+            raise HTTPException(status_code=404, detail="Event not found")
 
-            document_asset = Asset(
-                period_id=target_event.period_id,
-                kind=asset_kind,
-                title=derive_asset_title(document_original_filename or ""),
-                storage_filename=document_filename,
-                original_filename=document_original_filename,
-                content_type=document_content_type,
-                size_bytes=document_size_bytes,
-                text_excerpt=(transcript or "").strip()[:1200] or None,
-                notes=f"Uploaded to event: {target_event.title}",
-                legacy_memory_id=entry.id,
-            )
-            db.add(document_asset)
+        asset_kind = "photo" if (document_content_type or "").startswith("image/") else "document"
+        conflicting_asset = db.query(Asset).filter(Asset.legacy_memory_id == entry.id).first()
+        if conflicting_asset and conflicting_asset.kind != asset_kind:
+            conflicting_asset.legacy_memory_id = None
             db.flush()
-            if asset_kind == "photo" and document_filename:
-                doc_path = DOCUMENT_STORAGE_DIR / document_filename
-                if doc_path.exists():
-                    try:
-                        extract_and_apply_image_metadata(document_asset, doc_path.read_bytes(), document_content_type)
-                    except Exception:
-                        pass
-            ensure_event_asset_link(db, target_event, document_asset)
-            if target_event.legacy_memory_id is None:
-                target_event.legacy_memory_id = entry.id
+
+        document_asset = Asset(
+            period_id=target_event.period_id,
+            kind=asset_kind,
+            title=derive_asset_title(document_original_filename or ""),
+            storage_filename=document_filename,
+            original_filename=document_original_filename,
+            content_type=document_content_type,
+            size_bytes=document_size_bytes,
+            text_excerpt=(transcript or "").strip()[:1200] or None,
+            notes=f"Uploaded to event: {target_event.title}",
+            legacy_memory_id=entry.id,
+        )
+        db.add(document_asset)
+        db.flush()
+        if asset_kind == "photo" and document_filename:
+            doc_path = DOCUMENT_STORAGE_DIR / document_filename
+            if doc_path.exists():
+                try:
+                    extract_and_apply_image_metadata(document_asset, doc_path.read_bytes(), document_content_type)
+                except Exception:
+                    pass
+        ensure_event_asset_link(db, target_event, document_asset)
+        if target_event.legacy_memory_id is None:
+            target_event.legacy_memory_id = entry.id
     else:
         sync_life_hierarchy_for_memory(db, entry)
 

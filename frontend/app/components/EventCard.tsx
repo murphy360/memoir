@@ -79,6 +79,7 @@ type EventCardProps = {
   eventCapturePanelOpenIds: Set<number>;
   setEventCapturePanelOpenIds: Dispatch<SetStateAction<Set<number>>>;
   recordingForEventId: number | null;
+  recordingForAssetId: number | null;
   audioDevices: AudioInputDevice[];
   selectedDeviceId: string;
   setSelectedDeviceId: (value: string) => void;
@@ -87,6 +88,8 @@ type EventCardProps = {
   stopRecording: () => void;
   cancelRecording: () => void;
   eventRecordingPending: Record<number, PendingRecording>;
+  assetRecordingPending: Record<number, PendingRecording>;
+  startRecordingForAsset: (assetId: number, eventId: number) => Promise<void>;
   eventDocumentUploadingId: number | null;
   eventDocumentErrors: Record<number, string | null>;
   eventDocumentUploadProgressByEventId: Record<number, EventDocumentUploadProgressItem[]>;
@@ -187,6 +190,7 @@ export function EventCard({
   eventCapturePanelOpenIds,
   setEventCapturePanelOpenIds,
   recordingForEventId,
+  recordingForAssetId,
   audioDevices,
   selectedDeviceId,
   setSelectedDeviceId,
@@ -195,6 +199,8 @@ export function EventCard({
   stopRecording,
   cancelRecording,
   eventRecordingPending,
+  assetRecordingPending,
+  startRecordingForAsset,
   eventDocumentUploadingId,
   eventDocumentErrors,
   eventDocumentUploadProgressByEventId,
@@ -856,6 +862,14 @@ export function EventCard({
                 eventFaces={eventFaces}
                 processPhotoAsset={processPhotoAsset}
                 processingPhotoAssetId={processingPhotoAssetId}
+                recordingForAssetId={recordingForAssetId}
+                startRecordingForAsset={startRecordingForAsset}
+                stopRecording={stopRecording}
+                cancelRecording={cancelRecording}
+                assetRecordingPending={assetRecordingPending}
+                isRecording={isRecording}
+                isLoading={isLoading}
+                audioDevices={audioDevices}
               />
             </>
           )}
