@@ -966,10 +966,13 @@ def extract_text_from_photo_batch(
         {
             "text": (
                 "You will receive a batch of photos from a memoir app. "
-                "For each photo, produce one concise plain-text summary sentence focused on people, "
-                "location clues, activity, and notable context. Do not invent facts. "
+                "For each photo, produce a rich plain-text description in 3-5 sentences focused on people, "
+                "setting, activity, visible objects/landmarks, and notable context. Do not invent facts. "
                 "You may receive PHOTO_METADATA lines containing EXIF-derived date/location/camera context. "
                 "Treat metadata as supporting hints and reconcile with visual evidence. "
+                "If a place, landmark, object, sign, or event appears identifiable with high confidence, include "
+                "1 short background/history sentence about it; otherwise skip history. "
+                "When uncertain, say likely/possibly rather than stating certainty. "
                 "Return strict JSON only with this shape: "
                 "{\"items\":[{\"index\":1,\"summary\":\"...\"}]}. "
                 "Use the exact photo index provided before each image."

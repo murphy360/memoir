@@ -57,7 +57,9 @@ def reverse_geocode(lat: float, lon: float) -> Optional[str]:
     except Exception:
         logger.debug("Reverse geocode failed for (%s, %s)", lat, lon, exc_info=True)
 
-    _CACHE[key] = name
+    # Cache only successful lookups so transient API/network failures can retry later.
+    if name:
+        _CACHE[key] = name
     return name
 
 

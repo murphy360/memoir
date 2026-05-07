@@ -144,6 +144,17 @@ export function EventAssetList({
   }, [eventFaces, previewAsset]);
 
   const showFaceBoxes = previewAsset ? Boolean(showFaceBoxesByAssetId[previewAsset.id]) : false;
+  const hasPreviewGps = Boolean(
+    previewAsset
+    && previewAsset.gps_latitude !== null
+    && previewAsset.gps_longitude !== null,
+  );
+  const previewPositionText = hasPreviewGps && previewAsset
+    ? `${previewAsset.gps_latitude!.toFixed(6)}, ${previewAsset.gps_longitude!.toFixed(6)}`
+    : "Unavailable";
+  const previewMapUrl = hasPreviewGps && previewAsset
+    ? `https://www.google.com/maps?q=${previewAsset.gps_latitude},${previewAsset.gps_longitude}`
+    : null;
 
   const handleCloseModal = () => {
     setPreviewAssetId(null);
@@ -363,7 +374,17 @@ export function EventAssetList({
           <div className="assetPreviewMeta">
             <p className="meta"><strong>Filename:</strong> {previewAsset.original_filename || "none"}</p>
             {formatAssetCaptureDate(previewAsset) && <p className="meta"><strong>Captured:</strong> {formatAssetCaptureDate(previewAsset)}</p>}
-            {formatAssetGps(previewAsset) && <p className="meta"><strong>Location:</strong> {formatAssetGps(previewAsset)}</p>}
+            {previewAsset.location_name && <p className="meta"><strong>Place:</strong> {previewAsset.location_name}</p>}
+            <p className="meta">
+              <strong>Position:</strong> {previewPositionText}
+              {previewMapUrl && (
+                <>
+                  {" "}
+                  <a href={previewMapUrl} target="_blank" rel="noreferrer">Map</a>
+                </>
+              )}
+            </p>
+            {!previewAsset.location_name && formatAssetGps(previewAsset) && <p className="meta"><strong>Location:</strong> {formatAssetGps(previewAsset)}</p>}
             {renderImageMetadataBadges(previewAsset)}
             {(previewAsset.image_width !== null || previewAsset.image_height !== null) && (
               <p className="meta"><strong>Dimensions:</strong> {previewAsset.image_width || "?"} x {previewAsset.image_height || "?"}</p>

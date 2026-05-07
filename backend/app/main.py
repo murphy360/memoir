@@ -1105,6 +1105,9 @@ def process_single_photo(
         "processed": True,
         "has_text_excerpt": bool((asset.text_excerpt or "").strip()),
         "face_count": len(asset.faces),
+        "has_gps": asset.gps_latitude is not None and asset.gps_longitude is not None,
+        "location_name": asset.location_name,
+        "captured_at_text": asset.captured_at_text,
     }
 
 

@@ -1064,7 +1064,13 @@ export default function HomePage() {
       if (activeEventId === eventId) {
         await loadAssetsForEvent(eventId);
       }
-      setStatus(`Photo analyzed. Found ${result.face_count} face${result.face_count === 1 ? "" : "s"}.`);
+      const locationPart = result.location_name
+        ? `Location: ${result.location_name}.`
+        : (result.has_gps ? "GPS found (reverse geocode unavailable)." : "No GPS EXIF found.");
+      const capturePart = result.captured_at_text ? `Captured: ${result.captured_at_text}.` : "";
+      setStatus(
+        `Photo analyzed. Found ${result.face_count} face${result.face_count === 1 ? "" : "s"}. ${locationPart} ${capturePart}`.trim(),
+      );
     } catch {
       setStatus("Failed to analyze photo.");
     } finally {

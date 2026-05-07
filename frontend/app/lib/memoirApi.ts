@@ -372,7 +372,15 @@ export async function processEventPhotoAssets(
 export async function processSinglePhotoAsset(
   assetId: number,
   includeProcessed = true,
-): Promise<{ asset_id: number; processed: boolean; has_text_excerpt: boolean; face_count: number }> {
+): Promise<{
+  asset_id: number;
+  processed: boolean;
+  has_text_excerpt: boolean;
+  face_count: number;
+  has_gps: boolean;
+  location_name: string | null;
+  captured_at_text: string | null;
+}> {
   const response = await fetch(toAbsoluteApiUrl(`/api/assets/${assetId}/process-photo`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
