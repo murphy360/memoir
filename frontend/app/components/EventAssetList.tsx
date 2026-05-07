@@ -2,10 +2,11 @@ import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import {
   formatAssetCaptureDate,
+  parsePeriodYearHint,
   formatAssetGps,
   renderImageMetadataBadges,
 } from "../lib/homePageHelpers";
-import type { AssetEntry, EventFaceEntry } from "../types";
+import type { AssetEntry, EventFaceEntry, LifeEpic, LifeEvent, LifePeriod } from "../types";
 
 type EventAssetListProps = {
   assets: AssetEntry[];
@@ -46,10 +47,19 @@ type EventAssetListProps = {
   isLoading?: boolean;
   audioDevices?: Array<{ deviceId: string; label: string }>;
   showLinkControls?: boolean;
-  lifeEvents?: Array<{ id: number; title: string }>;
+  lifePeriods?: LifePeriod[];
+  lifeEpics?: LifeEpic[];
+  lifeEvents?: LifeEvent[];
+  createEpicInPeriod?: (periodId: number, title: string) => Promise<LifeEpic | null>;
+  createEventForLinking?: (payload: {
+    title: string;
+    periodId: number | null;
+    epicId: number | null;
+    eventDateText: string | null;
+  }) => Promise<LifeEvent | null>;
   assetLinkTargets?: Record<number, string>;
   setAssetLinkTargets?: Dispatch<SetStateAction<Record<number, string>>>;
-  linkUnlinkedAssetToEvent?: (assetId: number) => Promise<void>;
+  linkUnlinkedAssetToEvent?: (assetId: number, eventId?: number) => Promise<void>;
   isSavingLifeStructure?: boolean;
 };
 
@@ -78,6 +88,154 @@ function fileExtension(name: string | null): string {
   }
   const ext = raw.split(".").pop() || "FILE";
   return ext.slice(0, 5).toUpperCase();
+}
+
+function parseDateFromAsset(asset: AssetEntry): Date | null {
+  if (asset.captured_at) {
+    const parsed = new Date(asset.captured_at);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  if (asset.captured_at_text) {
+    const parsed = new Date(asset.captured_at_text);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function assetYearHint(asset: AssetEntry): number | null {
+  const parsedDate = parseDateFromAsset(asset);
+  if (parsedDate) {
+    return parsedDate.getFullYear();
+  }
+  return parsePeriodYearHint(asset.captured_at_text);
+}
+
+function dateRangeScore(year: number, startYear: number | null, endYear: number | null): number {
+  if (startYear !== null && endYear !== null) {
+    const normalizedStart = Math.min(startYear, endYear);
+    const normalizedEnd = Math.max(startYear, endYear);
+    if (year >= normalizedStart && year <= normalizedEnd) {
+      return (normalizedEnd - normalizedStart) * 0.01;
+    }
+    return Math.min(Math.abs(year - normalizedStart), Math.abs(year - normalizedEnd));
+  }
+  if (startYear !== null) {
+    return Math.abs(year - startYear) + 1;
+  }
+  if (endYear !== null) {
+    return Math.abs(year - endYear) + 1;
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+function eventYearHint(event: LifeEvent): number | null {
+  if (event.date_year !== null) {
+    return event.date_year;
+  }
+  if (event.date_decade !== null) {
+    return event.date_decade;
+  }
+  return parsePeriodYearHint(event.event_date_text);
+}
+
+function eventTimestampHint(event: LifeEvent): number | null {
+  if (event.date_year === null) {
+    return null;
+  }
+  const month = event.date_month ?? 1;
+  const day = event.date_day ?? 1;
+  const parsed = new Date(event.date_year, month - 1, day);
+  const time = parsed.getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
+function pickDefaultPeriodId(asset: AssetEntry, lifePeriods: LifePeriod[]): string {
+  const year = assetYearHint(asset);
+  if (year === null || lifePeriods.length === 0) {
+    return "";
+  }
+
+  let bestPeriod: LifePeriod | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const period of lifePeriods) {
+    const score = dateRangeScore(
+      year,
+      parsePeriodYearHint(period.start_date_text),
+      parsePeriodYearHint(period.end_date_text),
+    );
+    if (score < bestScore) {
+      bestScore = score;
+      bestPeriod = period;
+    }
+  }
+  return bestPeriod ? `${bestPeriod.id}` : "";
+}
+
+function pickDefaultEpicId(asset: AssetEntry, epicsInScope: LifeEpic[]): string {
+  const year = assetYearHint(asset);
+  if (year === null || epicsInScope.length === 0) {
+    return "";
+  }
+
+  let bestEpic: LifeEpic | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const epic of epicsInScope) {
+    const score = dateRangeScore(
+      year,
+      parsePeriodYearHint(epic.start_date_text),
+      parsePeriodYearHint(epic.end_date_text),
+    );
+    if (score < bestScore) {
+      bestScore = score;
+      bestEpic = epic;
+    }
+  }
+  return bestEpic ? `${bestEpic.id}` : "";
+}
+
+function pickDefaultEventId(asset: AssetEntry, eventsInScope: LifeEvent[]): string {
+  if (eventsInScope.length === 0) {
+    return "";
+  }
+
+  const assetDate = parseDateFromAsset(asset);
+  const assetTime = assetDate?.getTime() ?? null;
+  const assetYear = assetDate?.getFullYear() ?? assetYearHint(asset);
+  let bestEvent: LifeEvent | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (const event of eventsInScope) {
+    const eventTime = eventTimestampHint(event);
+    let score = Number.POSITIVE_INFINITY;
+
+    if (assetTime !== null && eventTime !== null) {
+      score = Math.abs(assetTime - eventTime);
+    } else if (assetYear !== null) {
+      const yearHint = eventYearHint(event);
+      if (yearHint !== null) {
+        score = Math.abs(assetYear - yearHint) * 366;
+      }
+    }
+
+    // Prefer the heavier event when dates tie or are missing.
+    if (score === bestScore && bestEvent && event.weight > bestEvent.weight) {
+      bestEvent = event;
+      continue;
+    }
+    if (score < bestScore || (bestEvent === null && Number.isFinite(score) === false)) {
+      bestScore = score;
+      bestEvent = event;
+    }
+  }
+
+  if (!bestEvent) {
+    return "";
+  }
+  return `${bestEvent.id}`;
 }
 
 export function EventAssetList({
@@ -113,7 +271,11 @@ export function EventAssetList({
   isLoading = false,
   audioDevices = [],
   showLinkControls = false,
+  lifePeriods = [],
+  lifeEpics = [],
   lifeEvents = [],
+  createEpicInPeriod,
+  createEventForLinking,
   assetLinkTargets = {},
   setAssetLinkTargets,
   linkUnlinkedAssetToEvent,
@@ -125,6 +287,10 @@ export function EventAssetList({
   const [modalEditingNotesId, setModalEditingNotesId] = useState<number | null>(null);
   const [modalEditingNotesValue, setModalEditingNotesValue] = useState("");
   const [showFaceBoxesByAssetId, setShowFaceBoxesByAssetId] = useState<Record<number, boolean>>({});
+  const [assetPeriodTargets, setAssetPeriodTargets] = useState<Record<number, string>>({});
+  const [assetEpicTargets, setAssetEpicTargets] = useState<Record<number, string>>({});
+  const [newEpicTitleByAssetId, setNewEpicTitleByAssetId] = useState<Record<number, string>>({});
+  const [newEventTitleByAssetId, setNewEventTitleByAssetId] = useState<Record<number, string>>({});
 
   const galleryAssets = useMemo(
     () => assets.filter((asset) => isImageAsset(asset) || isAudioAsset(asset) || isDocumentAsset(asset)),
@@ -178,6 +344,38 @@ export function EventAssetList({
   );
   const isRecordingThisAsset = Boolean(previewAsset && recordingForAssetId === previewAsset.id);
   const previewPendingRecording = previewAsset ? assetRecordingPending[previewAsset.id] : undefined;
+  const selectedPeriodId = previewAsset
+    ? assetPeriodTargets[previewAsset.id] || pickDefaultPeriodId(previewAsset, lifePeriods)
+    : "";
+  const eventsInPeriod = useMemo(() => {
+    if (!selectedPeriodId) {
+      return lifeEvents;
+    }
+    const periodId = Number(selectedPeriodId);
+    return lifeEvents.filter((event) => event.period_id === periodId);
+  }, [lifeEvents, selectedPeriodId]);
+  const epicsInPeriod = useMemo(() => {
+    if (!selectedPeriodId) {
+      return lifeEpics;
+    }
+    const periodId = Number(selectedPeriodId);
+    return lifeEpics.filter((epic) => epic.period_id === periodId);
+  }, [lifeEpics, selectedPeriodId]);
+  const selectedEpicId = previewAsset
+    ? assetEpicTargets[previewAsset.id] || pickDefaultEpicId(previewAsset, epicsInPeriod)
+    : "";
+  const eventsInScope = useMemo(() => {
+    if (!selectedEpicId) {
+      return eventsInPeriod;
+    }
+    const epicId = Number(selectedEpicId);
+    return eventsInPeriod.filter((event) => event.epic_id === epicId);
+  }, [eventsInPeriod, selectedEpicId]);
+  const selectedEventTarget = previewAsset
+    ? assetLinkTargets[previewAsset.id] || pickDefaultEventId(previewAsset, eventsInScope)
+    : "";
+  const draftEpicTitle = previewAsset ? (newEpicTitleByAssetId[previewAsset.id] || "") : "";
+  const draftEventTitle = previewAsset ? (newEventTitleByAssetId[previewAsset.id] || "") : "";
 
   return (
     <>
@@ -458,20 +656,202 @@ export function EventAssetList({
             <div className="lifeAssetLinkControls" style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem" }}>
               <select
                 className="directoryInput"
-                value={assetLinkTargets[previewAsset.id] || ""}
-                onChange={(e) => setAssetLinkTargets((current) => ({ ...current, [previewAsset.id]: e.target.value }))}
+                value={selectedPeriodId}
+                onChange={(e) => {
+                  const nextPeriodId = e.target.value;
+                  setAssetPeriodTargets((current) => ({ ...current, [previewAsset.id]: nextPeriodId }));
+                  setAssetEpicTargets((current) => {
+                    const next = { ...current };
+                    delete next[previewAsset.id];
+                    return next;
+                  });
+                  setAssetLinkTargets((current) => {
+                    const next = { ...current };
+                    delete next[previewAsset.id];
+                    return next;
+                  });
+                }}
+                disabled={isSavingLifeStructure || lifeEvents.length === 0 || lifePeriods.length === 0}
+              >
+                <option value="">All periods</option>
+                {lifePeriods.map((period) => (
+                  <option key={period.id} value={period.id}>{period.title}</option>
+                ))}
+              </select>
+              <select
+                className="directoryInput"
+                value={selectedEpicId}
+                onChange={(e) => {
+                  const nextEpicId = e.target.value;
+                  setAssetEpicTargets((current) => ({ ...current, [previewAsset.id]: nextEpicId }));
+                  setAssetLinkTargets((current) => {
+                    const next = { ...current };
+                    delete next[previewAsset.id];
+                    return next;
+                  });
+                }}
                 disabled={isSavingLifeStructure || lifeEvents.length === 0}
+                style={{ marginTop: "0.5rem" }}
+              >
+                <option value="">All epics</option>
+                {epicsInPeriod.map((epic) => (
+                  <option key={epic.id} value={epic.id}>{epic.title}</option>
+                ))}
+              </select>
+              {createEpicInPeriod && (
+                <div className="controls" style={{ marginTop: "0.5rem", gap: "0.45rem" }}>
+                  <input
+                    className="directoryInput"
+                    type="text"
+                    placeholder="Create new epic in selected period"
+                    value={draftEpicTitle}
+                    onChange={(e) => setNewEpicTitleByAssetId((current) => ({
+                      ...current,
+                      [previewAsset.id]: e.target.value,
+                    }))}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") {
+                        return;
+                      }
+                      const title = (newEpicTitleByAssetId[previewAsset.id] || "").trim();
+                      if (!selectedPeriodId || !title || !createEpicInPeriod) {
+                        return;
+                      }
+                      void createEpicInPeriod(Number(selectedPeriodId), title).then((createdEpic) => {
+                        if (!createdEpic) {
+                          return;
+                        }
+                        setAssetEpicTargets((current) => ({ ...current, [previewAsset.id]: `${createdEpic.id}` }));
+                        setNewEpicTitleByAssetId((current) => ({ ...current, [previewAsset.id]: "" }));
+                        setAssetLinkTargets((current) => {
+                          const next = { ...current };
+                          delete next[previewAsset.id];
+                          return next;
+                        });
+                      });
+                    }}
+                    disabled={isSavingLifeStructure || !selectedPeriodId}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    className="secondary"
+                    type="button"
+                    onClick={() => {
+                      const title = (newEpicTitleByAssetId[previewAsset.id] || "").trim();
+                      if (!selectedPeriodId || !title || !createEpicInPeriod) {
+                        return;
+                      }
+                      void createEpicInPeriod(Number(selectedPeriodId), title).then((createdEpic) => {
+                        if (!createdEpic) {
+                          return;
+                        }
+                        setAssetEpicTargets((current) => ({ ...current, [previewAsset.id]: `${createdEpic.id}` }));
+                        setNewEpicTitleByAssetId((current) => ({ ...current, [previewAsset.id]: "" }));
+                        setAssetLinkTargets((current) => {
+                          const next = { ...current };
+                          delete next[previewAsset.id];
+                          return next;
+                        });
+                      });
+                    }}
+                    disabled={isSavingLifeStructure || !selectedPeriodId || !draftEpicTitle.trim()}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    + Create Epic
+                  </button>
+                </div>
+              )}
+              <select
+                className="directoryInput"
+                value={selectedEventTarget}
+                onChange={(e) => setAssetLinkTargets((current) => ({ ...current, [previewAsset.id]: e.target.value }))}
+                disabled={isSavingLifeStructure || eventsInScope.length === 0}
+                style={{ marginTop: "0.5rem" }}
               >
                 <option value="">Select event to link to</option>
-                {lifeEvents.map((event) => (
+                {eventsInScope.map((event) => (
                   <option key={event.id} value={event.id}>{event.title}</option>
                 ))}
               </select>
+              {createEventForLinking && (
+                <div className="controls" style={{ marginTop: "0.5rem", gap: "0.45rem" }}>
+                  <input
+                    className="directoryInput"
+                    type="text"
+                    placeholder="Create new event for linking"
+                    value={draftEventTitle}
+                    onChange={(e) => setNewEventTitleByAssetId((current) => ({
+                      ...current,
+                      [previewAsset.id]: e.target.value,
+                    }))}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") {
+                        return;
+                      }
+                      const title = (newEventTitleByAssetId[previewAsset.id] || "").trim();
+                      if (!title || !createEventForLinking) {
+                        return;
+                      }
+                      const periodId = selectedPeriodId ? Number(selectedPeriodId) : null;
+                      const epicId = selectedEpicId ? Number(selectedEpicId) : null;
+                      const eventDateText = previewAsset.captured_at_text || null;
+                      void createEventForLinking({ title, periodId, epicId, eventDateText }).then((createdEvent) => {
+                        if (!createdEvent) {
+                          return;
+                        }
+                        setNewEventTitleByAssetId((current) => ({ ...current, [previewAsset.id]: "" }));
+                        setAssetLinkTargets((current) => ({ ...current, [previewAsset.id]: `${createdEvent.id}` }));
+                        if (createdEvent.period_id !== null) {
+                          setAssetPeriodTargets((current) => ({ ...current, [previewAsset.id]: `${createdEvent.period_id}` }));
+                        }
+                        if (createdEvent.epic_id !== null) {
+                          setAssetEpicTargets((current) => ({ ...current, [previewAsset.id]: `${createdEvent.epic_id}` }));
+                        }
+                      });
+                    }}
+                    disabled={isSavingLifeStructure}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    className="secondary"
+                    type="button"
+                    onClick={() => {
+                      const title = (newEventTitleByAssetId[previewAsset.id] || "").trim();
+                      if (!title || !createEventForLinking) {
+                        return;
+                      }
+                      const periodId = selectedPeriodId ? Number(selectedPeriodId) : null;
+                      const epicId = selectedEpicId ? Number(selectedEpicId) : null;
+                      const eventDateText = previewAsset.captured_at_text || null;
+                      void createEventForLinking({ title, periodId, epicId, eventDateText }).then((createdEvent) => {
+                        if (!createdEvent) {
+                          return;
+                        }
+                        setNewEventTitleByAssetId((current) => ({ ...current, [previewAsset.id]: "" }));
+                        setAssetLinkTargets((current) => ({ ...current, [previewAsset.id]: `${createdEvent.id}` }));
+                        if (createdEvent.period_id !== null) {
+                          setAssetPeriodTargets((current) => ({ ...current, [previewAsset.id]: `${createdEvent.period_id}` }));
+                        }
+                        if (createdEvent.epic_id !== null) {
+                          setAssetEpicTargets((current) => ({ ...current, [previewAsset.id]: `${createdEvent.epic_id}` }));
+                        }
+                      });
+                    }}
+                    disabled={isSavingLifeStructure || !draftEventTitle.trim()}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    + Create Event
+                  </button>
+                </div>
+              )}
               <button
                 className="secondary"
                 type="button"
-                onClick={() => { void linkUnlinkedAssetToEvent(previewAsset.id); handleCloseModal(); }}
-                disabled={!assetLinkTargets[previewAsset.id] || isSavingLifeStructure}
+                onClick={() => {
+                  void linkUnlinkedAssetToEvent(previewAsset.id, selectedEventTarget ? Number(selectedEventTarget) : undefined);
+                  handleCloseModal();
+                }}
+                disabled={!selectedEventTarget || isSavingLifeStructure}
                 style={{ marginTop: "0.5rem" }}
               >
                 Link

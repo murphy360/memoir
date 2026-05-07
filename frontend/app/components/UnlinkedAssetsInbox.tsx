@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { EventAssetList } from "./EventAssetList";
-import type { AssetEntry, LifeEvent } from "../types";
+import type { AssetEntry, LifeEpic, LifeEvent, LifePeriod } from "../types";
 
 type UnlinkedAssetsInboxProps = {
   unlinkedAssets: AssetEntry[];
@@ -22,10 +22,19 @@ type UnlinkedAssetsInboxProps = {
   resolveApiUrl: (path: string) => string;
   formatBytes: (bytes: number) => string;
   deleteAsset: (assetId: number, eventId?: number) => Promise<void>;
+  lifePeriods: LifePeriod[];
+  lifeEpics: LifeEpic[];
   lifeEvents: LifeEvent[];
+  createEpicInPeriod: (periodId: number, title: string) => Promise<LifeEpic | null>;
+  createEventForLinking: (payload: {
+    title: string;
+    periodId: number | null;
+    epicId: number | null;
+    eventDateText: string | null;
+  }) => Promise<LifeEvent | null>;
   assetLinkTargets: Record<number, string>;
   setAssetLinkTargets: Dispatch<SetStateAction<Record<number, string>>>;
-  linkUnlinkedAssetToEvent: (assetId: number) => Promise<void>;
+  linkUnlinkedAssetToEvent: (assetId: number, eventId?: number) => Promise<void>;
   isSavingLifeStructure: boolean;
 };
 
@@ -54,6 +63,10 @@ export function UnlinkedAssetsInbox({
   setAssetLinkTargets,
   linkUnlinkedAssetToEvent,
   isSavingLifeStructure,
+  lifePeriods,
+  lifeEpics,
+  createEpicInPeriod,
+  createEventForLinking,
 }: UnlinkedAssetsInboxProps) {
   return (
     <article className="memory" style={{ marginTop: "0.75rem" }}>
@@ -82,7 +95,11 @@ export function UnlinkedAssetsInbox({
           formatBytes={formatBytes}
           deleteAsset={deleteAsset}
           showLinkControls
-          lifeEvents={lifeEvents.map((event) => ({ id: event.id, title: event.title }))}
+          lifePeriods={lifePeriods}
+          lifeEpics={lifeEpics}
+          lifeEvents={lifeEvents}
+          createEpicInPeriod={createEpicInPeriod}
+          createEventForLinking={createEventForLinking}
           assetLinkTargets={assetLinkTargets}
           setAssetLinkTargets={setAssetLinkTargets}
           linkUnlinkedAssetToEvent={linkUnlinkedAssetToEvent}

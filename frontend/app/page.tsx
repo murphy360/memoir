@@ -749,6 +749,56 @@ export default function HomePage() {
     }
   }
 
+  // Inline epic creation from asset link modal (returns created epic for auto-selection)
+  async function createEpicInPeriod(periodId: number, title: string): Promise<LifeEpic | null> {
+    if (!title.trim()) return null;
+    setIsSavingLifeStructure(true);
+    setStatus("Creating epic...");
+    try {
+      const created = await createEpic({ period_id: periodId, title: title.trim(), description: null, weight: 5, start_date_text: null, end_date_text: null });
+      await loadTimeline();
+      setStatus("Epic created.");
+      return created;
+    } catch {
+      setStatus("Failed to create epic.");
+      return null;
+    } finally {
+      setIsSavingLifeStructure(false);
+    }
+  }
+
+  // Inline event creation from asset link modal (returns created event for auto-selection)
+  async function createEventForLinking(payload: {
+    title: string;
+    periodId: number | null;
+    epicId: number | null;
+    eventDateText: string | null;
+  }): Promise<LifeEvent | null> {
+    const { title, periodId, epicId, eventDateText } = payload;
+    if (!title.trim()) return null;
+    setIsSavingLifeStructure(true);
+    setStatus("Creating event...");
+    try {
+      const created = await createEvent({
+        title: title.trim(),
+        period_id: periodId,
+        epic_id: epicId,
+        weight: 5,
+        description: null,
+        location: null,
+        event_date_text: eventDateText,
+      });
+      await loadTimeline();
+      setStatus("Event created and ready to link.");
+      return created;
+    } catch {
+      setStatus("Failed to create event.");
+      return null;
+    } finally {
+      setIsSavingLifeStructure(false);
+    }
+  }
+
   async function mergePeriod(fromPeriodId: number, intoPeriodId: number) {
     setMergingPeriodId(null);
     setStatus("Merging period...");
@@ -789,8 +839,8 @@ export default function HomePage() {
     }
   }
 
-  async function linkUnlinkedAssetToEvent(assetId: number) {
-    const target = assetLinkTargets[assetId];
+  async function linkUnlinkedAssetToEvent(assetId: number, eventId?: number) {
+    const target = eventId ? `${eventId}` : assetLinkTargets[assetId];
     if (!target) {
       return;
     }
@@ -808,6 +858,11 @@ export default function HomePage() {
       await loadTimeline();
       if (activeEventId) {
         await loadAssetsForEvent(activeEventId);
+      }
+      // Jump to the event where the asset was linked
+      const linkedEvent = lifeEvents.find((e) => e.id === Number(target));
+      if (linkedEvent) {
+        focusEventInTimeline(linkedEvent.id, linkedEvent.period_id);
       }
       setStatus("Asset linked to event.");
     } catch {
@@ -2407,7 +2462,11 @@ export default function HomePage() {
                 resolveApiUrl={resolveApiUrl}
                 formatBytes={formatBytes}
                 deleteAsset={deleteAsset}
+                lifePeriods={lifePeriods}
+                lifeEpics={lifeEpics}
                 lifeEvents={lifeEvents}
+                createEpicInPeriod={createEpicInPeriod}
+                createEventForLinking={createEventForLinking}
                 assetLinkTargets={assetLinkTargets}
                 setAssetLinkTargets={setAssetLinkTargets}
                 linkUnlinkedAssetToEvent={linkUnlinkedAssetToEvent}
