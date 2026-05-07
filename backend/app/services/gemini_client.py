@@ -33,6 +33,20 @@ class PhotoSummary:
     assessed_place: Optional[str] = None
 
 
+def _extract_metadata_field(metadata_hint: Optional[str], field_name: str) -> Optional[str]:
+    """Extract a semicolon-delimited metadata hint value like key=value."""
+    hint = (metadata_hint or "").strip()
+    if not hint:
+        return None
+    target_prefix = f"{field_name}="
+    for chunk in hint.split(";"):
+        piece = chunk.strip()
+        if piece.startswith(target_prefix):
+            value = piece[len(target_prefix):].strip()
+            return value or None
+    return None
+
+
 @dataclass
 class DateSuggestion:
     estimated_date_text: str
@@ -982,16 +996,24 @@ def extract_text_from_photo_batch(
                 "1 short background/history sentence about it; otherwise skip history. "
                 "When uncertain, say likely/possibly rather than stating certainty. "
                 "Suggested title: 4-8 words, descriptive, suitable as a short asset label (e.g. 'Family picnic at Griffith Park'). "
-                "Assessed place: return the best location guess (locality/landmark/region) inferred from visual evidence and metadata. "
-                "If uncertain, use cautious phrasing like 'likely ...'. If no credible guess exists, return an empty string. "
+                "Assessed place: prioritize a specific named place (park, trail, school, venue, monument, neighborhood, base, museum, etc.) "
+                "when evidence supports it; examples: 'Rockhound State Park', 'Golden Gate Bridge', 'Camp Pendleton'. "
+                "Do not simply repeat city/state/country when a more specific place can be inferred from the image or metadata. "
+                "If only broad locality is known and no specific place is defensible, return an empty string. "
+                "If uncertain but plausible, use cautious phrasing like 'likely Rockhound State Park'. "
                 "Use the exact photo index provided before each image."
             )
         }
     ]
 
+    reverse_geocode_by_index: dict[int, str] = {}
+
     for index, payload in enumerate(photo_payloads, start=1):
         filename, file_bytes, mime_type = payload[0], payload[1], payload[2]
         metadata_hint = payload[3] if len(payload) > 3 else None
+        reverse_geocode_name = _extract_metadata_field(metadata_hint, "reverse_geocode_location_name")
+        if reverse_geocode_name:
+            reverse_geocode_by_index[index] = reverse_geocode_name
         parts.append({"text": f"PHOTO_INDEX={index}; filename={filename}"})
         if metadata_hint:
             parts.append({"text": f"PHOTO_METADATA={metadata_hint}"})
@@ -1071,6 +1093,14 @@ def extract_text_from_photo_batch(
             suggested_title: Optional[str] = raw_title[:180] if raw_title else None
             raw_assessed_place = str(item.get("assessed_place") or "").strip()
             assessed_place: Optional[str] = raw_assessed_place[:200] if raw_assessed_place else None
+            reverse_geocode_name = reverse_geocode_by_index.get(index_value)
+            # Avoid storing a duplicate city/state/country as "assessed place" when Gemini echoes reverse geocode output.
+            if (
+                assessed_place
+                and reverse_geocode_name
+                and assessed_place.casefold() == reverse_geocode_name.casefold()
+            ):
+                assessed_place = None
             result[index_value] = PhotoSummary(
                 summary=cleaned_summary[:1200],
                 suggested_title=suggested_title,
