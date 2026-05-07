@@ -5,7 +5,7 @@ import {
   formatAssetGps,
   renderImageMetadataBadges,
 } from "../lib/homePageHelpers";
-import type { AssetEntry } from "../types";
+import type { AssetEntry, EventFaceEntry } from "../types";
 
 type EventAssetListProps = {
   assets: AssetEntry[];
@@ -28,6 +28,9 @@ type EventAssetListProps = {
   formatBytes: (bytes: number) => string;
   deleteAsset: (assetId: number, eventId?: number) => Promise<void>;
   eventId?: number;
+  eventFaces?: EventFaceEntry[];
+  processPhotoAsset?: (assetId: number, eventId: number) => Promise<void>;
+  processingPhotoAssetId?: number | null;
   showLinkControls?: boolean;
   lifeEvents?: Array<{ id: number; title: string }>;
   assetLinkTargets?: Record<number, string>;
@@ -84,6 +87,9 @@ export function EventAssetList({
   formatBytes,
   deleteAsset,
   eventId,
+  eventFaces = [],
+  processPhotoAsset,
+  processingPhotoAssetId = null,
   showLinkControls = false,
   lifeEvents = [],
   assetLinkTargets = {},
@@ -96,6 +102,7 @@ export function EventAssetList({
   const [modalEditingTitleValue, setModalEditingTitleValue] = useState("");
   const [modalEditingNotesId, setModalEditingNotesId] = useState<number | null>(null);
   const [modalEditingNotesValue, setModalEditingNotesValue] = useState("");
+  const [showFaceBoxesByAssetId, setShowFaceBoxesByAssetId] = useState<Record<number, boolean>>({});
 
   const galleryAssets = useMemo(
     () => assets.filter((asset) => isImageAsset(asset) || isAudioAsset(asset) || isDocumentAsset(asset)),
@@ -107,6 +114,15 @@ export function EventAssetList({
     [assets, previewAssetId],
   );
 
+  const previewAssetFaces = useMemo(() => {
+    if (!previewAsset) {
+      return [];
+    }
+    return eventFaces.filter((face) => face.asset_id === previewAsset.id);
+  }, [eventFaces, previewAsset]);
+
+  const showFaceBoxes = previewAsset ? Boolean(showFaceBoxesByAssetId[previewAsset.id]) : false;
+
   const handleCloseModal = () => {
     setPreviewAssetId(null);
     setModalEditingTitleId(null);
@@ -114,6 +130,13 @@ export function EventAssetList({
     setModalEditingNotesId(null);
     setModalEditingNotesValue("");
   };
+
+  const canProcessPreviewPhoto = Boolean(
+    previewAsset
+    && isImageAsset(previewAsset)
+    && processPhotoAsset
+    && eventId !== undefined,
+  );
 
   return (
     <>
@@ -183,11 +206,60 @@ export function EventAssetList({
           </p>
 
           {isImageAsset(previewAsset) && (
-            <img
-              src={resolveApiUrl(`${previewAsset.download_url}?download=false`)}
-              alt={previewAsset.title || previewAsset.original_filename || `Asset ${previewAsset.id}`}
-              className="assetPreviewImage"
-            />
+            <>
+              {canProcessPreviewPhoto && (
+                <div className="assetPreviewImageControls">
+                  <button
+                    className="secondary"
+                    type="button"
+                    onClick={() => {
+                      if (!processPhotoAsset || eventId === undefined) {
+                        return;
+                      }
+                      void processPhotoAsset(previewAsset.id, eventId);
+                    }}
+                    disabled={processingPhotoAssetId === previewAsset.id}
+                  >
+                    {processingPhotoAssetId === previewAsset.id ? "Analyzing..." : "Analyze Photo"}
+                  </button>
+                  {previewAssetFaces.length > 0 && (
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() => setShowFaceBoxesByAssetId((current) => ({
+                        ...current,
+                        [previewAsset.id]: !current[previewAsset.id],
+                      }))}
+                    >
+                      {showFaceBoxes ? "Hide Face Boxes" : `Show Face Boxes (${previewAssetFaces.length})`}
+                    </button>
+                  )}
+                </div>
+              )}
+              <div className="assetPreviewImageWrap">
+                <img
+                  src={resolveApiUrl(`${previewAsset.download_url}?download=false`)}
+                  alt={previewAsset.title || previewAsset.original_filename || `Asset ${previewAsset.id}`}
+                  className="assetPreviewImage"
+                />
+                {showFaceBoxes && previewAssetFaces.map((face) => {
+                  const left = Math.max(0, Math.min(100, face.bbox_x * 100));
+                  const top = Math.max(0, Math.min(100, face.bbox_y * 100));
+                  const width = Math.max(1, Math.min(100, face.bbox_w * 100));
+                  const height = Math.max(1, Math.min(100, face.bbox_h * 100));
+                  return (
+                    <div
+                      key={face.id}
+                      className="assetPreviewFaceBox"
+                      style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }}
+                      title={face.person_name || "Detected face"}
+                    >
+                      <span className="assetPreviewFaceLabel">{face.person_name || "Unknown"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
 
           {isAudioAsset(previewAsset) && previewAsset.playback_url && (

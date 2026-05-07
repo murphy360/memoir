@@ -67,6 +67,8 @@ type EventCardProps = {
   deepResearchEvent: (eventId: number) => Promise<void>;
   processingEventPhotosId: number | null;
   processEventPhotos: (eventId: number) => Promise<void>;
+  processPhotoAsset: (assetId: number, eventId: number) => Promise<void>;
+  processingPhotoAssetId: number | null;
   acceptEventResearchSuggestion: (eventId: number) => Promise<void>;
   dismissEventResearchSuggestion: (eventId: number) => Promise<void>;
   questionsForEvent: QuestionContext[];
@@ -169,6 +171,8 @@ export function EventCard({
   deepResearchEvent,
   processingEventPhotosId,
   processEventPhotos,
+  processPhotoAsset,
+  processingPhotoAssetId,
   acceptEventResearchSuggestion,
   dismissEventResearchSuggestion,
   questionsForEvent,
@@ -767,6 +771,9 @@ export function EventCard({
                 formatBytes={formatBytes}
                 deleteAsset={deleteAsset}
                 eventId={event.id}
+                eventFaces={eventFaces}
+                processPhotoAsset={processPhotoAsset}
+                processingPhotoAssetId={processingPhotoAssetId}
               />
             </>
           )}

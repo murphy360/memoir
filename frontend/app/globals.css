@@ -1324,6 +1324,47 @@ button.ghost:hover:not(:disabled) {
   object-fit: contain;
 }
 
+.assetPreviewImageControls {
+  margin-top: 0.55rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.assetPreviewImageWrap {
+  position: relative;
+  width: 100%;
+  margin-top: 0.55rem;
+}
+
+.assetPreviewImageWrap .assetPreviewImage {
+  margin-top: 0;
+}
+
+.assetPreviewFaceBox {
+  position: absolute;
+  border: 2px solid #00a3ff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+  background: rgba(0, 163, 255, 0.08);
+  pointer-events: none;
+}
+
+.assetPreviewFaceLabel {
+  position: absolute;
+  top: -1.25rem;
+  left: 0;
+  background: rgba(0, 163, 255, 0.92);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 0.1rem 0.35rem;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .assetPreviewFrame {
   min-height: 58vh;
 }

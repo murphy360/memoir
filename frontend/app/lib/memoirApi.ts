@@ -260,6 +260,20 @@ export async function processEventPhotoAssets(
   return response.json();
 }
 
+/** Process one photo asset via POST /api/assets/{asset_id}/process-photo. */
+export async function processSinglePhotoAsset(
+  assetId: number,
+  includeProcessed = true,
+): Promise<{ asset_id: number; processed: boolean; has_text_excerpt: boolean; face_count: number }> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/assets/${assetId}/process-photo`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ include_processed: includeProcessed }),
+  });
+  await expectOk(response, "Process photo failed");
+  return response.json();
+}
+
 export async function deleteAsset(assetId: number): Promise<void> {
   const response = await fetch(toAbsoluteApiUrl(`/api/assets/${assetId}`), {
     method: "DELETE",

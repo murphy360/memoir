@@ -49,6 +49,7 @@ import {
   updateAssetNotes as updateAssetNotesById,
   updateAssetTitle as updateAssetTitleById,
   processEventPhotoAssets,
+  processSinglePhotoAsset,
   uploadAsset,
 } from "./lib/memoirApi";
 import {
@@ -123,6 +124,7 @@ export default function HomePage() {
   const [editingAssetTitleValue, setEditingAssetTitleValue] = useState("");
   const [assetTitleSavingId, setAssetTitleSavingId] = useState<number | null>(null);
   const [processingEventPhotosId, setProcessingEventPhotosId] = useState<number | null>(null);
+  const [processingPhotoAssetId, setProcessingPhotoAssetId] = useState<number | null>(null);
   const [editingAssetNotesId, setEditingAssetNotesId] = useState<number | null>(null);
   const [editingAssetNotesValue, setEditingAssetNotesValue] = useState("");
   const [assetNotesSavingId, setAssetNotesSavingId] = useState<number | null>(null);
@@ -877,6 +879,23 @@ export default function HomePage() {
     }
   }
 
+  async function processPhotoForEventAsset(assetId: number, eventId: number) {
+    setProcessingPhotoAssetId(assetId);
+    setStatus("Analyzing photo...");
+    try {
+      const result = await processSinglePhotoAsset(assetId, true);
+      await loadTimeline();
+      if (activeEventId === eventId) {
+        await loadAssetsForEvent(eventId);
+      }
+      setStatus(`Photo analyzed. Found ${result.face_count} face${result.face_count === 1 ? "" : "s"}.`);
+    } catch {
+      setStatus("Failed to analyze photo.");
+    } finally {
+      setProcessingPhotoAssetId(null);
+    }
+  }
+
   async function saveMemoryTitle(memoryId: number, eventId?: number) {
     const nextTitle = editingMemoryTitleValue.trim();
     if (!nextTitle) {
@@ -1464,6 +1483,8 @@ export default function HomePage() {
         deepResearchEvent={deepResearchEvent}
         processingEventPhotosId={processingEventPhotosId}
         processEventPhotos={processPhotosForEvent}
+        processPhotoAsset={processPhotoForEventAsset}
+        processingPhotoAssetId={processingPhotoAssetId}
         acceptEventResearchSuggestion={acceptEventResearchSuggestion}
         dismissEventResearchSuggestion={dismissEventResearchSuggestion}
         questionsForEvent={questionsByEventId.get(event.id) ?? []}

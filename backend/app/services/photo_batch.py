@@ -148,6 +148,63 @@ def _has_text_excerpt(asset: Asset) -> bool:
     return bool((asset.text_excerpt or "").strip())
 
 
+def process_single_photo_asset(
+    db: Session,
+    document_storage_dir: Path,
+    *,
+    asset: Asset,
+    include_processed: bool = True,
+) -> bool:
+    """Process one stored photo asset and refresh linked period summaries.
+
+    Returns True when processing ran and the asset was updated. Returns False when
+    the asset is not eligible (non-photo, missing file, or already processed when
+    include_processed is False).
+    """
+    if asset.kind != "photo":
+        return False
+    if not include_processed and _has_text_excerpt(asset):
+        return False
+    if not asset.storage_filename:
+        return False
+
+    file_path = document_storage_dir / asset.storage_filename
+    if not file_path.exists():
+        return False
+
+    try:
+        file_bytes = file_path.read_bytes()
+    except OSError:
+        return False
+
+    if not file_bytes:
+        return False
+
+    mime_type = (asset.content_type or "image/jpeg").strip().lower() or "image/jpeg"
+    summaries = extract_text_from_photo_batch([
+        (asset.original_filename or asset.storage_filename, file_bytes, mime_type),
+    ])
+
+    sync_asset_faces_for_photo(db, asset, file_bytes)
+    summary = summaries.get(1)
+    if summary:
+        asset.text_excerpt = summary
+
+    period_ids_to_refresh: set[int] = set()
+    if asset.period_id is not None:
+        period_ids_to_refresh.add(asset.period_id)
+    for event_link in asset.event_links:
+        event = event_link.event
+        if event and event.period_id is not None:
+            period_ids_to_refresh.add(event.period_id)
+
+    for period_id in period_ids_to_refresh:
+        period = db.get(LifePeriod, period_id)
+        refresh_period_summary(db, period)
+
+    return True
+
+
 def process_event_photo_assets(
     db: Session,
     document_storage_dir: Path,

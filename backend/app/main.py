@@ -99,6 +99,7 @@ from app.services.photo_batch import (
     get_photo_queue_size,
     process_events_photo_assets,
     process_queued_photo_uploads,
+    process_single_photo_asset,
 )
 from app.services.questions import (
     add_unique_pending_questions,
@@ -865,6 +866,37 @@ def process_photo_assets_by_event(
     )
     db.commit()
     return result
+
+
+@app.post("/api/assets/{asset_id}/process-photo")
+def process_single_photo(
+    asset_id: int,
+    include_processed: bool = Body(default=True, embed=True),
+    db: Session = Depends(get_db),
+) -> dict:
+    asset = db.get(Asset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if asset.kind != "photo":
+        raise HTTPException(status_code=400, detail="Asset is not a photo")
+
+    processed = process_single_photo_asset(
+        db,
+        DOCUMENT_STORAGE_DIR,
+        asset=asset,
+        include_processed=include_processed,
+    )
+    if not processed:
+        raise HTTPException(status_code=400, detail="Photo asset could not be processed")
+
+    db.commit()
+    db.refresh(asset)
+    return {
+        "asset_id": asset.id,
+        "processed": True,
+        "has_text_excerpt": bool((asset.text_excerpt or "").strip()),
+        "face_count": len(asset.faces),
+    }
 
 
 @app.post("/api/assets/{asset_id}/link-event/{event_id}", response_model=AssetResponse)
