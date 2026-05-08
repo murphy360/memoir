@@ -1,7 +1,7 @@
 """Face detection and event face projection helpers.
 
-This module intentionally does detection-only for phase 1: we store face regions
-per photo asset and allow manual person assignment later.
+Detection is CompreFace-only. Legacy OpenCV Haar cascade detection has been
+removed from the runtime path.
 """
 
 from dataclasses import dataclass
@@ -53,11 +53,7 @@ class FaceDetection:
 
 
 def detect_faces_from_image(image_bytes: bytes) -> list[FaceDetection]:
-    """Detect frontal faces and return normalized bounding boxes.
-
-    Coordinates are normalized to [0, 1] based on decoded image dimensions,
-    so the frontend can crop consistently regardless of photo size.
-    """
+    """Detect faces and return normalized bounding boxes using CompreFace only."""
     if not image_bytes:
         return []
 
@@ -75,51 +71,14 @@ def detect_faces_from_image(image_bytes: bytes) -> list[FaceDetection]:
         width=width,
         height=height,
     )
-    if compreface_faces is not None:
-        return _dedupe_overlapping_faces(compreface_faces)
-
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    detector = cv2.CascadeClassifier(cascade_path)
-    if detector.empty():
-        return []
-
-    detections = detector.detectMultiScale(
-        gray,
-        scaleFactor=1.08,
-        minNeighbors=7,
-        minSize=(MIN_FACE_SIZE_PX, MIN_FACE_SIZE_PX),
-    )
-
-    faces: list[FaceDetection] = []
-    for x, y, w, h in detections:
-        if w <= 0 or h <= 0:
-            continue
-
-        area_ratio = (w * h) / float(width * height)
-        aspect_ratio = w / float(h)
-        if area_ratio < MIN_FACE_AREA_RATIO or area_ratio > MAX_FACE_AREA_RATIO:
-            continue
-        if aspect_ratio < MIN_FACE_ASPECT_RATIO or aspect_ratio > MAX_FACE_ASPECT_RATIO:
-            continue
-
-        faces.append(
-            FaceDetection(
-                bbox_x=max(0.0, min(1.0, x / width)),
-                bbox_y=max(0.0, min(1.0, y / height)),
-                bbox_w=max(0.0, min(1.0, w / width)),
-                bbox_h=max(0.0, min(1.0, h / height)),
-                confidence=None,
-            )
-        )
-
-    return _dedupe_overlapping_faces(faces)
+    return _dedupe_overlapping_faces(compreface_faces)
 
 
-def _detect_faces_with_compreface(*, image_bytes: bytes, width: int, height: int) -> Optional[list[FaceDetection]]:
-    """Detect faces via CompreFace; return None when unavailable to allow fallback."""
+def _detect_faces_with_compreface(*, image_bytes: bytes, width: int, height: int) -> list[FaceDetection]:
+    """Detect faces via CompreFace only; return empty list on error/unavailable."""
     if not COMPREFACE_API_KEY or not COMPREFACE_BASE_URL:
-        return None
+        logger.warning("CompreFace is not configured; skipping face detection.")
+        return []
 
     try:
         response = requests.post(
@@ -140,11 +99,11 @@ def _detect_faces_with_compreface(*, image_bytes: bytes, width: int, height: int
         response.raise_for_status()
         payload = response.json()
     except requests.RequestException as exc:
-        logger.warning("CompreFace request failed; falling back to OpenCV: %s", exc)
-        return None
+        logger.warning("CompreFace request failed; face detection skipped: %s", exc)
+        return []
     except ValueError as exc:
-        logger.warning("CompreFace JSON parse failed; falling back to OpenCV: %s", exc)
-        return None
+        logger.warning("CompreFace JSON parse failed; face detection skipped: %s", exc)
+        return []
 
     result_items = payload.get("result") if isinstance(payload, dict) else None
     if not isinstance(result_items, list):
