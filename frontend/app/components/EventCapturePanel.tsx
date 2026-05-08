@@ -18,8 +18,12 @@ type AudioInputDevice = {
 
 type EventDocumentUploadProgressItem = {
   fileName: string;
+  assetId?: number;
+  isPhoto?: boolean;
   status: "uploading" | "saved" | "failed";
   error?: string;
+  stages?: Partial<Record<"geocoding" | "faces" | "gemini", "pending" | "running" | "done" | "skipped">>;
+  stageDetails?: Partial<Record<"geocoding" | "faces" | "gemini", string>>;
 };
 
 type EventCapturePanelProps = {
@@ -204,12 +208,34 @@ export function EventCapturePanel({
             <p className="meta" style={{ marginBottom: "0.25rem" }}>Upload Progress</p>
             <ul style={{ margin: 0, paddingLeft: "1rem" }}>
               {eventDocumentUploadProgress.map((item, index) => (
-                <li key={`${item.fileName}-${index}`} className="meta" style={{ marginBottom: "0.1rem" }}>
-                  {item.status === "uploading" && "Uploading... "}
-                  {item.status === "saved" && "Saved ✓ "}
-                  {item.status === "failed" && "Failed ✗ "}
-                  {item.fileName}
-                  {item.status === "failed" && item.error ? ` (${item.error})` : ""}
+                <li key={`${item.fileName}-${index}`} className="meta" style={{ marginBottom: "0.25rem" }}>
+                  <span>
+                    {item.status === "uploading" && "Uploading… "}
+                    {item.status === "saved" && "Saved ✓ "}
+                    {item.status === "failed" && "Failed ✗ "}
+                    {item.fileName}
+                    {item.status === "failed" && item.error ? ` (${item.error})` : ""}
+                  </span>
+                  {item.stages && (
+                    <span style={{ marginLeft: "0.5rem", display: "inline-flex", gap: "0.4rem", fontSize: "0.75em", opacity: 0.8 }}>
+                      {(["geocoding", "faces", "gemini"] as const).map((stage) => {
+                        const s = item.stages?.[stage];
+                        if (!s) return null;
+                        const labels: Record<string, string> = {
+                          geocoding: "📍",
+                          faces: "👤",
+                          gemini: "✨",
+                        };
+                        const detail = item.stageDetails?.[stage];
+                        const icon = labels[stage];
+                        if (s === "pending") return <span key={stage} title={stage} style={{ opacity: 0.4 }}>{icon}…</span>;
+                        if (s === "running") return <span key={stage} title={stage}>{icon}…</span>;
+                        if (s === "done") return <span key={stage} title={detail ?? stage} style={{ color: "var(--success, green)" }}>{icon}{detail ? ` ${detail}` : " ✓"}</span>;
+                        if (s === "skipped") return <span key={stage} title={`${stage} (already done)`} style={{ opacity: 0.5 }}>{icon} ✓</span>;
+                        return null;
+                      })}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

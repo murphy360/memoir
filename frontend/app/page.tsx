@@ -60,6 +60,7 @@ import {
   renameEpic,
   assignEpicToThread,
   assignEventToThread,
+  API_BASE,
 } from "./lib/memoirApi";
 import {
   AUDIO_DEVICE_STORAGE_KEY,
@@ -85,10 +86,17 @@ type PendingRecording = {
   error?: string;
 };
 
+type AnalysisStage = "geocoding" | "faces" | "gemini";
+type StageStatus = "pending" | "running" | "done" | "skipped";
+
 type EventDocumentUploadProgressItem = {
   fileName: string;
+  assetId?: number;
+  isPhoto?: boolean;
   status: "uploading" | "saved" | "failed";
   error?: string;
+  stages?: Partial<Record<AnalysisStage, StageStatus>>;
+  stageDetails?: Partial<Record<AnalysisStage, string>>;
 };
 
 export default function HomePage() {
@@ -1092,22 +1100,83 @@ export default function HomePage() {
   async function processPhotosForEvent(eventId: number) {
     setProcessingEventPhotosId(eventId);
     setStatus("Reprocessing event photos...");
+
+    // Load assets so we can pre-populate per-photo progress rows
+    let photoAssets: typeof activeEventAssets = [];
     try {
-      const result = await processEventPhotoAssets(eventId, true);
-      await loadTimeline();
-      if (activeEventId === eventId) {
-        await loadAssetsForEvent(eventId);
-      }
-      if (result.photos_processed > 0) {
-        setStatus(`Reprocessed ${result.photos_processed} photo${result.photos_processed === 1 ? "" : "s"} for this event.`);
-      } else {
-        setStatus("No photo files were available to reprocess for this event.");
-      }
+      const [assets] = await Promise.all([fetchEventAssets(eventId)]);
+      photoAssets = assets.filter((a) => a.kind === "photo");
+      setActiveEventAssets(assets);
     } catch {
-      setStatus("Failed to process event photos.");
-    } finally {
-      setProcessingEventPhotosId(null);
+      // continue anyway — progress list will fill in as SSE fires
     }
+
+    const progressRows: EventDocumentUploadProgressItem[] = photoAssets.map((a) => ({
+      fileName: a.original_filename || a.title || `asset-${a.id}`,
+      assetId: a.id,
+      isPhoto: true,
+      status: "saved",
+      stages: { geocoding: "pending", faces: "pending", gemini: "pending" },
+    }));
+    if (progressRows.length > 0) {
+      setEventDocumentUploadProgressByEventId((prev) => ({ ...prev, [eventId]: progressRows }));
+    }
+
+    const url = `${API_BASE}/api/assets/analyze-stream?event_id=${eventId}&include_processed=true`;
+    const es = new EventSource(url);
+
+    es.onmessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data as string) as Record<string, unknown>;
+
+        if (data["type"] === "complete" || data["type"] === "error") {
+          es.close();
+          setProcessingEventPhotosId(null);
+          void loadTimeline();
+          void loadAssetsForEvent(eventId);
+          const count = photoAssets.length;
+          setStatus(
+            data["type"] === "error"
+              ? `Analysis error: ${String(data["message"] ?? "unknown")}`
+              : count === 0
+              ? "No unprocessed photos found for this event."
+              : `Reprocessed ${count} photo${count === 1 ? "" : "s"} for this event.`,
+          );
+          return;
+        }
+
+        const assetId = data["asset_id"] as number;
+        const stage = data["stage"] as AnalysisStage;
+        const stageStatus = data["status"] as StageStatus;
+        if (!assetId || !stage) return;
+
+        setEventDocumentUploadProgressByEventId((prev) => ({
+          ...prev,
+          [eventId]: (prev[eventId] ?? []).map((item) => {
+            if (item.assetId !== assetId) return item;
+            const newDetails = { ...item.stageDetails };
+            if (stage === "geocoding" && typeof data["place"] === "string" && data["place"]) {
+              newDetails.geocoding = data["place"] as string;
+            } else if (stage === "faces" && data["face_count"] !== undefined) {
+              newDetails.faces = String(data["face_count"]);
+            } else if (stage === "gemini" && typeof data["title"] === "string" && data["title"]) {
+              newDetails.gemini = data["title"] as string;
+            }
+            return { ...item, stages: { ...item.stages, [stage]: stageStatus }, stageDetails: newDetails };
+          }),
+        }));
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      setProcessingEventPhotosId(null);
+      void loadTimeline();
+      void loadAssetsForEvent(eventId);
+      setStatus("Analysis stream closed.");
+    };
   }
 
   async function processPhotoForEventAsset(assetId: number, eventId: number) {
@@ -1572,7 +1641,6 @@ export default function HomePage() {
       return;
     }
 
-    // Seed a per-file progress list so the event panel can show live status updates.
     const initialProgress: EventDocumentUploadProgressItem[] = files.map((file) => ({
       fileName: file.name || "unnamed file",
       status: "uploading",
@@ -1582,10 +1650,12 @@ export default function HomePage() {
     setEventDocumentErrors((prev) => ({ ...prev, [eventId]: null }));
     setEventDocumentUploadProgressByEventId((prev) => ({ ...prev, [eventId]: initialProgress }));
     setStatus(files.length === 1 ? "Uploading file to event..." : `Uploading ${files.length} files to event...`);
-    try {
-      const uploadedAssetIds: number[] = [];
-      const failedFileNames: string[] = [];
 
+    const uploadedAssetIds: number[] = [];
+    const photoAssetIds: number[] = [];
+    const failedFileNames: string[] = [];
+
+    try {
       for (const [index, file] of files.entries()) {
         try {
           const formData = new FormData();
@@ -1595,19 +1665,28 @@ export default function HomePage() {
           formData.append("event_id", String(eventId));
           const uploaded = await uploadAsset(formData);
           uploadedAssetIds.push(uploaded.id);
+          if (kind === "photo") photoAssetIds.push(uploaded.id);
           setEventDocumentUploadProgressByEventId((prev) => ({
             ...prev,
-            [eventId]: (prev[eventId] ?? []).map((item, itemIndex) => (
-              itemIndex === index ? { ...item, status: "saved", error: undefined } : item
-            )),
+            [eventId]: (prev[eventId] ?? []).map((item, itemIndex) =>
+              itemIndex === index
+                ? {
+                    ...item,
+                    assetId: uploaded.id,
+                    isPhoto: kind === "photo",
+                    status: "saved" as const,
+                    stages: kind === "photo" ? { geocoding: "pending", faces: "pending", gemini: "pending" } : undefined,
+                  }
+                : item
+            ),
           }));
         } catch {
           failedFileNames.push(file.name || "unnamed file");
           setEventDocumentUploadProgressByEventId((prev) => ({
             ...prev,
-            [eventId]: (prev[eventId] ?? []).map((item, itemIndex) => (
-              itemIndex === index ? { ...item, status: "failed", error: "Upload failed" } : item
-            )),
+            [eventId]: (prev[eventId] ?? []).map((item, itemIndex) =>
+              itemIndex === index ? { ...item, status: "failed" as const, error: "Upload failed" } : item
+            ),
           }));
         }
       }
@@ -1615,33 +1694,86 @@ export default function HomePage() {
       if (uploadedAssetIds.length === 0) {
         setEventDocumentErrors((prev) => ({
           ...prev,
-          [eventId]: files.length === 1
-            ? "Document upload failed."
-            : `All ${files.length} uploads failed.`,
+          [eventId]: files.length === 1 ? "Document upload failed." : `All ${files.length} uploads failed.`,
         }));
         setStatus("Document upload failed.");
+        setEventDocumentUploadingId(null);
         return;
       }
 
-      await Promise.all([loadTimeline(), loadAssetsForEvent(eventId)]);
-      markAndScrollTo(`asset-row-${uploadedAssetIds[uploadedAssetIds.length - 1]}`, 220);
+      // All saves complete — release upload lock so user can queue more while analysis runs
+      setEventDocumentUploadingId(null);
 
-      if (failedFileNames.length === 0) {
-        setStatus(uploadedAssetIds.length === 1
-          ? "File uploaded and linked to event."
-          : `${uploadedAssetIds.length} files uploaded and linked to event.`);
+      if (photoAssetIds.length > 0) {
+        setStatus(`Analyzing ${photoAssetIds.length} photo${photoAssetIds.length === 1 ? "" : "s"}...`);
+
+        const es = new EventSource(`${API_BASE}/api/assets/analyze-stream?asset_ids=${photoAssetIds.join(",")}`);
+
+        es.onmessage = (event: MessageEvent) => {
+          try {
+            const data = JSON.parse(event.data as string) as Record<string, unknown>;
+
+            if (data["type"] === "complete" || data["type"] === "error") {
+              es.close();
+              void loadTimeline();
+              void loadAssetsForEvent(eventId);
+              const count = uploadedAssetIds.length;
+              setStatus(
+                failedFileNames.length === 0
+                  ? count === 1 ? "Photo uploaded and analyzed." : `${count} photos uploaded and analyzed.`
+                  : `${count} uploaded and analyzed, ${failedFileNames.length} failed.`
+              );
+              return;
+            }
+
+            const assetId = data["asset_id"] as number;
+            const stage = data["stage"] as AnalysisStage;
+            const stageStatus = data["status"] as StageStatus;
+            if (!assetId || !stage) return;
+
+            setEventDocumentUploadProgressByEventId((prev) => ({
+              ...prev,
+              [eventId]: (prev[eventId] ?? []).map((item) => {
+                if (item.assetId !== assetId) return item;
+                const newDetails = { ...item.stageDetails };
+                if (stage === "geocoding" && typeof data["place"] === "string" && data["place"]) {
+                  newDetails.geocoding = data["place"] as string;
+                } else if (stage === "faces" && data["face_count"] !== undefined) {
+                  newDetails.faces = String(data["face_count"]);
+                } else if (stage === "gemini" && typeof data["title"] === "string" && data["title"]) {
+                  newDetails.gemini = data["title"] as string;
+                }
+                return { ...item, stages: { ...item.stages, [stage]: stageStatus }, stageDetails: newDetails };
+              }),
+            }));
+          } catch {
+            // ignore parse errors
+          }
+        };
+
+        es.onerror = () => {
+          es.close();
+          void loadTimeline();
+          void loadAssetsForEvent(eventId);
+        };
       } else {
-        setEventDocumentErrors((prev) => ({
-          ...prev,
-          [eventId]: `${failedFileNames.length} file(s) failed to upload: ${failedFileNames.slice(0, 3).join(", ")}${failedFileNames.length > 3 ? ", ..." : ""}`,
-        }));
-        setStatus(`${uploadedAssetIds.length} uploaded, ${failedFileNames.length} failed.`);
+        // No photos — load and done
+        await Promise.all([loadTimeline(), loadAssetsForEvent(eventId)]);
+        markAndScrollTo(`asset-row-${uploadedAssetIds[uploadedAssetIds.length - 1]}`, 220);
+        if (failedFileNames.length === 0) {
+          setStatus(uploadedAssetIds.length === 1 ? "File uploaded and linked to event." : `${uploadedAssetIds.length} files uploaded and linked to event.`);
+        } else {
+          setEventDocumentErrors((prev) => ({
+            ...prev,
+            [eventId]: `${failedFileNames.length} file(s) failed: ${failedFileNames.slice(0, 3).join(", ")}${failedFileNames.length > 3 ? ", ..." : ""}`,
+          }));
+          setStatus(`${uploadedAssetIds.length} uploaded, ${failedFileNames.length} failed.`);
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to process document.";
       setEventDocumentErrors((prev) => ({ ...prev, [eventId]: message }));
       setStatus("Document upload failed.");
-    } finally {
       setEventDocumentUploadingId(null);
     }
   }

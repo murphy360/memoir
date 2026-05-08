@@ -5,10 +5,11 @@ stage many photos first, then process them in one Gemini request.
 """
 
 import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
-from typing import Optional
+from typing import Iterator, Optional
 
 from sqlalchemy.orm import Session
 
@@ -16,7 +17,8 @@ from app.models import Asset, EventAsset, LifeEvent, LifePeriod
 from app.services.document_storage import save_document_file
 from app.services.faces import FACE_DETECTION_ON_INGEST, sync_asset_faces_for_photo
 from app.services.gemini_client import PhotoSummary, extract_text_from_photo_batch
-from app.services.image_metadata import extract_and_apply_image_metadata, extract_image_metadata
+from app.services.geocoding import reverse_geocode
+from app.services.image_metadata import compress_photo_for_storage, extract_and_apply_image_metadata, extract_image_metadata
 from app.services.periods import refresh_period_summary
 
 
@@ -136,12 +138,14 @@ def process_queued_photo_uploads(
 
     for index, item in enumerate(queued, start=1):
         upload_like = _UploadLike(item.filename, item.content_type)
+        storage_bytes, storage_content_type = compress_photo_for_storage(item.file_bytes, item.content_type)
         (
             storage_filename,
             content_type,
             size_bytes,
             original_filename,
-        ) = save_document_file(upload_like, item.file_bytes, document_storage_dir)
+        ) = save_document_file(upload_like, storage_bytes, document_storage_dir)
+        content_type = storage_content_type or content_type
 
         asset = Asset(
             period_id=item.period_id,
@@ -218,6 +222,114 @@ def _collect_recognized_face_names(asset: Asset) -> list[str]:
     return names
 
 
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data)}\n\n"
+
+
+def analyze_photo_assets_stream(
+    db: Session,
+    document_storage_dir: Path,
+    asset_ids: list[int],
+) -> Iterator[str]:
+    """Generator that streams SSE events as each photo passes through analysis stages.
+
+    Stages per photo: geocoding → faces (CompreFace) → gemini (batched at end).
+    """
+    assets_for_gemini: list[tuple[Asset, bytes, str]] = []
+
+    for asset_id in asset_ids:
+        asset = db.get(Asset, asset_id)
+        if not asset or asset.kind != "photo" or not asset.storage_filename:
+            continue
+
+        file_path = document_storage_dir / asset.storage_filename
+        if not file_path.exists():
+            continue
+
+        try:
+            file_bytes = file_path.read_bytes()
+        except OSError:
+            continue
+
+        if not file_bytes:
+            continue
+
+        mime_type = (asset.content_type or "image/jpeg").strip().lower() or "image/jpeg"
+
+        # Geocoding stage — run only if GPS present and not yet resolved
+        if asset.gps_latitude is not None and asset.gps_longitude is not None and not asset.reverse_geocode_location_name:
+            yield _sse({"asset_id": asset_id, "stage": "geocoding", "status": "running"})
+            place = reverse_geocode(asset.gps_latitude, asset.gps_longitude)
+            if place:
+                asset.reverse_geocode_location_name = place
+                asset.location_name = place
+                db.flush()
+            yield _sse({"asset_id": asset_id, "stage": "geocoding", "status": "done", "place": place or ""})
+        else:
+            yield _sse({"asset_id": asset_id, "stage": "geocoding", "status": "skipped", "place": asset.reverse_geocode_location_name or ""})
+
+        # CompreFace stage
+        yield _sse({"asset_id": asset_id, "stage": "faces", "status": "running"})
+        sync_asset_faces_for_photo(db, asset, file_bytes)
+        db.flush()
+        # Expire the relationship so SQLAlchemy re-queries it before we read names below
+        db.expire(asset, ["faces"])
+        face_count = len(getattr(asset, "faces", []) or [])
+        yield _sse({"asset_id": asset_id, "stage": "faces", "status": "done", "face_count": face_count})
+
+        assets_for_gemini.append((asset, file_bytes, mime_type))
+
+    # Gemini batch — run all at once after per-photo stages complete
+    if assets_for_gemini:
+        payloads: list[tuple[str, bytes, str, str | None]] = []
+        for asset, file_bytes, mime_type in assets_for_gemini:
+            hint = _build_photo_metadata_hint(
+                captured_at_text=asset.captured_at_text,
+                captured_at=asset.captured_at,
+                gps_latitude=asset.gps_latitude,
+                gps_longitude=asset.gps_longitude,
+                exif_place_name=asset.exif_place_name,
+                reverse_geocode_location_name=asset.reverse_geocode_location_name,
+                camera_make=asset.camera_make,
+                camera_model=asset.camera_model,
+            )
+            recognized_names = _collect_recognized_face_names(asset)
+            if recognized_names:
+                names_hint = "People identified in this photo: " + ", ".join(recognized_names) + "."
+                hint = "; ".join(filter(None, [hint, names_hint]))
+            yield _sse({"asset_id": asset.id, "stage": "gemini", "status": "running"})
+            payloads.append((asset.original_filename or asset.storage_filename, file_bytes, mime_type, hint or None))
+
+        summaries = extract_text_from_photo_batch(payloads)
+
+        for idx, (asset, _, _) in enumerate(assets_for_gemini, start=1):
+            result = summaries.get(idx)
+            if result:
+                asset.text_excerpt = result.summary
+                asset.analyzed_place_name = result.assessed_place
+                if result.suggested_title:
+                    asset.gemini_suggested_title = result.suggested_title
+                    asset.title = result.suggested_title
+                db.flush()
+            title = (result.suggested_title if result else None) or ""
+            yield _sse({"asset_id": asset.id, "stage": "gemini", "status": "done", "title": title})
+
+        # Refresh period summaries for events linked to these assets
+        period_ids: set[int] = set()
+        for asset, _, _ in assets_for_gemini:
+            for link in (getattr(asset, "event_links", []) or []):
+                event = getattr(link, "event", None)
+                if event and getattr(event, "period_id", None):
+                    period_ids.add(event.period_id)
+        for period_id in period_ids:
+            period = db.get(LifePeriod, period_id)
+            if period:
+                refresh_period_summary(db, period)
+
+    db.commit()
+    yield _sse({"type": "complete"})
+
+
 def process_single_photo_asset(
     db: Session,
     document_storage_dir: Path,
@@ -257,6 +369,7 @@ def process_single_photo_asset(
     if force_faces or FACE_DETECTION_ON_INGEST:
         sync_asset_faces_for_photo(db, asset, file_bytes)
         db.flush()
+        db.expire(asset, ["faces"])
 
     metadata_hint = _build_photo_metadata_hint(
         captured_at_text=asset.captured_at_text,

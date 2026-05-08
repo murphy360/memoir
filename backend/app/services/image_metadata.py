@@ -1,4 +1,5 @@
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import BytesIO
@@ -8,6 +9,9 @@ from PIL import ExifTags, Image
 
 from app.services.geocoding import reverse_geocode
 
+
+PHOTO_MAX_DIMENSION: int = int(os.environ.get("PHOTO_MAX_DIMENSION", "2048"))
+PHOTO_JPEG_QUALITY: int = int(os.environ.get("PHOTO_JPEG_QUALITY", "85"))
 
 EXIF_TAGS = ExifTags.TAGS
 GPS_TAGS = ExifTags.GPSTAGS
@@ -127,7 +131,54 @@ def _build_exif_dump(exif_data: dict[str, Any]) -> Optional[str]:
     return raw if raw else None
 
 
-def extract_image_metadata(file_bytes: bytes, content_type: Optional[str]) -> ImageMetadata:
+def compress_photo_for_storage(
+    file_bytes: bytes,
+    content_type: Optional[str],
+    *,
+    max_dimension: int = PHOTO_MAX_DIMENSION,
+    jpeg_quality: int = PHOTO_JPEG_QUALITY,
+) -> tuple[bytes, str]:
+    """Resize and re-encode a photo if it exceeds max_dimension.
+
+    Returns (compressed_bytes, new_content_type). If the image is already
+    within the size limit and is a supported format, the original bytes and
+    content_type are returned unchanged.
+    """
+    if not (content_type or "").lower().startswith("image/"):
+        return file_bytes, content_type or "application/octet-stream"
+
+    try:
+        with Image.open(BytesIO(file_bytes)) as img:
+            w, h = img.size
+            needs_resize = max(w, h) > max_dimension
+            is_jpeg = img.format == "JPEG"
+
+            if not needs_resize and is_jpeg:
+                # Already a JPEG within bounds — return as-is
+                return file_bytes, "image/jpeg"
+
+            if needs_resize:
+                img.thumbnail((max_dimension, max_dimension), Image.LANCZOS)
+
+            # Convert palette / RGBA modes that JPEG can't handle
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+
+            # Preserve EXIF bytes when available so downstream tools still see them
+            exif_bytes = img.info.get("exif", b"")
+
+            buf = BytesIO()
+            save_kwargs: dict = {"format": "JPEG", "quality": jpeg_quality, "optimize": True}
+            if exif_bytes:
+                save_kwargs["exif"] = exif_bytes
+            img.save(buf, **save_kwargs)
+            return buf.getvalue(), "image/jpeg"
+    except Exception:
+        # If anything goes wrong, fall back to the original bytes
+        return file_bytes, content_type or "image/jpeg"
+
+
+def extract_image_metadata(file_bytes: bytes, content_type: Optional[str], *, skip_geocoding: bool = False) -> ImageMetadata:
     if not (content_type or "").lower().startswith("image/"):
         return ImageMetadata()
 
@@ -173,7 +224,7 @@ def extract_image_metadata(file_bytes: bytes, content_type: Optional[str]) -> Im
                 metadata.gps_longitude = _dms_to_decimal(gps.get("GPSLongitude"), _coerce_text(gps.get("GPSLongitudeRef"), max_len=2))
                 metadata.exif_place_name = _coerce_text(gps.get("GPSAreaInformation"), max_len=200)
 
-                if metadata.gps_latitude is not None and metadata.gps_longitude is not None:
+                if metadata.gps_latitude is not None and metadata.gps_longitude is not None and not skip_geocoding:
                     metadata.reverse_geocode_location_name = reverse_geocode(metadata.gps_latitude, metadata.gps_longitude)
 
                 if gps:
@@ -203,6 +254,6 @@ def apply_image_metadata_to_asset(asset: Any, metadata: ImageMetadata) -> None:
     asset.exif_json = metadata.exif_json
 
 
-def extract_and_apply_image_metadata(asset: Any, file_bytes: bytes, content_type: Optional[str]) -> None:
-    metadata = extract_image_metadata(file_bytes, content_type)
+def extract_and_apply_image_metadata(asset: Any, file_bytes: bytes, content_type: Optional[str], *, skip_geocoding: bool = False) -> None:
+    metadata = extract_image_metadata(file_bytes, content_type, skip_geocoding=skip_geocoding)
     apply_image_metadata_to_asset(asset, metadata)

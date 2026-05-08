@@ -11,7 +11,7 @@ from typing import Optional
 
 from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine, ensure_schema_migrations, get_db
@@ -60,7 +60,7 @@ from app.services.gemini_client import (
     suggest_event_edit_from_context,
 )
 from app.services.gemini_client import extract_text_from_document
-from app.services.image_metadata import extract_and_apply_image_metadata
+from app.services.image_metadata import compress_photo_for_storage, extract_and_apply_image_metadata
 from app.services.geocoding import backfill_asset_location_names
 from app.services.faces import assign_face_to_person, list_faces_for_event, sync_asset_faces_for_photo
 from app.services.directory import (
@@ -105,6 +105,7 @@ from app.services.periods import (
 from app.services.period_analysis_pipeline import queue_and_process_period_event_analysis
 from app.services.photo_batch import (
     QueuedPhotoUpload,
+    analyze_photo_assets_stream,
     enqueue_photo_uploads,
     get_photo_queue_size,
     process_events_photo_assets,
@@ -968,12 +969,19 @@ async def upload_asset(
         fingerprint = hashlib.sha256(stored_bytes).hexdigest()
         normalized_kind = "audio"
     else:
+        # For images, compress before writing to disk; EXIF extraction uses original bytes
+        storage_bytes = file_bytes
+        storage_content_type = (file.content_type or "").split(";")[0].strip().lower() or None
+        if storage_content_type and storage_content_type.startswith("image/"):
+            storage_bytes, storage_content_type = compress_photo_for_storage(file_bytes, storage_content_type)
         (
             storage_filename,
             content_type,
             size_bytes,
             original_filename,
-        ) = save_document_file(file, file_bytes, DOCUMENT_STORAGE_DIR)
+        ) = save_document_file(file, storage_bytes, DOCUMENT_STORAGE_DIR)
+        if storage_content_type:
+            content_type = storage_content_type
         fingerprint = hashlib.sha256(file_bytes).hexdigest()
 
     asset = Asset(
@@ -988,7 +996,7 @@ async def upload_asset(
         notes=notes,
     )
     if normalized_kind != "audio":
-        extract_and_apply_image_metadata(asset, file_bytes, content_type)
+        extract_and_apply_image_metadata(asset, file_bytes, content_type, skip_geocoding=True)
 
     db.add(asset)
     db.flush()
@@ -1088,6 +1096,58 @@ def process_photo_asset_queue(
     for asset in assets:
         db.refresh(asset)
     return [build_asset_response(asset) for asset in assets]
+
+
+@app.get("/api/assets/analyze-stream")
+def stream_analyze_assets(
+    asset_ids: Optional[str] = None,
+    event_id: Optional[int] = None,
+    include_processed: bool = False,
+) -> StreamingResponse:
+    """SSE endpoint: streams per-photo analysis progress (geocoding -> faces -> gemini).
+
+    Provide either:
+    - asset_ids: comma-separated list of asset IDs
+    - event_id: resolve all photo assets linked to this event (respects include_processed)
+    """
+    if asset_ids:
+        ids = [int(x.strip()) for x in asset_ids.split(",") if x.strip().isdigit()]
+    elif event_id is not None:
+        with SessionLocal() as _db:
+            event = _db.get(LifeEvent, event_id)
+            if not event:
+                raise HTTPException(status_code=404, detail="Event not found")
+            ids = [
+                link.asset.id
+                for link in event.linked_assets
+                if link.asset
+                and link.asset.kind == "photo"
+                and link.asset.storage_filename
+                and (include_processed or not (link.asset.text_excerpt or "").strip())
+            ]
+    else:
+        raise HTTPException(status_code=400, detail="Provide asset_ids or event_id")
+
+    if not ids:
+        def _empty():
+            yield f"data: {json.dumps({'type': 'complete', 'photos_processed': 0})}\n\n"
+        return StreamingResponse(_empty(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    def generate():
+        db = SessionLocal()
+        try:
+            yield from analyze_photo_assets_stream(db, DOCUMENT_STORAGE_DIR, ids)
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+        finally:
+            db.close()
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/assets/photos/process-events")

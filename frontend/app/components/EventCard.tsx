@@ -21,8 +21,12 @@ type PendingRecording = {
 
 type EventDocumentUploadProgressItem = {
   fileName: string;
+  assetId?: number;
+  isPhoto?: boolean;
   status: "uploading" | "saved" | "failed";
   error?: string;
+  stages?: Partial<Record<"geocoding" | "faces" | "gemini", "pending" | "running" | "done" | "skipped">>;
+  stageDetails?: Partial<Record<"geocoding" | "faces" | "gemini", string>>;
 };
 
 type AudioInputDevice = {
