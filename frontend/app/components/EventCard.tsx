@@ -261,6 +261,9 @@ export function EventCard({
   const [isResearchOpen, setIsResearchOpen] = useState(false);
   const [showThreadPicker, setShowThreadPicker] = useState(false);
   const assignedThread = threads.find((t) => t.id === event.thread_id) ?? null;
+  // Keep photo analysis visibility on the event card so users can track progress without opening Add Memory.
+  const photoProgressRows = eventDocumentUploadProgressByEventId[event.id] ?? [];
+  const completedPhotoCount = photoProgressRows.filter((row) => row.stages?.gemini === "done" || row.stages?.gemini === "skipped").length;
   const isAnalyzed = Boolean(
     event.analysis_last_analyzed_at
     || event.analysis_status === "completed"
@@ -548,6 +551,48 @@ export function EventCard({
               {processingEventPhotosId === event.id ? "Processing Photos..." : "Process Event Photos"}
             </button>
           </div>
+          {photoProgressRows.length > 0 && (
+            <section className="eventPhotoProgressPanel" style={{ marginBottom: "0.55rem" }}>
+              <div className="eventPhotoProgressHeader">
+                <p className="researchLabel" style={{ margin: 0 }}>Photo Analysis Progress</p>
+                <span className="badge">{completedPhotoCount}/{photoProgressRows.length} complete</span>
+              </div>
+              <ul className="eventPhotoProgressList">
+                {photoProgressRows.map((item, index) => {
+                  const stageEntries: Array<{ key: "geocoding" | "faces" | "gemini"; label: string }> = [
+                    { key: "geocoding", label: "Geo" },
+                    { key: "faces", label: "Faces" },
+                    { key: "gemini", label: "AI" },
+                  ];
+                  return (
+                    <li key={`${item.assetId ?? item.fileName}-${index}`} className="eventPhotoProgressItem">
+                      <div className="eventPhotoProgressTopRow">
+                        <span className="eventPhotoProgressFileName" title={item.fileName}>{item.fileName}</span>
+                        <span className={`eventPhotoUploadState uploadState-${item.status}`}>{item.status === "saved" ? "Saved" : item.status === "failed" ? "Failed" : "Uploading"}</span>
+                      </div>
+                      <div className="eventPhotoStageRow">
+                        {stageEntries.map((stage) => {
+                          const stageStatus = item.stages?.[stage.key];
+                          if (!stageStatus) return null;
+                          const detail = item.stageDetails?.[stage.key];
+                          return (
+                            <span
+                              key={stage.key}
+                              className={`eventPhotoStageBadge stage-${stageStatus}`}
+                              title={detail ?? stage.label}
+                            >
+                              {stage.label}: {stageStatus}
+                              {detail ? ` (${detail})` : ""}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
           {event.summary && (
             <section className="researchPanel" style={{ marginBottom: "0.55rem" }}>
               <div className="controls" style={{ justifyContent: "space-between", marginBottom: "0.35rem" }}>

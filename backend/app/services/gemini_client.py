@@ -986,23 +986,31 @@ def extract_text_from_photo_batch(
     parts: list[dict] = [
         {
             "text": (
-                "You will receive a batch of photos from a memoir app. "
-                "For each photo produce a rich description, a suggested asset title, and an assessed place. "
-                "Description: 3-5 sentences covering people, setting, activity, visible objects/landmarks, and notable context. "
-                "Do not invent facts. "
-                "You may receive PHOTO_METADATA lines containing EXIF-derived date/location/camera context. "
-                "You may also receive PHOTO_CAPTURED_AT for the capture timestamp/date. "
-                "Treat metadata as supporting hints and reconcile with visual evidence. "
-                "If PHOTO_CAPTURED_AT is present, naturally reference the day/date context in the description when it adds clarity. "
-                "If a place, landmark, object, sign, or event appears identifiable with high confidence, include "
-                "1 short background/history sentence about it; otherwise skip history. "
-                "When uncertain, say likely/possibly rather than stating certainty. "
-                "Suggested title: 4-8 words, descriptive, suitable as a short asset label (e.g. 'Family picnic at Griffith Park'). "
-                "Assessed place: prioritize a specific named place (park, trail, school, venue, monument, neighborhood, base, museum, etc.) "
-                "when evidence supports it; examples: 'Rockhound State Park', 'Golden Gate Bridge', 'Camp Pendleton'. "
-                "Do not simply repeat city/state/country when a more specific place can be inferred from the image or metadata. "
-                "If only broad locality is known and no specific place is defensible, return an empty string. "
-                "If uncertain but plausible, use cautious phrasing like 'likely Rockhound State Park'. "
+                "You will receive a batch of photos from a personal memoir app. "
+                "Your goal is to produce the richest, most historically and contextually accurate description possible for each photo — "
+                "as if you are a knowledgeable archivist helping someone understand and remember this moment. \n\n"
+
+                "For each photo provide:\n"
+                "- summary: A vivid, detailed description of 4-7 sentences. Cover the people present (using any provided names), "
+                "the setting, the activity or occasion, and any identifiable objects, vehicles, vessels, aircraft, landmarks, "
+                "signs, or structures visible. When you can confidently identify something specific — a ship class, a named vessel, "
+                "a base, a museum exhibit, a geographic feature, a historical event — name it and provide 1-2 sentences of "
+                "factual background or historical context. If the subject is a notable real-world entity (military ship, spacecraft, "
+                "monument, etc.), actively draw on what you know about it: its designation, history, current status, and why it "
+                "might be significant. Reference the capture date naturally when it adds context (e.g. what was happening at that "
+                "location around that time). Use the person's name if provided — do not refer to them only as 'a man' or 'a person'. "
+                "When uncertain about an identification, say 'likely' or 'possibly' rather than stating it as fact. "
+                "Do not invent names or facts you cannot support from the image or metadata. \n"
+                "- suggested_title: 4-8 words, specific and descriptive, suitable as a short asset label "
+                "(e.g. 'Corey at USS John P. Murtha Stern Ramp'). Prefer specificity over generic labels. \n"
+                "- assessed_place: The most specific named place defensible from the image and metadata "
+                "(base, ship, venue, park, landmark, neighborhood — not just city/state). "
+                "If uncertain but plausible, use cautious phrasing like 'likely Naval Base San Diego'. "
+                "Return empty string only if no specific place can be inferred at all. \n\n"
+
+                "You may receive PHOTO_METADATA lines with EXIF-derived date, GPS coordinates, reverse-geocoded location, "
+                "and camera info. You may also receive a PHOTO_CAPTURED_AT timestamp and a PEOPLE hint listing identified persons. "
+                "Treat all metadata as reliable supporting evidence and reconcile with what you see visually. \n"
                 "Use the exact photo index provided before each image."
             )
         }
@@ -1050,7 +1058,7 @@ def extract_text_from_photo_batch(
                                 },
                                 "summary": {
                                     "type": "string",
-                                    "description": "Rich 3-5 sentence description covering people, setting, activity, and notable context",
+                                    "description": "Rich 4-7 sentence description covering people (by name when known), setting, activity, identifiable objects/vessels/landmarks with historical context where relevant",
                                 },
                                 "suggested_title": {
                                     "type": "string",

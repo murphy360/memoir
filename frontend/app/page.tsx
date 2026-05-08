@@ -1099,6 +1099,12 @@ export default function HomePage() {
 
   async function processPhotosForEvent(eventId: number) {
     setProcessingEventPhotosId(eventId);
+    setEventCapturePanelOpenIds((prev) => {
+      if (prev.has(eventId)) return prev;
+      const next = new Set(prev);
+      next.add(eventId);
+      return next;
+    });
     setStatus("Reprocessing event photos...");
 
     // Load assets so we can pre-populate per-photo progress rows
