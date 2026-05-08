@@ -784,6 +784,16 @@ def summarize_event(event_id: int, db: Session = Depends(get_db)) -> LifeEventRe
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
+    # Process any photo assets that haven't been analyzed yet so their
+    # text_excerpt, title, and place data are available for the summary.
+    process_events_photo_assets(
+        db,
+        DOCUMENT_STORAGE_DIR,
+        event_id=event_id,
+        include_processed=False,
+    )
+    db.flush()
+
     refresh_event_summary_and_suggestion(db, event, auto_apply_title=False)
 
     db.commit()

@@ -150,6 +150,9 @@ def refresh_event_summary_and_suggestion(
             details.append(" ".join(asset.text_excerpt.split())[:180])
         if asset.captured_at_text:
             details.append(asset.captured_at_text)
+        place = (asset.analyzed_place_name or asset.reverse_geocode_location_name or "").strip()
+        if place:
+            details.append(f"Place: {place}")
         if details:
             asset_points.append(f"{title}: {' | '.join(details)}")
         else:
