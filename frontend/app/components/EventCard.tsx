@@ -654,6 +654,13 @@ export function EventCard({
                 {eventFaces.map((face, index) => {
                   const faceCx = face.bbox_x + face.bbox_w / 2;
                   const faceCy = face.bbox_y + face.bbox_h / 2;
+                  const similarityText = face.compreface_similarity !== null
+                    ? `${Math.round(face.compreface_similarity * 100)}%`
+                    : null;
+                  const ageText = face.compreface_age_low !== null && face.compreface_age_high !== null
+                    ? `${face.compreface_age_low}-${face.compreface_age_high}`
+                    : null;
+                  const detectedName = face.person_name || face.compreface_subject;
                   // Scale so the face bbox fills ~60% of the thumbnail height; cap to avoid distortion
                   const previewScale = Math.max(1.5, Math.min(4.0, 0.6 / Math.max(face.bbox_h, 0.08)));
                   const originX = `${Math.round(faceCx * 100)}%`;
@@ -686,29 +693,40 @@ export function EventCard({
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p className="meta" style={{ margin: 0 }}>
-                          {face.person_name ? `Tagged: ${face.person_name}` : "Unknown person"}
+                          {face.person_name ? `Tagged: ${face.person_name}` : detectedName ? `Detected: ${detectedName}` : "Unknown person"}
                           {face.asset_title ? ` · ${face.asset_title}` : ""}
                         </p>
+                        {(similarityText || face.compreface_gender || ageText) && (
+                          <p className="meta" style={{ margin: "0.15rem 0 0" }}>
+                            {similarityText ? `Similarity ${similarityText}` : ""}
+                            {face.compreface_gender ? `${similarityText ? " · " : ""}${face.compreface_gender}` : ""}
+                            {ageText ? `${similarityText || face.compreface_gender ? " · " : ""}Age ${ageText}` : ""}
+                          </p>
+                        )}
                         <div className="controls" style={{ marginTop: "0.25rem", flexWrap: "wrap" }}>
-                          <select
-                            className="directoryInput"
-                            value={selectedPerson}
-                            onChange={(e) => setFaceAssignTargets((current) => ({ ...current, [face.id]: e.target.value }))}
-                            disabled={peopleDirectory.length === 0 || assigningFaceId === face.id}
-                          >
-                            <option value="">Select person</option>
-                            {peopleDirectory.map((person) => (
-                              <option key={person.id} value={person.id}>{person.name}</option>
-                            ))}
-                          </select>
-                          <button
-                            className="secondary"
-                            type="button"
-                            disabled={!selectedPerson || assigningFaceId === face.id}
-                            onClick={() => void assignFaceToPerson(face.id, Number(selectedPerson), event.id)}
-                          >
-                            {assigningFaceId === face.id ? "Saving..." : "Assign"}
-                          </button>
+                          {face.person_id === null && (
+                            <>
+                              <select
+                                className="directoryInput"
+                                value={selectedPerson}
+                                onChange={(e) => setFaceAssignTargets((current) => ({ ...current, [face.id]: e.target.value }))}
+                                disabled={peopleDirectory.length === 0 || assigningFaceId === face.id}
+                              >
+                                <option value="">Select person</option>
+                                {peopleDirectory.map((person) => (
+                                  <option key={person.id} value={person.id}>{person.name}</option>
+                                ))}
+                              </select>
+                              <button
+                                className="secondary"
+                                type="button"
+                                disabled={!selectedPerson || assigningFaceId === face.id}
+                                onClick={() => void assignFaceToPerson(face.id, Number(selectedPerson), event.id)}
+                              >
+                                {assigningFaceId === face.id ? "Saving..." : "Assign"}
+                              </button>
+                            </>
+                          )}
                           {face.person_id !== null && (
                             <button
                               className="ghost"

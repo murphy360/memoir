@@ -341,12 +341,34 @@ def ensure_schema_migrations() -> None:
                 bbox_w REAL NOT NULL,
                 bbox_h REAL NOT NULL,
                 confidence REAL,
+                compreface_subject VARCHAR(120),
+                compreface_similarity REAL,
+                compreface_gender VARCHAR(20),
+                compreface_age_low INTEGER,
+                compreface_age_high INTEGER,
+                compreface_raw_json TEXT,
                 person_id INTEGER,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
                 FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE SET NULL
             )
         """))
+        asset_face_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(asset_faces)")).fetchall()
+        }
+        if "compreface_subject" not in asset_face_columns:
+            connection.execute(text("ALTER TABLE asset_faces ADD COLUMN compreface_subject VARCHAR(120)"))
+        if "compreface_similarity" not in asset_face_columns:
+            connection.execute(text("ALTER TABLE asset_faces ADD COLUMN compreface_similarity REAL"))
+        if "compreface_gender" not in asset_face_columns:
+            connection.execute(text("ALTER TABLE asset_faces ADD COLUMN compreface_gender VARCHAR(20)"))
+        if "compreface_age_low" not in asset_face_columns:
+            connection.execute(text("ALTER TABLE asset_faces ADD COLUMN compreface_age_low INTEGER"))
+        if "compreface_age_high" not in asset_face_columns:
+            connection.execute(text("ALTER TABLE asset_faces ADD COLUMN compreface_age_high INTEGER"))
+        if "compreface_raw_json" not in asset_face_columns:
+            connection.execute(text("ALTER TABLE asset_faces ADD COLUMN compreface_raw_json TEXT"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_asset_faces_asset_id ON asset_faces (asset_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_asset_faces_person_id ON asset_faces (person_id)"))
 

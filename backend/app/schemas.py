@@ -1,6 +1,6 @@
 from datetime import datetime
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -295,6 +295,12 @@ class EventFaceResponse(BaseModel):
     bbox_w: float = Field(description="Box width normalized to [0, 1] of image width.")
     bbox_h: float = Field(description="Box height normalized to [0, 1] of image height.")
     confidence: Optional[float] = Field(default=None, description="Detector confidence when available.")
+    compreface_subject: Optional[str] = Field(default=None, description="Top CompreFace subject prediction for this face, if any.")
+    compreface_similarity: Optional[float] = Field(default=None, description="Similarity score for top CompreFace subject prediction in [0, 1].")
+    compreface_gender: Optional[str] = Field(default=None, description="CompreFace gender plugin value for this face when enabled.")
+    compreface_age_low: Optional[int] = Field(default=None, description="CompreFace age plugin lower bound for this face when enabled.")
+    compreface_age_high: Optional[int] = Field(default=None, description="CompreFace age plugin upper bound for this face when enabled.")
+    compreface_raw: Optional[dict[str, Any]] = Field(default=None, description="Full raw CompreFace metadata object captured for this detected face.")
     person_id: Optional[int] = Field(default=None, description="Assigned person id for this face, if manually linked.")
     person_name: Optional[str] = Field(default=None, description="Assigned person display name, if manually linked.")
 

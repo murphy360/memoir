@@ -341,12 +341,32 @@ class AssetFace(Base):
     bbox_w: Mapped[float] = mapped_column(Float, nullable=False)
     bbox_h: Mapped[float] = mapped_column(Float, nullable=False)
     confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Top CompreFace prediction subject when recognition data is available.
+    compreface_subject: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    # Similarity score for the top predicted subject in [0, 1].
+    compreface_similarity: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Plugin metadata from CompreFace, when face plugins are enabled.
+    compreface_gender: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    compreface_age_low: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    compreface_age_high: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Raw CompreFace result object for debugging and UI inspection of all metadata.
+    compreface_raw_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # person_id stays null until a user manually assigns the detected face.
     person_id: Mapped[Optional[int]] = mapped_column(ForeignKey("people.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     asset: Mapped["Asset"] = relationship(back_populates="faces")
     person: Mapped[Optional["Person"]] = relationship(back_populates="tagged_faces")
+
+    @property
+    def compreface_raw(self) -> Optional[dict[str, Any]]:
+        if not self.compreface_raw_json:
+            return None
+        try:
+            parsed = json.loads(self.compreface_raw_json)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
 
 
 class Question(Base):

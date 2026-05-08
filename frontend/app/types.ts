@@ -200,7 +200,9 @@ export type AssetEntry = {
 
 /**
  * One detected face region from a photo asset linked to an event.
- * person_id/person_name stay null until manually assigned.
+ * person_id/person_name can be set automatically when CompreFace subject
+ * matches a known person (or alias) with sufficient confidence.
+ * compreface_* fields capture raw recognition metadata when available.
  */
 export type EventFaceEntry = {
   id: number;
@@ -212,6 +214,12 @@ export type EventFaceEntry = {
   bbox_w: number;
   bbox_h: number;
   confidence: number | null;
+  compreface_subject: string | null;
+  compreface_similarity: number | null;
+  compreface_gender: string | null;
+  compreface_age_low: number | null;
+  compreface_age_high: number | null;
+  compreface_raw: Record<string, unknown> | null;
   person_id: number | null;
   person_name: string | null;
 };

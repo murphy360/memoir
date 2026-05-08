@@ -734,6 +734,12 @@ def _build_event_face_response(face: AssetFace) -> EventFaceResponse:
         bbox_w=face.bbox_w,
         bbox_h=face.bbox_h,
         confidence=face.confidence,
+        compreface_subject=face.compreface_subject,
+        compreface_similarity=face.compreface_similarity,
+        compreface_gender=face.compreface_gender,
+        compreface_age_low=face.compreface_age_low,
+        compreface_age_high=face.compreface_age_high,
+        compreface_raw=face.compreface_raw,
         person_id=person.id if person else None,
         person_name=person.name if person else None,
     )
@@ -776,6 +782,26 @@ def delete_event_face(face_id: int, db: Session = Depends(get_db)) -> None:
         raise HTTPException(status_code=404, detail="Face not found")
     db.delete(face)
     db.commit()
+
+
+@app.post("/api/assets/{asset_id}/sync-faces", response_model=list[EventFaceResponse])
+def sync_asset_faces(asset_id: int, db: Session = Depends(get_db)) -> list[EventFaceResponse]:
+    """Trigger face detection on a single photo asset on demand."""
+    asset = db.get(Asset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if asset.kind != "photo":
+        raise HTTPException(status_code=400, detail="Asset is not a photo")
+    if not asset.storage_filename:
+        raise HTTPException(status_code=400, detail="Asset has no stored file")
+    file_path = DOCUMENT_STORAGE_DIR / asset.storage_filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Asset file not found on disk")
+    image_bytes = file_path.read_bytes()
+    sync_asset_faces_for_photo(db, asset, image_bytes)
+    db.commit()
+    faces = db.query(AssetFace).filter(AssetFace.asset_id == asset_id).all()
+    return [_build_event_face_response(face) for face in faces]
 
 
 @app.post("/api/events/{event_id}/summarize", response_model=LifeEventResponse)
@@ -1104,6 +1130,7 @@ def process_single_photo(
         DOCUMENT_STORAGE_DIR,
         asset=asset,
         include_processed=include_processed,
+        force_faces=True,
     )
     if not processed:
         raise HTTPException(status_code=400, detail="Photo asset could not be processed")

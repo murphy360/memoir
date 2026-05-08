@@ -90,6 +90,24 @@ function fileExtension(name: string | null): string {
   return ext.slice(0, 5).toUpperCase();
 }
 
+function formatSimilarityPercent(value: number | null): string {
+  if (value === null || Number.isNaN(value)) {
+    return "n/a";
+  }
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function stringifyComprefaceRaw(raw: Record<string, unknown> | null): string {
+  if (!raw) {
+    return "{}";
+  }
+  try {
+    return JSON.stringify(raw, null, 2);
+  } catch {
+    return "{}";
+  }
+}
+
 function parseDateFromAsset(asset: AssetEntry): Date | null {
   if (asset.captured_at) {
     const parsed = new Date(asset.captured_at);
@@ -531,18 +549,60 @@ export function EventAssetList({
                   const top = Math.max(0, Math.min(100, face.bbox_y * 100));
                   const width = Math.max(1, Math.min(100, face.bbox_w * 100));
                   const height = Math.max(1, Math.min(100, face.bbox_h * 100));
+                  const similarityText = face.compreface_similarity !== null
+                    ? formatSimilarityPercent(face.compreface_similarity)
+                    : null;
+                  const ageText = face.compreface_age_low !== null && face.compreface_age_high !== null
+                    ? `${face.compreface_age_low}-${face.compreface_age_high}`
+                    : null;
+                  const labelText = face.person_name || face.compreface_subject || "Unknown";
+                  const badgeText = similarityText
+                    ? `${labelText} ${similarityText}`
+                    : labelText;
+                  const tooltipParts = [
+                    face.person_name ? `Tagged: ${face.person_name}` : null,
+                    face.compreface_subject ? `CompreFace: ${face.compreface_subject}` : null,
+                    similarityText ? `Similarity: ${similarityText}` : null,
+                    face.compreface_gender ? `Gender: ${face.compreface_gender}` : null,
+                    ageText ? `Age: ${ageText}` : null,
+                  ].filter(Boolean);
                   return (
                     <div
                       key={face.id}
                       className="assetPreviewFaceBox"
                       style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }}
-                      title={face.person_name || "Detected face"}
+                      title={tooltipParts.join(" | ") || "Detected face"}
                     >
-                      <span className="assetPreviewFaceLabel">{face.person_name || "Unknown"}</span>
+                      <span className="assetPreviewFaceLabel">{badgeText}</span>
                     </div>
                   );
                 })}
               </div>
+              {showFaceBoxes && previewAssetFaces.length > 0 && (
+                <div className="assetPreviewFaceMetaPanel">
+                  {previewAssetFaces.map((face, index) => {
+                    const ageText = face.compreface_age_low !== null && face.compreface_age_high !== null
+                      ? `${face.compreface_age_low}-${face.compreface_age_high}`
+                      : "n/a";
+                    return (
+                      <article key={`meta-${face.id}`} className="assetPreviewFaceMetaCard">
+                        <h4>Face {index + 1}</h4>
+                        <p className="meta"><strong>Assigned Person:</strong> {face.person_name || "n/a"}</p>
+                        <p className="meta"><strong>CompreFace Subject:</strong> {face.compreface_subject || "n/a"}</p>
+                        <p className="meta"><strong>Similarity:</strong> {formatSimilarityPercent(face.compreface_similarity)}</p>
+                        <p className="meta"><strong>Gender:</strong> {face.compreface_gender || "n/a"}</p>
+                        <p className="meta"><strong>Age Range:</strong> {ageText}</p>
+                        <p className="meta"><strong>Detection Confidence:</strong> {formatSimilarityPercent(face.confidence)}</p>
+                        <p className="meta"><strong>BBox (normalized):</strong> x={face.bbox_x.toFixed(4)}, y={face.bbox_y.toFixed(4)}, w={face.bbox_w.toFixed(4)}, h={face.bbox_h.toFixed(4)}</p>
+                        <details>
+                          <summary>Raw CompreFace Metadata</summary>
+                          <pre className="assetPreviewFaceRaw">{stringifyComprefaceRaw(face.compreface_raw)}</pre>
+                        </details>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
 

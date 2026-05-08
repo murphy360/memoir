@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Asset, EventAsset, LifeEvent, LifePeriod
 from app.services.document_storage import save_document_file
-from app.services.faces import sync_asset_faces_for_photo
+from app.services.faces import FACE_DETECTION_ON_INGEST, sync_asset_faces_for_photo
 from app.services.gemini_client import PhotoSummary, extract_text_from_photo_batch
 from app.services.image_metadata import extract_and_apply_image_metadata, extract_image_metadata
 from app.services.periods import refresh_period_summary
@@ -166,7 +166,8 @@ def process_queued_photo_uploads(
 
         db.add(asset)
         db.flush()
-        sync_asset_faces_for_photo(db, asset, item.file_bytes)
+        if FACE_DETECTION_ON_INGEST:
+            sync_asset_faces_for_photo(db, asset, item.file_bytes)
 
         event: Optional[LifeEvent] = None
         if item.event_id is not None:
@@ -202,6 +203,7 @@ def process_single_photo_asset(
     *,
     asset: Asset,
     include_processed: bool = True,
+    force_faces: bool = False,
 ) -> tuple[bool, Optional[str]]:
     """Process one stored photo asset and refresh linked period summaries.
 
@@ -244,7 +246,8 @@ def process_single_photo_asset(
         (asset.original_filename or asset.storage_filename, file_bytes, mime_type, metadata_hint or None),
     ])
 
-    sync_asset_faces_for_photo(db, asset, file_bytes)
+    if force_faces or FACE_DETECTION_ON_INGEST:
+        sync_asset_faces_for_photo(db, asset, file_bytes)
     photo_result = summaries.get(1)
     suggested_title: Optional[str] = None
     if photo_result:
@@ -330,7 +333,8 @@ def process_event_photo_assets(
     summaries = extract_text_from_photo_batch(payloads)
     updated_assets: list[Asset] = []
     for index, asset in enumerate(valid_assets, start=1):
-        sync_asset_faces_for_photo(db, asset, payloads[index - 1][1])
+        if FACE_DETECTION_ON_INGEST:
+            sync_asset_faces_for_photo(db, asset, payloads[index - 1][1])
         photo_result = summaries.get(index)
         if not photo_result:
             continue

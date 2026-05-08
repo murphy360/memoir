@@ -1410,6 +1410,38 @@ button.ghost:hover:not(:disabled) {
   text-overflow: ellipsis;
 }
 
+.assetPreviewFaceMetaPanel {
+  margin-top: 0.7rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.assetPreviewFaceMetaCard {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  background: color-mix(in srgb, var(--panel) 94%, var(--accent) 6%);
+}
+
+.assetPreviewFaceMetaCard h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.92rem;
+}
+
+.assetPreviewFaceMetaCard details {
+  margin-top: 0.25rem;
+}
+
+.assetPreviewFaceRaw {
+  margin: 0.35rem 0 0;
+  padding: 0.45rem;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.08);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+}
+
 .assetPreviewFrame {
   min-height: 58vh;
 }
