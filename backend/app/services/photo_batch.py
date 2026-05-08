@@ -197,6 +197,27 @@ def _has_text_excerpt(asset: Asset) -> bool:
     return bool((asset.text_excerpt or "").strip())
 
 
+def _collect_recognized_face_names(asset: Asset) -> list[str]:
+    """Return deduplicated names for faces that have been identified.
+
+    Priority: confirmed person assignment (person.name) > CompreFace subject name.
+    """
+    seen: set[str] = set()
+    names: list[str] = []
+    for face in getattr(asset, "faces", []) or []:
+        person = getattr(face, "person", None)
+        if person and getattr(person, "name", None):
+            name = person.name.strip()
+        elif getattr(face, "compreface_subject", None):
+            name = face.compreface_subject.strip()
+        else:
+            continue
+        if name and name not in seen:
+            seen.add(name)
+            names.append(name)
+    return names
+
+
 def process_single_photo_asset(
     db: Session,
     document_storage_dir: Path,
@@ -232,6 +253,11 @@ def process_single_photo_asset(
 
     mime_type = (asset.content_type or "image/jpeg").strip().lower() or "image/jpeg"
     extract_and_apply_image_metadata(asset, file_bytes, mime_type)
+
+    if force_faces or FACE_DETECTION_ON_INGEST:
+        sync_asset_faces_for_photo(db, asset, file_bytes)
+        db.flush()
+
     metadata_hint = _build_photo_metadata_hint(
         captured_at_text=asset.captured_at_text,
         captured_at=asset.captured_at,
@@ -242,12 +268,15 @@ def process_single_photo_asset(
         camera_make=asset.camera_make,
         camera_model=asset.camera_model,
     )
+
+    recognized_names = _collect_recognized_face_names(asset)
+    if recognized_names:
+        names_hint = "People identified in this photo: " + ", ".join(recognized_names) + "."
+        metadata_hint = "; ".join(filter(None, [metadata_hint, names_hint]))
+
     summaries = extract_text_from_photo_batch([
         (asset.original_filename or asset.storage_filename, file_bytes, mime_type, metadata_hint or None),
     ])
-
-    if force_faces or FACE_DETECTION_ON_INGEST:
-        sync_asset_faces_for_photo(db, asset, file_bytes)
     photo_result = summaries.get(1)
     suggested_title: Optional[str] = None
     if photo_result:
