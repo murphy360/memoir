@@ -60,7 +60,21 @@ def _build_photo_metadata_hint(
     reverse_geocode_location_name: Optional[str],
     camera_make: Optional[str],
     camera_model: Optional[str],
+    recognized_people: Optional[list[str]] = None,
+    event_title: Optional[str] = None,
+    event_date_text: Optional[str] = None,
+    event_description: Optional[str] = None,
+    linked_memory_excerpt: Optional[str] = None,
+    period_title: Optional[str] = None,
 ) -> str:
+    def _sanitize_metadata_value(value: Optional[str], *, max_length: int = 400) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = " ".join(str(value).replace(";", ",").split()).strip()
+        if not cleaned:
+            return None
+        return cleaned[:max_length]
+
     parts: list[str] = []
     if captured_at_text:
         parts.append(f"captured_at={captured_at_text}")
@@ -75,7 +89,71 @@ def _build_photo_metadata_hint(
     if camera_make or camera_model:
         camera_label = " ".join(part for part in [camera_make, camera_model] if part)
         parts.append(f"camera={camera_label}")
+
+    normalized_people = [name.strip() for name in (recognized_people or []) if name and name.strip()]
+    if normalized_people:
+        parts.append(f"people={','.join(normalized_people[:8])}")
+
+    cleaned_event_title = _sanitize_metadata_value(event_title, max_length=180)
+    if cleaned_event_title:
+        parts.append(f"event_title={cleaned_event_title}")
+    cleaned_event_date_text = _sanitize_metadata_value(event_date_text, max_length=100)
+    if cleaned_event_date_text:
+        parts.append(f"event_date_text={cleaned_event_date_text}")
+    cleaned_event_description = _sanitize_metadata_value(event_description, max_length=500)
+    if cleaned_event_description:
+        parts.append(f"event_description={cleaned_event_description}")
+
+    cleaned_linked_memory_excerpt = _sanitize_metadata_value(linked_memory_excerpt, max_length=700)
+    if cleaned_linked_memory_excerpt:
+        parts.append(f"linked_memory_excerpt={cleaned_linked_memory_excerpt}")
+
+    cleaned_period_title = _sanitize_metadata_value(period_title, max_length=180)
+    if cleaned_period_title:
+        parts.append(f"period_title={cleaned_period_title}")
+
     return "; ".join(parts)
+
+
+def _derive_asset_context_hints(asset: Asset) -> dict[str, Optional[str]]:
+    """Extract optional event/memory context fields for photo analysis hints."""
+    event_title: Optional[str] = None
+    event_date_text: Optional[str] = None
+    event_description: Optional[str] = None
+    linked_memory_excerpt: Optional[str] = None
+    period_title: Optional[str] = None
+
+    primary_event: Optional[LifeEvent] = None
+    for link in (getattr(asset, "event_links", []) or []):
+        event = getattr(link, "event", None)
+        if event is not None:
+            primary_event = event
+            break
+
+    if primary_event is not None:
+        event_title = primary_event.title
+        event_date_text = primary_event.event_date_text
+        event_description = primary_event.description
+        if primary_event.period is not None:
+            period_title = primary_event.period.title
+        if primary_event.legacy_memory is not None:
+            linked_memory_excerpt = (
+                primary_event.legacy_memory.event_description
+                or primary_event.legacy_memory.transcript
+            )
+
+    if not linked_memory_excerpt and asset.legacy_memory is not None:
+        linked_memory_excerpt = asset.legacy_memory.event_description or asset.legacy_memory.transcript
+    if not period_title and asset.period is not None:
+        period_title = asset.period.title
+
+    return {
+        "event_title": event_title,
+        "event_date_text": event_date_text,
+        "event_description": event_description,
+        "linked_memory_excerpt": linked_memory_excerpt,
+        "period_title": period_title,
+    }
 
 
 def enqueue_photo_uploads(items: list[QueuedPhotoUpload]) -> int:
@@ -120,6 +198,11 @@ def process_queued_photo_uploads(
     payloads: list[tuple[str, bytes, str, str | None]] = []
     for item in queued:
         metadata = extract_image_metadata(item.file_bytes, item.content_type)
+        queued_event: Optional[LifeEvent] = db.get(LifeEvent, item.event_id) if item.event_id is not None else None
+        queued_memory_excerpt: Optional[str] = None
+        if queued_event is not None and queued_event.legacy_memory is not None:
+            queued_memory_excerpt = queued_event.legacy_memory.event_description or queued_event.legacy_memory.transcript
+
         metadata_hint = _build_photo_metadata_hint(
             captured_at_text=metadata.captured_at_text,
             captured_at=metadata.captured_at,
@@ -129,6 +212,11 @@ def process_queued_photo_uploads(
             reverse_geocode_location_name=metadata.reverse_geocode_location_name,
             camera_make=metadata.camera_make,
             camera_model=metadata.camera_model,
+            event_title=queued_event.title if queued_event is not None else None,
+            event_date_text=queued_event.event_date_text if queued_event is not None else None,
+            event_description=queued_event.description if queued_event is not None else None,
+            linked_memory_excerpt=queued_memory_excerpt,
+            period_title=(queued_event.period.title if queued_event is not None and queued_event.period is not None else None),
         )
         payloads.append((item.filename, item.file_bytes, item.content_type, metadata_hint or None))
     batch_summaries = extract_text_from_photo_batch(payloads)
@@ -157,7 +245,7 @@ def process_queued_photo_uploads(
             size_bytes=size_bytes,
             fingerprint_sha256=hashlib.sha256(item.file_bytes).hexdigest(),
             notes=item.notes,
-            text_excerpt=batch_summaries.get(index, PhotoSummary("")).summary or None,
+            text_excerpt=batch_summaries.get(index, PhotoSummary("")).excerpt_text() or None,
         )
         # Prefer Gemini's suggested title over the filename-derived one when available
         photo_result = batch_summaries.get(index)
@@ -283,6 +371,8 @@ def analyze_photo_assets_stream(
     if assets_for_gemini:
         payloads: list[tuple[str, bytes, str, str | None]] = []
         for asset, file_bytes, mime_type in assets_for_gemini:
+            recognized_names = _collect_recognized_face_names(asset)
+            context_hints = _derive_asset_context_hints(asset)
             hint = _build_photo_metadata_hint(
                 captured_at_text=asset.captured_at_text,
                 captured_at=asset.captured_at,
@@ -292,11 +382,13 @@ def analyze_photo_assets_stream(
                 reverse_geocode_location_name=asset.reverse_geocode_location_name,
                 camera_make=asset.camera_make,
                 camera_model=asset.camera_model,
+                recognized_people=recognized_names,
+                event_title=context_hints.get("event_title"),
+                event_date_text=context_hints.get("event_date_text"),
+                event_description=context_hints.get("event_description"),
+                linked_memory_excerpt=context_hints.get("linked_memory_excerpt"),
+                period_title=context_hints.get("period_title"),
             )
-            recognized_names = _collect_recognized_face_names(asset)
-            if recognized_names:
-                names_hint = "People identified in this photo: " + ", ".join(recognized_names) + "."
-                hint = "; ".join(filter(None, [hint, names_hint]))
             yield _sse({"asset_id": asset.id, "stage": "gemini", "status": "running"})
             payloads.append((asset.original_filename or asset.storage_filename, file_bytes, mime_type, hint or None))
 
@@ -305,14 +397,17 @@ def analyze_photo_assets_stream(
         for idx, (asset, _, _) in enumerate(assets_for_gemini, start=1):
             result = summaries.get(idx)
             if result:
-                asset.text_excerpt = result.summary
+                asset.text_excerpt = result.excerpt_text()
                 asset.analyzed_place_name = result.assessed_place
                 if result.suggested_title:
                     asset.gemini_suggested_title = result.suggested_title
                     asset.title = result.suggested_title
                 db.flush()
-            title = (result.suggested_title if result else None) or ""
-            yield _sse({"asset_id": asset.id, "stage": "gemini", "status": "done", "title": title})
+            if result:
+                title = result.suggested_title or ""
+                yield _sse({"asset_id": asset.id, "stage": "gemini", "status": "done", "title": title})
+            else:
+                yield _sse({"asset_id": asset.id, "stage": "gemini", "status": "skipped", "title": ""})
 
         # Refresh period summaries for events linked to these assets
         period_ids: set[int] = set()
@@ -371,6 +466,8 @@ def process_single_photo_asset(
         db.flush()
         db.expire(asset, ["faces"])
 
+    recognized_names = _collect_recognized_face_names(asset)
+    context_hints = _derive_asset_context_hints(asset)
     metadata_hint = _build_photo_metadata_hint(
         captured_at_text=asset.captured_at_text,
         captured_at=asset.captured_at,
@@ -380,12 +477,13 @@ def process_single_photo_asset(
         reverse_geocode_location_name=asset.reverse_geocode_location_name,
         camera_make=asset.camera_make,
         camera_model=asset.camera_model,
+        recognized_people=recognized_names,
+        event_title=context_hints.get("event_title"),
+        event_date_text=context_hints.get("event_date_text"),
+        event_description=context_hints.get("event_description"),
+        linked_memory_excerpt=context_hints.get("linked_memory_excerpt"),
+        period_title=context_hints.get("period_title"),
     )
-
-    recognized_names = _collect_recognized_face_names(asset)
-    if recognized_names:
-        names_hint = "People identified in this photo: " + ", ".join(recognized_names) + "."
-        metadata_hint = "; ".join(filter(None, [metadata_hint, names_hint]))
 
     summaries = extract_text_from_photo_batch([
         (asset.original_filename or asset.storage_filename, file_bytes, mime_type, metadata_hint or None),
@@ -393,7 +491,7 @@ def process_single_photo_asset(
     photo_result = summaries.get(1)
     suggested_title: Optional[str] = None
     if photo_result:
-        asset.text_excerpt = photo_result.summary
+        asset.text_excerpt = photo_result.excerpt_text()
         suggested_title = photo_result.suggested_title
         asset.gemini_suggested_title = photo_result.suggested_title
         if photo_result.suggested_title:
@@ -456,6 +554,8 @@ def process_event_photo_assets(
             continue
         mime_type = (asset.content_type or "image/jpeg").strip().lower() or "image/jpeg"
         extract_and_apply_image_metadata(asset, file_bytes, mime_type)
+        recognized_names = _collect_recognized_face_names(asset)
+        context_hints = _derive_asset_context_hints(asset)
         metadata_hint = _build_photo_metadata_hint(
             captured_at_text=asset.captured_at_text,
             captured_at=asset.captured_at,
@@ -465,6 +565,12 @@ def process_event_photo_assets(
             reverse_geocode_location_name=asset.reverse_geocode_location_name,
             camera_make=asset.camera_make,
             camera_model=asset.camera_model,
+            recognized_people=recognized_names,
+            event_title=context_hints.get("event_title"),
+            event_date_text=context_hints.get("event_date_text"),
+            event_description=context_hints.get("event_description"),
+            linked_memory_excerpt=context_hints.get("linked_memory_excerpt"),
+            period_title=context_hints.get("period_title"),
         )
         payloads.append((asset.original_filename or asset.storage_filename, file_bytes, mime_type, metadata_hint or None))
         valid_assets.append(asset)
@@ -480,7 +586,7 @@ def process_event_photo_assets(
         photo_result = summaries.get(index)
         if not photo_result:
             continue
-        asset.text_excerpt = photo_result.summary
+        asset.text_excerpt = photo_result.excerpt_text()
         if photo_result.suggested_title:
             asset.gemini_suggested_title = photo_result.suggested_title
             asset.title = photo_result.suggested_title

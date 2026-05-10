@@ -2,7 +2,9 @@ import base64
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Optional
 
 import requests
@@ -31,6 +33,29 @@ class PhotoSummary:
     summary: str
     suggested_title: Optional[str] = None
     assessed_place: Optional[str] = None
+    visual_evidence: Optional[str] = None
+    contextual_narrative: Optional[str] = None
+    discrepancy_flag: Optional[str] = None
+
+    def excerpt_text(self, *, max_length: int = 1200) -> str:
+        """Build a readable asset excerpt with optional discrepancy warning."""
+        visual = (self.visual_evidence or "").strip()
+        contextual = (self.contextual_narrative or "").strip()
+        discrepancy = (self.discrepancy_flag or "").strip()
+        fallback = (self.summary or "").strip()
+
+        parts: list[str] = []
+        if visual:
+            parts.append(f"Visual evidence: {visual}")
+        if contextual:
+            parts.append(f"Contextual narrative: {contextual}")
+        elif fallback:
+            parts.append(fallback)
+        if discrepancy:
+            parts.append(f"Metadata discrepancy: {discrepancy}")
+
+        text = "\n".join(parts).strip() or fallback
+        return text[:max_length]
 
 
 def _extract_metadata_field(metadata_hint: Optional[str], field_name: str) -> Optional[str]:
@@ -964,14 +989,42 @@ def extract_text_from_document(filename: str, file_bytes: bytes, mime_type: str)
         )
 
 
+def _parse_photo_research_notes(raw_text: str) -> dict[int, str]:
+    """Parse PHOTO_INDEX blocks from pass-1 text research notes.
+
+    Expected format repeats blocks like:
+    PHOTO_INDEX=1
+    RESEARCH_NOTES: ...
+    """
+    notes_by_index: dict[int, str] = {}
+    if not raw_text:
+        return notes_by_index
+
+    pattern = re.compile(r"PHOTO_INDEX=(\d+)\s*(.*?)(?=PHOTO_INDEX=\d+|\Z)", re.DOTALL)
+    for match in pattern.finditer(raw_text):
+        try:
+            index_value = int(match.group(1))
+        except (TypeError, ValueError):
+            continue
+        note_text = match.group(2).strip()
+        if note_text.upper().startswith("RESEARCH_NOTES:"):
+            note_text = note_text.split(":", 1)[1].strip()
+        if note_text:
+            notes_by_index[index_value] = note_text[:1500]
+    return notes_by_index
+
+
 def extract_text_from_photo_batch(
     photo_payloads: list[tuple[str, bytes, str] | tuple[str, bytes, str, str | None]]
 ) -> dict[int, "PhotoSummary"]:
-    """Use one Gemini call to summarize a batch of uploaded photos.
+    """Use a two-pass Gemini flow to summarize a batch of uploaded photos.
+
+    Pass 1 runs plain-text research with web search enabled.
+    Pass 2 consumes those notes and returns strict JSON summaries.
 
     The return value is keyed by 1-based photo index from `photo_payloads`.
-    Each value is a PhotoSummary with a plain-text description and an optional
-    suggested title. Returns {} if Gemini is unavailable or parsing fails.
+    Each value is a PhotoSummary with structured visual/contextual analysis,
+    plus title/place fields. Returns {} if Gemini is unavailable or parsing fails.
     """
     if not photo_payloads:
         return {}
@@ -980,42 +1033,28 @@ def extract_text_from_photo_batch(
     if not gemini_key:
         return {}
 
-    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent"
+    # Allow photo analysis to use stronger models than the global default.
+    research_model = (
+        os.getenv("GEMINI_PHOTO_RESEARCH_MODEL")
+        or os.getenv("GEMINI_RESEARCH_MODEL")
+        or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    )
+    structured_model = (
+        os.getenv("GEMINI_PHOTO_STRUCTURED_MODEL")
+        or os.getenv("GEMINI_PHOTO_MODEL")
+        or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    )
+    research_endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{research_model}:generateContent"
+    structured_endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{structured_model}:generateContent"
+    logger.info(
+        "photo analysis models selected: photo_research_model=%s photo_structured_model=%s",
+        research_model,
+        structured_model,
+    )
+    
+    today_date = datetime.now().strftime("%B %d, %Y")
 
-    parts: list[dict] = [
-        {
-            "text": (
-                "You will receive a batch of photos from a personal memoir app. "
-                "Your goal is to produce the richest, most historically and contextually accurate description possible for each photo — "
-                "as if you are a knowledgeable archivist helping someone understand and remember this moment. \n\n"
-
-                "For each photo provide:\n"
-                "- summary: A vivid, detailed description of 4-7 sentences. Cover the people present (using any provided names), "
-                "the setting, the activity or occasion, and any identifiable objects, vehicles, vessels, aircraft, landmarks, "
-                "signs, or structures visible. When you can confidently identify something specific — a ship class, a named vessel, "
-                "a base, a museum exhibit, a geographic feature, a historical event — name it and provide 1-2 sentences of "
-                "factual background or historical context. If the subject is a notable real-world entity (military ship, spacecraft, "
-                "monument, etc.), actively draw on what you know about it: its designation, history, current status, and why it "
-                "might be significant. Reference the capture date naturally when it adds context (e.g. what was happening at that "
-                "location around that time). Use the person's name if provided — do not refer to them only as 'a man' or 'a person'. "
-                "When uncertain about an identification, say 'likely' or 'possibly' rather than stating it as fact. "
-                "Do not invent names or facts you cannot support from the image or metadata. \n"
-                "- suggested_title: 4-8 words, specific and descriptive, suitable as a short asset label "
-                "(e.g. 'Corey at USS John P. Murtha Stern Ramp'). Prefer specificity over generic labels. \n"
-                "- assessed_place: The most specific named place defensible from the image and metadata "
-                "(base, ship, venue, park, landmark, neighborhood — not just city/state). "
-                "If uncertain but plausible, use cautious phrasing like 'likely Naval Base San Diego'. "
-                "Return empty string only if no specific place can be inferred at all. \n\n"
-
-                "You may receive PHOTO_METADATA lines with EXIF-derived date, GPS coordinates, reverse-geocoded location, "
-                "and camera info. You may also receive a PHOTO_CAPTURED_AT timestamp and a PEOPLE hint listing identified persons. "
-                "Treat all metadata as reliable supporting evidence and reconcile with what you see visually. \n"
-                "Use the exact photo index provided before each image."
-            )
-        }
-    ]
-
+    photo_parts_by_index: dict[int, list[dict]] = {}
     reverse_geocode_by_index: dict[int, str] = {}
 
     for index, payload in enumerate(photo_payloads, start=1):
@@ -1024,13 +1063,55 @@ def extract_text_from_photo_batch(
         reverse_geocode_name = _extract_metadata_field(metadata_hint, "reverse_geocode_location_name")
         if reverse_geocode_name:
             reverse_geocode_by_index[index] = reverse_geocode_name
-        parts.append({"text": f"PHOTO_INDEX={index}; filename={filename}"})
+        photo_parts: list[dict] = [{"text": f"PHOTO_INDEX={index}; filename={filename}"}]
         captured_at_hint = _extract_metadata_field(metadata_hint, "captured_at")
         if captured_at_hint:
-            parts.append({"text": f"PHOTO_CAPTURED_AT={captured_at_hint}"})
+            photo_parts.append({"text": f"PHOTO_CAPTURED_AT={captured_at_hint}"})
+        gps_hint = _extract_metadata_field(metadata_hint, "gps")
+        if gps_hint:
+            photo_parts.append({"text": f"PHOTO_COORDINATES={gps_hint}"})
         if metadata_hint:
-            parts.append({"text": f"PHOTO_METADATA={metadata_hint}"})
-        parts.append(
+            photo_parts.append({"text": f"PHOTO_METADATA={metadata_hint}"})
+        place_guess = reverse_geocode_name or _extract_metadata_field(metadata_hint, "exif_place_name") or "Unknown"
+        date_guess = captured_at_hint or "Unknown"
+        people_guess = _extract_metadata_field(metadata_hint, "people") or "Unknown"
+        event_title = _extract_metadata_field(metadata_hint, "event_title")
+        event_date_text = _extract_metadata_field(metadata_hint, "event_date_text")
+        event_description = _extract_metadata_field(metadata_hint, "event_description")
+        linked_memory_excerpt = _extract_metadata_field(metadata_hint, "linked_memory_excerpt")
+        period_title = _extract_metadata_field(metadata_hint, "period_title")
+
+        context_lines: list[str] = [
+            f"CONTEXT_PLACE={place_guess}",
+            f"CONTEXT_DATE={date_guess}",
+            f"KNOWN_PEOPLE={people_guess}",
+        ]
+        if event_title:
+            context_lines.append(f"LINKED_EVENT_TITLE={event_title}")
+        if event_date_text:
+            context_lines.append(f"LINKED_EVENT_DATE={event_date_text}")
+        if event_description:
+            context_lines.append(f"LINKED_EVENT_DESCRIPTION={event_description}")
+        if period_title:
+            context_lines.append(f"LINKED_PERIOD={period_title}")
+        if linked_memory_excerpt:
+            context_lines.append(f"LINKED_MEMORY={linked_memory_excerpt}")
+
+        if place_guess == "Unknown" and date_guess == "Unknown" and people_guess == "Unknown":
+            context_lines.append(
+                "ANALYSIS_MODE=No metadata available. Infer from visual evidence and research only."
+            )
+        elif event_title or linked_memory_excerpt:
+            context_lines.append(
+                "ANALYSIS_MODE=Use linked event/memory context as strong user-provided evidence unless visual evidence clearly conflicts."
+            )
+        else:
+            context_lines.append(
+                "ANALYSIS_MODE=Use available metadata as hints; validate against visual evidence."
+            )
+
+        photo_parts.append({"text": "\n".join(context_lines)})
+        photo_parts.append(
             {
                 "inline_data": {
                     "mime_type": mime_type,
@@ -1038,6 +1119,83 @@ def extract_text_from_photo_batch(
                 }
             }
         )
+        photo_parts_by_index[index] = photo_parts
+
+    research_notes_by_index: dict[int, str] = {}
+    research_parts: list[dict] = [
+        {
+            "text": (
+                "You are a forensic visual research analyst. For each photo, identify the most specific real-world details visible, "
+                "then use web search to verify and enrich those findings.\n\n"
+                "Prioritize high-value identifiers when present:\n"
+                "- Naval/air/vehicle identifiers (hull numbers, tail numbers, registrations, unit marks)\n"
+                "- Specific hardware/equipment models and likely purpose\n"
+                "- Signs, plaques, logos, uniforms, insignia, and landmarks\n"
+                "- Time/place context: what documented events, missions, games, performances, incidents, or operations were occurring there then\n\n"
+                "When LINKED_EVENT or LINKED_MEMORY context is provided, treat it as strong user-provided context and use it to guide search terms.\n"
+                "Do not return JSON.\n\n"
+                "Return exactly this repeated block format:\n"
+                "PHOTO_INDEX=<index>\n"
+                "RESEARCH_NOTES: 5-12 sentences with concrete findings, grounded hypotheses, and what evidence supports each claim."
+            )
+        }
+    ]
+    for index in sorted(photo_parts_by_index):
+        research_parts.extend(photo_parts_by_index[index])
+
+    research_payload = {
+        "contents": [{"parts": research_parts}],
+        "tools": [
+            {
+                "googleSearch": {
+                    "searchTypes": {
+                        "webSearch": {}
+                    }
+                }
+            }
+        ],
+        "generationConfig": {
+            "temperature": 1.0,
+            "maxOutputTokens": 3000,
+            "responseMimeType": "text/plain",
+        },
+    }
+
+    try:
+        research_response = requests.post(research_endpoint, params={"key": gemini_key}, json=research_payload, timeout=90)
+        if research_response.ok:
+            research_data = research_response.json()
+            research_text_parts = research_data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+            raw_research_text = "\n".join(part.get("text", "").strip() for part in research_text_parts if part.get("text")).strip()
+            if raw_research_text:
+                research_notes_by_index = _parse_photo_research_notes(raw_research_text)
+        else:
+            logger.warning("Gemini photo research pass failed: %s", research_response.text[:300])
+    except Exception as exc:
+        logger.warning("Gemini photo research pass exception: %s", exc)
+
+    parts: list[dict] = [
+        {
+            "text": (
+                "You are a structured distiller for memoir photo analysis. Convert the image evidence and WEB_RESEARCH_NOTES into the required JSON schema. "
+                f"Today's date for context is {today_date}. Use context fields (place/date/people/event/memory) as hints, and preserve concrete identifiers from research notes. "
+                "Do not invent unsupported facts. If metadata and visual/research evidence conflict, explain that in discrepancy_flag.\n\n"
+                "Return JSON fields for each photo:\n"
+                "- suggested_title: 4-8 words, specific and descriptive, and include the most identifiable entity when known.\n"
+                "- assessed_place: the most specific defensible place (prefer specific venue/base/pier/site over city-level labels when supported).\n"
+                "- visual_evidence: 1-2 sentences of observable facts only.\n"
+                "- contextual_narrative: 3-5 sentences integrating strongest IDs, likely scene purpose, and historical/social context relevant to the provided date/place.\n"
+                "- discrepancy_flag: metadata conflicts or competing interpretations; empty string if none.\n\n"
+                "Use the exact photo index provided before each image."
+            )
+        }
+    ]
+    for index in sorted(photo_parts_by_index):
+        note = research_notes_by_index.get(index)
+        for part in photo_parts_by_index[index]:
+            if note and "inline_data" in part:
+                parts.append({"text": f"WEB_RESEARCH_NOTES={note}"})
+            parts.append(part)
 
     payload = {
         "contents": [{"parts": parts}],
@@ -1058,7 +1216,7 @@ def extract_text_from_photo_batch(
                                 },
                                 "summary": {
                                     "type": "string",
-                                    "description": "Rich 4-7 sentence description covering people (by name when known), setting, activity, identifiable objects/vessels/landmarks with historical context where relevant",
+                                    "description": "Legacy fallback summary field; may be empty when contextual_narrative is provided",
                                 },
                                 "suggested_title": {
                                     "type": "string",
@@ -1066,10 +1224,22 @@ def extract_text_from_photo_batch(
                                 },
                                 "assessed_place": {
                                     "type": "string",
-                                    "description": "Best-effort location assessment inferred from visual and metadata clues, or empty string when unknown",
+                                    "description": "Most specific defensible named place, prioritizing PHOTO_COORDINATES when present; empty string only when no specific place can be inferred",
+                                },
+                                "visual_evidence": {
+                                    "type": "string",
+                                    "description": "One or two sentences of strictly observable visual facts, with specific object/equipment identification (not generic shape descriptors) and notable details like colors, text, insignia",
+                                },
+                                "contextual_narrative": {
+                                    "type": "string",
+                                    "description": "Three to five sentences synthesizing people, place, time, and operational context. For each significant object or activity, answer: what is it? why would it be present on this date at this location? What operation or situation does it suggest?",
+                                },
+                                "discrepancy_flag": {
+                                    "type": "string",
+                                    "description": "Metadata conflict note, or empty string when no conflict",
                                 },
                             },
-                            "required": ["index", "summary", "suggested_title", "assessed_place"],
+                            "required": ["index", "suggested_title", "assessed_place", "visual_evidence", "contextual_narrative", "discrepancy_flag"],
                         },
                     }
                 },
@@ -1079,7 +1249,7 @@ def extract_text_from_photo_batch(
     }
 
     try:
-        response = requests.post(endpoint, params={"key": gemini_key}, json=payload, timeout=90)
+        response = requests.post(structured_endpoint, params={"key": gemini_key}, json=payload, timeout=90)
         if not response.ok:
             logger.warning("Gemini photo batch extraction failed: %s", response.text[:300])
             return {}
@@ -1096,16 +1266,21 @@ def extract_text_from_photo_batch(
             if not isinstance(item, dict):
                 continue
             index_value = item.get("index")
-            summary = item.get("summary")
-            if not isinstance(index_value, int) or not isinstance(summary, str):
+            if not isinstance(index_value, int):
                 continue
-            cleaned_summary = summary.strip()
-            if not cleaned_summary:
+            legacy_summary = str(item.get("summary") or "").strip()
+            raw_visual_evidence = str(item.get("visual_evidence") or "").strip()
+            raw_contextual_narrative = str(item.get("contextual_narrative") or "").strip()
+            if not raw_contextual_narrative and legacy_summary:
+                raw_contextual_narrative = legacy_summary
+            if not raw_contextual_narrative and not raw_visual_evidence:
                 continue
             raw_title = str(item.get("suggested_title") or "").strip()
             suggested_title: Optional[str] = raw_title[:180] if raw_title else None
             raw_assessed_place = str(item.get("assessed_place") or "").strip()
             assessed_place: Optional[str] = raw_assessed_place[:200] if raw_assessed_place else None
+            raw_discrepancy_flag = str(item.get("discrepancy_flag") or "").strip()
+            discrepancy_flag: Optional[str] = raw_discrepancy_flag[:300] if raw_discrepancy_flag else None
             reverse_geocode_name = reverse_geocode_by_index.get(index_value)
             # Avoid storing a duplicate city/state/country as "assessed place" when Gemini echoes reverse geocode output.
             if (
@@ -1115,9 +1290,12 @@ def extract_text_from_photo_batch(
             ):
                 assessed_place = None
             result[index_value] = PhotoSummary(
-                summary=cleaned_summary[:1200],
+                summary=raw_contextual_narrative[:1200],
                 suggested_title=suggested_title,
                 assessed_place=assessed_place,
+                visual_evidence=raw_visual_evidence[:500] or None,
+                contextual_narrative=raw_contextual_narrative[:1200] or None,
+                discrepancy_flag=discrepancy_flag,
             )
         return result
     except Exception as exc:
