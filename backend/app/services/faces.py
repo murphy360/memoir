@@ -2,6 +2,11 @@
 
 Detection is CompreFace-only. Legacy OpenCV Haar cascade detection has been
 removed from the runtime path.
+
+Face Enrollment Workflow:
+  When an unknown face (compreface_subject is None) is manually assigned to a person for the first time,
+  the face is automatically enrolled into a new CompreFace subject. This enables future automatic
+  recognition of that person's face pattern. Subject names are kept in sync when people are renamed.
 """
 
 from dataclasses import dataclass
@@ -19,11 +24,6 @@ from app.models import Asset, AssetFace, EventAsset, Person, PersonAlias
 from app.services.periods import normalize_directory_name
 
 
-MIN_FACE_SIZE_PX = 48
-MIN_FACE_AREA_RATIO = 0.004
-MAX_FACE_AREA_RATIO = 0.45
-MIN_FACE_ASPECT_RATIO = 0.62
-MAX_FACE_ASPECT_RATIO = 1.6
 COMPREFACE_API_KEY = (os.getenv("COMPREFACE_API_KEY") or "").strip()
 COMPREFACE_BASE_URL = (os.getenv("COMPREFACE_BASE_URL") or "http://compreface-api:8080").strip().rstrip("/")
 COMPREFACE_TIMEOUT_SECONDS = float(os.getenv("COMPREFACE_TIMEOUT_SECONDS", "6.0"))
@@ -71,7 +71,8 @@ def detect_faces_from_image(image_bytes: bytes) -> list[FaceDetection]:
         width=width,
         height=height,
     )
-    return _dedupe_overlapping_faces(compreface_faces)
+    deduped = _dedupe_overlapping_faces(compreface_faces)
+    return _dedupe_subject_matches(deduped)
 
 
 def _detect_faces_with_compreface(*, image_bytes: bytes, width: int, height: int) -> list[FaceDetection]:
@@ -85,8 +86,10 @@ def _detect_faces_with_compreface(*, image_bytes: bytes, width: int, height: int
             f"{COMPREFACE_BASE_URL}/api/v1/recognition/recognize",
             headers={"x-api-key": COMPREFACE_API_KEY},
             params={
-                # Keep at least one match so recognized subjects are returned.
-                "limit": max(1, COMPREFACE_PREDICTION_COUNT),
+                # limit = max faces returned per image (not subject matches per face).
+                # Set high so large group photos are fully detected.
+                "limit": 50,
+                # prediction_count = max subject candidates returned per detected face.
                 "prediction_count": max(1, COMPREFACE_PREDICTION_COUNT),
                 "det_prob_threshold": COMPREFACE_DET_PROB_THRESHOLD,
                 **({"face_plugins": COMPREFACE_FACE_PLUGINS} if COMPREFACE_FACE_PLUGINS else {}),
@@ -133,13 +136,6 @@ def _detect_faces_with_compreface(*, image_bytes: bytes, width: int, height: int
             continue
 
         if w <= 0.0 or h <= 0.0:
-            continue
-
-        area_ratio = (w * h) / float(width * height)
-        aspect_ratio = w / h
-        if area_ratio < MIN_FACE_AREA_RATIO or area_ratio > MAX_FACE_AREA_RATIO:
-            continue
-        if aspect_ratio < MIN_FACE_ASPECT_RATIO or aspect_ratio > MAX_FACE_ASPECT_RATIO:
             continue
 
         probability = box.get("probability")
@@ -242,6 +238,59 @@ def _dedupe_overlapping_faces(faces: list[FaceDetection]) -> list[FaceDetection]
     return kept
 
 
+def _dedupe_subject_matches(faces: list[FaceDetection]) -> list[FaceDetection]:
+    """For each recognized subject, keep only the highest-similarity match.
+
+    If the same subject appears multiple times (e.g. a group photo where one
+    person's face is detected in two positions), only the best match keeps the
+    subject label. All lower-confidence duplicates are cleared to unknown so
+    they surface in the unrecognized-faces inbox rather than creating false
+    assignments.
+    """
+    # Find the highest similarity seen for each subject
+    best_similarity: dict[str, float] = {}
+    for face in faces:
+        if face.compreface_subject and face.compreface_similarity is not None:
+            current_best = best_similarity.get(face.compreface_subject)
+            if current_best is None or face.compreface_similarity > current_best:
+                best_similarity[face.compreface_subject] = face.compreface_similarity
+
+    # Track which subjects have already claimed their best slot
+    claimed: set[str] = set()
+    result: list[FaceDetection] = []
+    for face in faces:
+        subject = face.compreface_subject
+        if not subject:
+            # Unknown face — keep as-is
+            result.append(face)
+        elif (
+            face.compreface_similarity is not None
+            and face.compreface_similarity == best_similarity.get(subject)
+            and subject not in claimed
+        ):
+            # Best match for this subject — keep it and claim the slot
+            claimed.add(subject)
+            result.append(face)
+        else:
+            # Non-best or duplicate match — downgrade to unknown
+            result.append(
+                FaceDetection(
+                    bbox_x=face.bbox_x,
+                    bbox_y=face.bbox_y,
+                    bbox_w=face.bbox_w,
+                    bbox_h=face.bbox_h,
+                    confidence=face.confidence,
+                    compreface_subject=None,
+                    compreface_similarity=None,
+                    compreface_gender=face.compreface_gender,
+                    compreface_age_low=face.compreface_age_low,
+                    compreface_age_high=face.compreface_age_high,
+                    compreface_raw=face.compreface_raw,
+                )
+            )
+    return result
+
+
 def _resolve_person_id_for_subject(db: Session, subject: Optional[str]) -> Optional[int]:
     """Resolve a CompreFace subject string to exactly one existing Person id.
 
@@ -319,8 +368,93 @@ def list_faces_for_event(db: Session, event_id: int) -> list[AssetFace]:
     )
 
 
+def create_compreface_subject(name: str) -> Optional[str]:
+    """Create a new subject (person) in CompreFace and return the subject UUID.
+    
+    Returns None on error or if CompreFace is not configured.
+    Raises requests.RequestException on API errors.
+    """
+    if not COMPREFACE_API_KEY or not COMPREFACE_BASE_URL:
+        logger.warning("CompreFace not configured; cannot create subject.")
+        return None
+
+    try:
+        response = requests.post(
+            f"{COMPREFACE_BASE_URL}/api/v1/recognition/subjects",
+            headers={"x-api-key": COMPREFACE_API_KEY},
+            json={"subject": name},
+            timeout=COMPREFACE_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        subject_id = payload.get("subject_id")
+        if isinstance(subject_id, str) and subject_id:
+            logger.info("Created CompreFace subject %s for %s", subject_id, name)
+            return subject_id
+        logger.warning("CompreFace subject creation returned no subject_id: %s", payload)
+        return None
+    except requests.RequestException as exc:
+        logger.error("CompreFace subject creation failed: %s", exc)
+        raise
+
+
+def enroll_face_in_compreface_subject(subject_id: str, face_image_bytes: bytes) -> bool:
+    """Add a face sample to a CompreFace subject for enrollment.
+    
+    Returns True on success, False on error or if CompreFace is not configured.
+    Raises requests.RequestException on API errors.
+    """
+    if not COMPREFACE_API_KEY or not COMPREFACE_BASE_URL:
+        logger.warning("CompreFace not configured; cannot enroll face.")
+        return False
+
+    try:
+        response = requests.post(
+            f"{COMPREFACE_BASE_URL}/api/v1/recognition/faces",
+            headers={"x-api-key": COMPREFACE_API_KEY},
+            params={"subject_id": subject_id},
+            files={"file": ("face.jpg", face_image_bytes, "image/jpeg")},
+            timeout=COMPREFACE_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        logger.info("Enrolled face into CompreFace subject %s", subject_id)
+        return True
+    except requests.RequestException as exc:
+        logger.error("CompreFace face enrollment failed: %s", exc)
+        raise
+
+
+def rename_compreface_subject(subject_id: str, new_name: str) -> bool:
+    """Rename a CompreFace subject.
+    
+    Returns True on success, False on error or if CompreFace is not configured.
+    Raises requests.RequestException on API errors.
+    """
+    if not COMPREFACE_API_KEY or not COMPREFACE_BASE_URL:
+        logger.warning("CompreFace not configured; cannot rename subject.")
+        return False
+
+    try:
+        response = requests.put(
+            f"{COMPREFACE_BASE_URL}/api/v1/recognition/subjects/{subject_id}",
+            headers={"x-api-key": COMPREFACE_API_KEY},
+            json={"subject": new_name},
+            timeout=COMPREFACE_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        logger.info("Renamed CompreFace subject %s to %s", subject_id, new_name)
+        return True
+    except requests.RequestException as exc:
+        logger.error("CompreFace subject rename failed: %s", exc)
+        raise
+
+
 def assign_face_to_person(db: Session, face_id: int, person_id: Optional[int]) -> AssetFace:
-    """Assign a detected face to a person, or clear assignment with null."""
+    """Assign a detected face to a person, or clear assignment with null.
+    
+    When assigning an unknown face (compreface_subject is None) to a person for the first time,
+    automatically creates and enrolls the face in a CompreFace subject.
+    """
     face = db.get(AssetFace, face_id)
     if face is None:
         raise ValueError("face_not_found")
@@ -332,6 +466,31 @@ def assign_face_to_person(db: Session, face_id: int, person_id: Optional[int]) -
     person = db.get(Person, person_id)
     if person is None:
         raise ValueError("person_not_found")
+
+    # Auto-enroll unknown face to CompreFace if this is first assignment
+    if (
+        not face.compreface_subject
+        and face.asset
+        and face.asset.storage_filename
+        and not person.compreface_subject_id
+    ):
+        try:
+            from pathlib import Path
+            from app.main import DOCUMENT_STORAGE_DIR
+            
+            file_path = DOCUMENT_STORAGE_DIR / face.asset.storage_filename
+            if file_path.exists():
+                image_bytes = file_path.read_bytes()
+                # Create new CompreFace subject
+                subject_id = create_compreface_subject(person.name)
+                if subject_id:
+                    person.compreface_subject_id = subject_id
+                    # Enroll the face
+                    if enroll_face_in_compreface_subject(subject_id, image_bytes):
+                        logger.info("Auto-enrolled face for person %s (id=%s) to CompreFace subject %s", 
+                                   person.name, person.id, subject_id)
+        except Exception as exc:
+            logger.warning("Face auto-enrollment to CompreFace failed; continuing without enrollment: %s", exc)
 
     face.person_id = person.id
     return face

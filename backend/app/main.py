@@ -1345,6 +1345,15 @@ def rename_person(
             raise HTTPException(status_code=409, detail="Person name already exists")
 
     person.name = name
+    
+    # Sync CompreFace subject name if this person has one
+    if person.compreface_subject_id:
+        from app.services.faces import rename_compreface_subject
+        try:
+            rename_compreface_subject(person.compreface_subject_id, name)
+        except Exception as exc:
+            logger.warning("Failed to rename CompreFace subject %s: %s", person.compreface_subject_id, exc)
+    
     for memory in db.query(MemoryEntry).all():
         if memory.recorder_person_id == person.id:
             memory.recorder_name = person.name

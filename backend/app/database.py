@@ -73,6 +73,14 @@ def ensure_schema_migrations() -> None:
             )
         """))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_people_name ON people (name)"))
+        
+        # Migrate people table for new columns
+        people_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(people)")).fetchall()
+        }
+        if "compreface_subject_id" not in people_columns:
+            connection.execute(text("ALTER TABLE people ADD COLUMN compreface_subject_id VARCHAR(255)"))
 
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS places (
