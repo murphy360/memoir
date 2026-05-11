@@ -332,6 +332,23 @@ class Asset(Base):
         return f"/api/assets/{self.id}/download"
 
 
+class UnknownFaceGroup(Base):
+    __tablename__ = "unknown_face_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    # Fingerprint derived from normalized face crops; used as a deterministic grouping key.
+    fingerprint: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    representative_face_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    faces: Mapped[list["AssetFace"]] = relationship(
+        back_populates="unknown_face_group",
+        foreign_keys="AssetFace.unknown_face_group_id",
+    )
+
+
 class AssetFace(Base):
     __tablename__ = "asset_faces"
 
@@ -353,12 +370,20 @@ class AssetFace(Base):
     compreface_age_high: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Raw CompreFace result object for debugging and UI inspection of all metadata.
     compreface_raw_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Deterministic hash of a normalized face crop used for unknown-face grouping.
+    face_fingerprint: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+    # Null when this face is assigned to a person or when no grouping key is available.
+    unknown_face_group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("unknown_face_groups.id", ondelete="SET NULL"), nullable=True, index=True)
     # person_id stays null until a user manually assigns the detected face.
     person_id: Mapped[Optional[int]] = mapped_column(ForeignKey("people.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     asset: Mapped["Asset"] = relationship(back_populates="faces")
     person: Mapped[Optional["Person"]] = relationship(back_populates="tagged_faces")
+    unknown_face_group: Mapped[Optional["UnknownFaceGroup"]] = relationship(
+        back_populates="faces",
+        foreign_keys=[unknown_face_group_id],
+    )
 
     @property
     def compreface_raw(self) -> Optional[dict[str, Any]]:

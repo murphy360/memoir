@@ -309,6 +309,46 @@ class AssignFacePersonRequest(BaseModel):
     person_id: Optional[int] = Field(default=None, description="Person id to assign, or null to clear assignment.")
 
 
+class RenameFaceSubjectRequest(BaseModel):
+    new_subject_name: str = Field(description="New CompreFace subject display name to apply.")
+
+
+class UnknownFaceGroupMemberResponse(BaseModel):
+    face_id: int = Field(description="Detected face row id belonging to this unknown group.")
+    asset_id: int = Field(description="Source photo asset id for this detected face.")
+    asset_download_url: str = Field(description="Download URL for the source photo asset.")
+    bbox_x: float = Field(description="Left coordinate normalized to [0, 1] of image width.")
+    bbox_y: float = Field(description="Top coordinate normalized to [0, 1] of image height.")
+    bbox_w: float = Field(description="Box width normalized to [0, 1] of image width.")
+    bbox_h: float = Field(description="Box height normalized to [0, 1] of image height.")
+    confidence: Optional[float] = Field(default=None, description="Detector confidence when available.")
+
+
+class UnknownFaceGroupResponse(BaseModel):
+    group_id: int = Field(description="Unknown face group id.")
+    fingerprint: str = Field(description="Deterministic grouping fingerprint shared by unknown faces in this group.")
+    status: str = Field(description="Group lifecycle status such as open, ignored, or resolved.")
+    representative_face_id: Optional[int] = Field(default=None, description="One face id selected as this group's representative sample.")
+    face_count: int = Field(description="How many face rows currently belong to this group.")
+    members: list[UnknownFaceGroupMemberResponse] = Field(default_factory=list, description="Face members for rapid review and assignment.")
+
+
+class AssignUnknownFaceGroupRequest(BaseModel):
+    person_id: int = Field(description="Existing person id to assign to all faces in this unknown group.")
+
+
+class CreatePersonFromUnknownFaceGroupRequest(BaseModel):
+    name: str = Field(description="New person display name created from this unknown group.")
+
+
+class MergeUnknownFaceGroupRequest(BaseModel):
+    into_group_id: int = Field(description="Target unknown group id that will receive all faces from the source group.")
+
+
+class SplitUnknownFaceGroupRequest(BaseModel):
+    face_ids: list[int] = Field(default_factory=list, description="Face ids to move from the source group into a newly created group.")
+
+
 class QuestionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

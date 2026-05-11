@@ -143,6 +143,18 @@ export async function assignFacePerson(faceId: number, personId: number | null):
   return response.json();
 }
 
+/** Rename a detected face's CompreFace subject via POST /api/faces/{face_id}/rename-subject. */
+export async function renameFaceSubject(faceId: number, newSubjectName: string): Promise<EventFaceEntry> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/faces/${faceId}/rename-subject`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ new_subject_name: newSubjectName }),
+  });
+
+  await expectOk(response, "Failed to rename CompreFace subject");
+  return response.json();
+}
+
 /** Permanently delete a detected face record via DELETE /api/faces/{face_id}. */
 export async function deleteFace(faceId: number): Promise<void> {
   const response = await fetch(toAbsoluteApiUrl(`/api/faces/${faceId}`), { method: "DELETE" });
@@ -583,6 +595,17 @@ export async function createDirectoryEntry(kind: "people" | "places", name: stri
     body: JSON.stringify({ name }),
   });
   await expectOk(response, "Create failed");
+}
+
+/** Create one person via POST /api/people and return the created directory entry. */
+export async function createPersonEntry(name: string): Promise<DirectoryEntry> {
+  const response = await fetch(toAbsoluteApiUrl("/api/people"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  await expectOk(response, "Create person failed");
+  return response.json();
 }
 
 export async function renameDirectoryEntry(

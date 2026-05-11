@@ -30,6 +30,7 @@ type EventAssetListProps = {
   deleteAsset: (assetId: number, eventId?: number) => Promise<void>;
   eventId?: number;
   eventFaces?: EventFaceEntry[];
+  renameFaceSubject?: (faceId: number, newSubjectName: string, eventId: number) => Promise<void>;
   processPhotoAsset?: (assetId: number, eventId: number) => Promise<void>;
   processingPhotoAssetId?: number | null;
   recordingForAssetId?: number | null;
@@ -278,6 +279,7 @@ export function EventAssetList({
   deleteAsset,
   eventId,
   eventFaces = [],
+  renameFaceSubject,
   processPhotoAsset,
   processingPhotoAssetId = null,
   recordingForAssetId = null,
@@ -309,6 +311,9 @@ export function EventAssetList({
   const [assetEpicTargets, setAssetEpicTargets] = useState<Record<number, string>>({});
   const [newEpicTitleByAssetId, setNewEpicTitleByAssetId] = useState<Record<number, string>>({});
   const [newEventTitleByAssetId, setNewEventTitleByAssetId] = useState<Record<number, string>>({});
+  const [editingFaceSubjectId, setEditingFaceSubjectId] = useState<number | null>(null);
+  const [editingFaceSubjectValue, setEditingFaceSubjectValue] = useState("");
+  const [renamingFaceSubjectId, setRenamingFaceSubjectId] = useState<number | null>(null);
 
   const galleryAssets = useMemo(
     () => assets.filter((asset) => isImageAsset(asset) || isAudioAsset(asset) || isDocumentAsset(asset)),
@@ -346,6 +351,37 @@ export function EventAssetList({
     setModalEditingTitleValue("");
     setModalEditingNotesId(null);
     setModalEditingNotesValue("");
+    setEditingFaceSubjectId(null);
+    setEditingFaceSubjectValue("");
+    setRenamingFaceSubjectId(null);
+  };
+
+  const beginFaceSubjectEdit = (face: EventFaceEntry) => {
+    setEditingFaceSubjectId(face.id);
+    setEditingFaceSubjectValue(face.compreface_subject || "");
+  };
+
+  const cancelFaceSubjectEdit = () => {
+    setEditingFaceSubjectId(null);
+    setEditingFaceSubjectValue("");
+  };
+
+  const saveFaceSubjectEdit = async (faceId: number) => {
+    if (!renameFaceSubject || eventId === undefined) {
+      return;
+    }
+    const normalized = editingFaceSubjectValue.trim();
+    if (!normalized) {
+      return;
+    }
+    setRenamingFaceSubjectId(faceId);
+    try {
+      await renameFaceSubject(faceId, normalized, eventId);
+      setEditingFaceSubjectId(null);
+      setEditingFaceSubjectValue("");
+    } finally {
+      setRenamingFaceSubjectId(null);
+    }
   };
 
   const canProcessPreviewPhoto = Boolean(
@@ -584,11 +620,65 @@ export function EventAssetList({
                     const ageText = face.compreface_age_low !== null && face.compreface_age_high !== null
                       ? `${face.compreface_age_low}-${face.compreface_age_high}`
                       : "n/a";
+                    const canEditSubject = Boolean(renameFaceSubject && eventId !== undefined && face.compreface_subject);
+                    const isEditingSubject = editingFaceSubjectId === face.id;
+                    const isSavingSubject = renamingFaceSubjectId === face.id;
                     return (
                       <article key={`meta-${face.id}`} className="assetPreviewFaceMetaCard">
                         <h4>Face {index + 1}</h4>
                         <p className="meta"><strong>Assigned Person:</strong> {face.person_name || "n/a"}</p>
-                        <p className="meta"><strong>CompreFace Subject:</strong> {face.compreface_subject || "n/a"}</p>
+                        {isEditingSubject ? (
+                          <div className="controls" style={{ marginBottom: "0.45rem" }}>
+                            <label className="meta" style={{ display: "block", marginBottom: "0.25rem" }}>
+                              <strong>CompreFace Subject</strong>
+                            </label>
+                            <input
+                              className="directoryInput"
+                              type="text"
+                              value={editingFaceSubjectValue}
+                              autoFocus
+                              onChange={(e) => setEditingFaceSubjectValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  void saveFaceSubjectEdit(face.id);
+                                }
+                                if (e.key === "Escape") {
+                                  cancelFaceSubjectEdit();
+                                }
+                              }}
+                              disabled={isSavingSubject}
+                            />
+                            <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.35rem" }}>
+                              <button
+                                className="primary"
+                                type="button"
+                                onClick={() => void saveFaceSubjectEdit(face.id)}
+                                disabled={isSavingSubject || !editingFaceSubjectValue.trim()}
+                              >
+                                Save
+                              </button>
+                              <button className="secondary" type="button" onClick={cancelFaceSubjectEdit} disabled={isSavingSubject}>
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ marginBottom: "0.35rem" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "center" }}>
+                              <p className="meta" style={{ margin: 0 }}><strong>CompreFace Subject:</strong> {face.compreface_subject || "n/a"}</p>
+                              {canEditSubject && (
+                                <button
+                                  className="secondary"
+                                  type="button"
+                                  style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
+                                  onClick={() => beginFaceSubjectEdit(face)}
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         <p className="meta"><strong>Similarity:</strong> {formatSimilarityPercent(face.compreface_similarity)}</p>
                         <p className="meta"><strong>Gender:</strong> {face.compreface_gender || "n/a"}</p>
                         <p className="meta"><strong>Age Range:</strong> {ageText}</p>

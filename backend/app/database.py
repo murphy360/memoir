@@ -341,6 +341,20 @@ def ensure_schema_migrations() -> None:
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_event_assets_asset_id ON event_assets (asset_id)"))
 
         connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS unknown_face_groups (
+                id INTEGER PRIMARY KEY,
+                fingerprint VARCHAR(32) NOT NULL UNIQUE,
+                representative_face_id INTEGER,
+                status VARCHAR(20) NOT NULL DEFAULT 'open',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (representative_face_id) REFERENCES asset_faces(id) ON DELETE SET NULL
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_unknown_face_groups_fingerprint ON unknown_face_groups (fingerprint)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_unknown_face_groups_status ON unknown_face_groups (status)"))
+
+        connection.execute(text("""
             CREATE TABLE IF NOT EXISTS asset_faces (
                 id INTEGER PRIMARY KEY,
                 asset_id INTEGER NOT NULL,
@@ -377,8 +391,14 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE asset_faces ADD COLUMN compreface_age_high INTEGER"))
         if "compreface_raw_json" not in asset_face_columns:
             connection.execute(text("ALTER TABLE asset_faces ADD COLUMN compreface_raw_json TEXT"))
+        if "face_fingerprint" not in asset_face_columns:
+            connection.execute(text("ALTER TABLE asset_faces ADD COLUMN face_fingerprint VARCHAR(32)"))
+        if "unknown_face_group_id" not in asset_face_columns:
+            connection.execute(text("ALTER TABLE asset_faces ADD COLUMN unknown_face_group_id INTEGER"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_asset_faces_asset_id ON asset_faces (asset_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_asset_faces_person_id ON asset_faces (person_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_asset_faces_face_fingerprint ON asset_faces (face_fingerprint)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_asset_faces_unknown_face_group_id ON asset_faces (unknown_face_group_id)"))
 
         # Ensure questions table has source_memory_id and answer_memory_id columns
         q_columns = {

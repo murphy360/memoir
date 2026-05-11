@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine, ensure_schema_migrations, get_db
-from app.models import Asset, AssetFace, Base, EventAsset, LifeEpic, LifeEvent, LifePeriod, LifeThread, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place, Question, Setting
+from app.models import Asset, AssetFace, Base, EventAsset, LifeEpic, LifeEvent, LifePeriod, LifeThread, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place, Question, Setting, UnknownFaceGroup
 from app.schemas import (
     AnalyzeLifePeriodRequest,
     AssetResponse,
@@ -35,10 +35,12 @@ from app.schemas import (
     LifePeriodResponse,
     LifeThreadResponse,
     MergeLifeEventRequest,
+    MergeUnknownFaceGroupRequest,
     LinkAssetToEventRequest,
     MemoryResponse,
     MergePersonRequest,
     QuestionResponse,
+    RenameFaceSubjectRequest,
     UpdateLifeEpicRequest,
     UpdateAssetRequest,
     UpdateLifeEventRequest,
@@ -47,10 +49,14 @@ from app.schemas import (
     MergePeriodsRequest,
     SettingsResponse,
     SplitPersonRequest,
+    SplitUnknownFaceGroupRequest,
+    UnknownFaceGroupResponse,
     UpdateDirectoryEntryRequest,
     UpdateMemoryRequest,
     UpdateMemoryRecorderRequest,
     UpdateSettingRequest,
+    AssignUnknownFaceGroupRequest,
+    CreatePersonFromUnknownFaceGroupRequest,
 )
 from app.services.audio_storage import save_audio_file
 from app.services.document_storage import save_document_file
@@ -62,7 +68,15 @@ from app.services.gemini_client import (
 from app.services.gemini_client import extract_text_from_document
 from app.services.image_metadata import compress_photo_for_storage, extract_and_apply_image_metadata
 from app.services.geocoding import backfill_asset_location_names
-from app.services.faces import assign_face_to_person, list_faces_for_event, sync_asset_faces_for_photo
+from app.services.faces import assign_face_to_person, list_faces_for_event, rename_face_subject, sync_asset_faces_for_photo
+from app.services.unknown_face_groups import (
+    assign_unknown_group_to_person,
+    reconcile_unknown_face_groups_for_asset,
+    create_person_from_unknown_group,
+    list_unknown_face_groups_for_event,
+    merge_unknown_face_groups,
+    split_unknown_face_group,
+)
 from app.services.directory import (
     assign_recorder_person,
     build_directory_response,
@@ -746,6 +760,39 @@ def _build_event_face_response(face: AssetFace) -> EventFaceResponse:
     )
 
 
+def _build_unknown_face_group_response(db: Session, group_id: int) -> UnknownFaceGroupResponse:
+    group = db.get(UnknownFaceGroup, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Unknown face group not found")
+
+    face_rows = (
+        db.query(AssetFace)
+        .filter(AssetFace.unknown_face_group_id == group_id)
+        .order_by(AssetFace.id.asc())
+        .all()
+    )
+    return UnknownFaceGroupResponse(
+        group_id=group_id,
+        fingerprint=group.fingerprint,
+        status=group.status,
+        representative_face_id=group.representative_face_id,
+        face_count=len(face_rows),
+        members=[
+            {
+                "face_id": face.id,
+                "asset_id": face.asset_id,
+                "asset_download_url": face.asset.download_url if face.asset else "",
+                "bbox_x": face.bbox_x,
+                "bbox_y": face.bbox_y,
+                "bbox_w": face.bbox_w,
+                "bbox_h": face.bbox_h,
+                "confidence": face.confidence,
+            }
+            for face in face_rows
+        ],
+    )
+
+
 @app.get("/api/events/{event_id}/faces", response_model=list[EventFaceResponse])
 def list_event_faces(event_id: int, db: Session = Depends(get_db)) -> list[EventFaceResponse]:
     event = db.get(LifeEvent, event_id)
@@ -754,6 +801,92 @@ def list_event_faces(event_id: int, db: Session = Depends(get_db)) -> list[Event
 
     faces = list_faces_for_event(db, event_id)
     return [_build_event_face_response(face) for face in faces if face.asset]
+
+
+@app.get("/api/events/{event_id}/unknown-face-groups", response_model=list[UnknownFaceGroupResponse])
+def list_event_unknown_face_groups(event_id: int, db: Session = Depends(get_db)) -> list[UnknownFaceGroupResponse]:
+    event = db.get(LifeEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    return [
+        UnknownFaceGroupResponse(**payload)
+        for payload in list_unknown_face_groups_for_event(db, event_id)
+    ]
+
+
+@app.post("/api/unknown-face-groups/{group_id}/assign-person", response_model=UnknownFaceGroupResponse)
+def assign_unknown_face_group(
+    group_id: int,
+    body: AssignUnknownFaceGroupRequest,
+    db: Session = Depends(get_db),
+) -> UnknownFaceGroupResponse:
+    try:
+        assign_unknown_group_to_person(db, group_id, body.person_id)
+    except ValueError as exc:
+        if str(exc) == "group_not_found":
+            raise HTTPException(status_code=404, detail="Unknown face group not found") from exc
+        if str(exc) == "person_not_found":
+            raise HTTPException(status_code=404, detail="Person not found") from exc
+        raise HTTPException(status_code=400, detail="Could not assign unknown face group") from exc
+
+    db.commit()
+    return _build_unknown_face_group_response(db, group_id)
+
+
+@app.post("/api/unknown-face-groups/{group_id}/create-person", response_model=DirectoryEntryResponse)
+def create_person_from_unknown_group_route(
+    group_id: int,
+    body: CreatePersonFromUnknownFaceGroupRequest,
+    db: Session = Depends(get_db),
+) -> DirectoryEntryResponse:
+    try:
+        _, person = create_person_from_unknown_group(db, group_id, body.name)
+    except ValueError as exc:
+        if str(exc) == "group_not_found":
+            raise HTTPException(status_code=404, detail="Unknown face group not found") from exc
+        raise HTTPException(status_code=400, detail="Could not create person from unknown face group") from exc
+
+    db.commit()
+    return build_directory_response(person.name, person.id, 0)
+
+
+@app.post("/api/unknown-face-groups/{group_id}/merge", response_model=UnknownFaceGroupResponse)
+def merge_unknown_face_group_route(
+    group_id: int,
+    body: MergeUnknownFaceGroupRequest,
+    db: Session = Depends(get_db),
+) -> UnknownFaceGroupResponse:
+    try:
+        target = merge_unknown_face_groups(db, group_id, body.into_group_id)
+    except ValueError as exc:
+        if str(exc) == "group_not_found":
+            raise HTTPException(status_code=404, detail="Unknown face group not found") from exc
+        if str(exc) == "cannot_merge_same_group":
+            raise HTTPException(status_code=400, detail="Cannot merge a group into itself") from exc
+        raise HTTPException(status_code=400, detail="Could not merge unknown face groups") from exc
+
+    db.commit()
+    return _build_unknown_face_group_response(db, target.id)
+
+
+@app.post("/api/unknown-face-groups/{group_id}/split", response_model=UnknownFaceGroupResponse)
+def split_unknown_face_group_route(
+    group_id: int,
+    body: SplitUnknownFaceGroupRequest,
+    db: Session = Depends(get_db),
+) -> UnknownFaceGroupResponse:
+    try:
+        split_group = split_unknown_face_group(db, group_id, body.face_ids)
+    except ValueError as exc:
+        if str(exc) == "group_not_found":
+            raise HTTPException(status_code=404, detail="Unknown face group not found") from exc
+        if str(exc) == "no_faces_selected":
+            raise HTTPException(status_code=400, detail="No faces selected to split") from exc
+        raise HTTPException(status_code=400, detail="Could not split unknown face group") from exc
+
+    db.commit()
+    return _build_unknown_face_group_response(db, split_group.id)
 
 
 @app.post("/api/faces/{face_id}/assign-person", response_model=EventFaceResponse)
@@ -776,12 +909,42 @@ def assign_event_face_person(
     return _build_event_face_response(face)
 
 
+@app.post("/api/faces/{face_id}/rename-subject", response_model=EventFaceResponse)
+def rename_event_face_subject(
+    face_id: int,
+    body: RenameFaceSubjectRequest,
+    db: Session = Depends(get_db),
+) -> EventFaceResponse:
+    try:
+        face = rename_face_subject(db, face_id, body.new_subject_name)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "face_not_found":
+            raise HTTPException(status_code=404, detail="Face not found") from exc
+        if code == "face_has_no_subject":
+            raise HTTPException(status_code=400, detail="Face has no CompreFace subject") from exc
+        if code == "subject_name_required":
+            raise HTTPException(status_code=400, detail="New subject name is required") from exc
+        if code == "subject_name_too_long":
+            raise HTTPException(status_code=400, detail="New subject name is too long") from exc
+        if code == "compreface_rename_failed":
+            raise HTTPException(status_code=502, detail="Failed to rename CompreFace subject in upstream service") from exc
+        raise HTTPException(status_code=400, detail="Could not rename CompreFace subject") from exc
+
+    db.commit()
+    db.refresh(face)
+    return _build_event_face_response(face)
+
+
 @app.delete("/api/faces/{face_id}", status_code=204)
 def delete_event_face(face_id: int, db: Session = Depends(get_db)) -> None:
     face = db.get(AssetFace, face_id)
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
+    asset_id = face.asset_id
     db.delete(face)
+    db.flush()
+    reconcile_unknown_face_groups_for_asset(db, asset_id)
     db.commit()
 
 

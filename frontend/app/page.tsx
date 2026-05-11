@@ -28,6 +28,8 @@ import {
   dismissQuestionById,
   dismissResearchSuggestionById,
   assignFacePerson,
+  createPersonEntry,
+  renameFaceSubject,
   deleteFace,
   fetchEventAssets,
   fetchEventFaces,
@@ -356,15 +358,28 @@ export default function HomePage() {
     }
   }
 
-  async function assignFaceToPerson(faceId: number, personId: number | null, eventId: number) {
+  async function assignFaceToPerson(
+    faceId: number,
+    personId: number | null,
+    eventId: number,
+    options?: { promoteUnknownSubject?: boolean },
+  ) {
     setAssigningFaceId(faceId);
-    setStatus(personId === null ? "Clearing face assignment..." : "Saving face assignment...");
+    setStatus(personId === null
+      ? "Clearing face assignment..."
+      : (options?.promoteUnknownSubject
+        ? "Saving face assignment and promoting unknown CompreFace subject..."
+        : "Saving face assignment..."));
     try {
       await assignFacePerson(faceId, personId);
       if (activeEventId === eventId) {
         await loadAssetsForEvent(eventId);
       }
-      setStatus(personId === null ? "Face assignment cleared." : "Face assignment saved.");
+      setStatus(personId === null
+        ? "Face assignment cleared."
+        : (options?.promoteUnknownSubject
+          ? "Face assignment saved. Unknown CompreFace subject promoted to the selected person name."
+          : "Face assignment saved."));
     } catch {
       setStatus("Failed to update face assignment.");
     } finally {
@@ -382,6 +397,44 @@ export default function HomePage() {
       setStatus("Face discarded.");
     } catch {
       setStatus("Failed to discard face.");
+    }
+  }
+
+  async function renameFaceComprefaceSubject(faceId: number, newSubjectName: string, eventId: number) {
+    setStatus("Renaming CompreFace subject...");
+    try {
+      await renameFaceSubject(faceId, newSubjectName);
+      if (activeEventId === eventId) {
+        await loadAssetsForEvent(eventId);
+      }
+      setStatus("CompreFace subject renamed.");
+    } catch {
+      setStatus("Failed to rename CompreFace subject.");
+      throw new Error("rename_compreface_subject_failed");
+    }
+  }
+
+  async function createAndAssignFacePerson(faceId: number, name: string, eventId: number) {
+    const normalized = name.trim();
+    if (!normalized) {
+      return;
+    }
+
+    setAssigningFaceId(faceId);
+    setStatus("Adding person and assigning face...");
+    try {
+      const person = await createPersonEntry(normalized);
+      await assignFacePerson(faceId, person.id);
+      await loadTimeline();
+      if (activeEventId === eventId) {
+        await loadAssetsForEvent(eventId);
+      }
+      setStatus("Person added and face assigned.");
+    } catch {
+      setStatus("Failed to add person and assign face.");
+      throw new Error("create_and_assign_face_person_failed");
+    } finally {
+      setAssigningFaceId(null);
     }
   }
 
@@ -1947,6 +2000,8 @@ export default function HomePage() {
         formatBytes={formatBytes}
         deleteAsset={deleteAsset}
         assignFaceToPerson={assignFaceToPerson}
+        createAndAssignFacePerson={createAndAssignFacePerson}
+        renameFaceSubject={renameFaceComprefaceSubject}
         assigningFaceId={assigningFaceId}
         timeline={timeline}
           discardFace={discardFace}

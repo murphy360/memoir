@@ -6,6 +6,11 @@ import { EventLinkedMemories } from "./EventLinkedMemories";
 import { UNASSIGNED_PERIOD_VALUE } from "../lib/homePageHelpers";
 import type { AssetEntry, DirectoryEntry, EventFaceEntry, LifeEpic, LifeEvent, LifePeriod, LifeThread, MemoryEntry, Question } from "../types";
 
+function isUnknownCompreFaceSubject(subject: string | null): boolean {
+  const normalized = (subject || "").trim().toLowerCase();
+  return normalized.startsWith("unknown-");
+}
+
 type QuestionContext = {
   question: Question;
   sourceMemory: MemoryEntry | null;
@@ -121,7 +126,14 @@ type EventCardProps = {
   resolveApiUrl: (path: string) => string;
   formatBytes: (bytes: number) => string;
   deleteAsset: (assetId: number, eventId?: number) => Promise<void>;
-  assignFaceToPerson: (faceId: number, personId: number | null, eventId: number) => Promise<void>;
+  assignFaceToPerson: (
+    faceId: number,
+    personId: number | null,
+    eventId: number,
+    options?: { promoteUnknownSubject?: boolean },
+  ) => Promise<void>;
+  createAndAssignFacePerson: (faceId: number, name: string, eventId: number) => Promise<void>;
+  renameFaceSubject: (faceId: number, newSubjectName: string, eventId: number) => Promise<void>;
   assigningFaceId: number | null;
   timeline: MemoryEntry[];
     discardFace: (faceId: number, eventId: number) => Promise<void>;
@@ -233,6 +245,8 @@ export function EventCard({
   formatBytes,
   deleteAsset,
   assignFaceToPerson,
+  createAndAssignFacePerson,
+  renameFaceSubject,
   assigningFaceId,
   timeline,
     discardFace,
@@ -256,6 +270,7 @@ export function EventCard({
   onAssignThread,
 }: EventCardProps) {
   const [faceAssignTargets, setFaceAssignTargets] = useState<Record<number, string>>({});
+  const [faceCreateNames, setFaceCreateNames] = useState<Record<number, string>>({});
   const [isPeopleOpen, setIsPeopleOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [isResearchOpen, setIsResearchOpen] = useState(false);
@@ -715,6 +730,8 @@ export function EventCard({
                   const originX = `${Math.round(faceCx * 100)}%`;
                   const originY = `${Math.round(faceCy * 100)}%`;
                   const selectedPerson = faceAssignTargets[face.id] || "";
+                  const createName = faceCreateNames[face.id] || "";
+                  const isUnknownSubject = isUnknownCompreFaceSubject(face.compreface_subject);
                   return (
                     <div key={face.id} className="assetNotesRow" style={{ alignItems: "center", gap: "0.6rem", width: "100%" }}>
                       <div
@@ -770,10 +787,55 @@ export function EventCard({
                                 className="secondary"
                                 type="button"
                                 disabled={!selectedPerson || assigningFaceId === face.id}
-                                onClick={() => void assignFaceToPerson(face.id, Number(selectedPerson), event.id)}
+                                onClick={() => void assignFaceToPerson(
+                                  face.id,
+                                  Number(selectedPerson),
+                                  event.id,
+                                  { promoteUnknownSubject: isUnknownSubject },
+                                )}
+                                title={isUnknownSubject ? "Assigning will promote this unknown CompreFace subject to the selected person name." : "Assign this detected face to the selected person."}
                               >
-                                {assigningFaceId === face.id ? "Saving..." : "Assign"}
+                                {assigningFaceId === face.id ? "Saving..." : (isUnknownSubject ? "Assign & Promote" : "Assign")}
                               </button>
+                              {isUnknownSubject && (
+                                <p className="meta" style={{ margin: "0.1rem 0 0", width: "100%" }}>
+                                  Assigning this face will promote the unknown CompreFace subject to the selected person's name for future matches.
+                                </p>
+                              )}
+                              <div className="controls" style={{ width: "100%", marginTop: "0.2rem", flexWrap: "wrap" }}>
+                                <input
+                                  className="directoryInput"
+                                  type="text"
+                                  placeholder="Add new person here"
+                                  value={createName}
+                                  onChange={(e) => setFaceCreateNames((current) => ({ ...current, [face.id]: e.target.value }))}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && createName.trim() && assigningFaceId !== face.id) {
+                                      void createAndAssignFacePerson(face.id, createName, event.id)
+                                        .then(() => {
+                                          setFaceCreateNames((current) => ({ ...current, [face.id]: "" }));
+                                          setFaceAssignTargets((current) => ({ ...current, [face.id]: "" }));
+                                        });
+                                    }
+                                  }}
+                                  disabled={assigningFaceId === face.id}
+                                />
+                                <button
+                                  className="primary"
+                                  type="button"
+                                  disabled={!createName.trim() || assigningFaceId === face.id}
+                                  onClick={() => {
+                                    void createAndAssignFacePerson(face.id, createName, event.id)
+                                      .then(() => {
+                                        setFaceCreateNames((current) => ({ ...current, [face.id]: "" }));
+                                        setFaceAssignTargets((current) => ({ ...current, [face.id]: "" }));
+                                      });
+                                  }}
+                                  title="Create person and assign this face in one step"
+                                >
+                                  {assigningFaceId === face.id ? "Saving..." : "Add + Assign"}
+                                </button>
+                              </div>
                             </>
                           )}
                           {face.person_id !== null && (
@@ -934,6 +996,7 @@ export function EventCard({
                 deleteAsset={deleteAsset}
                 eventId={event.id}
                 eventFaces={eventFaces}
+                renameFaceSubject={renameFaceSubject}
                 processPhotoAsset={processPhotoAsset}
                 processingPhotoAssetId={processingPhotoAssetId}
                 recordingForAssetId={recordingForAssetId}
