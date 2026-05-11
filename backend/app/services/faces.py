@@ -10,6 +10,7 @@ Face Enrollment Workflow:
 """
 
 from dataclasses import dataclass
+import difflib
 import json
 import logging
 import os
@@ -381,6 +382,11 @@ def _resolve_person_id_for_subject(db: Session, subject: Optional[str]) -> Optio
     candidate_ids: set[int] = set()
 
     for person in db.query(Person).all():
+        linked_subject = (person.compreface_subject_id or "").strip()
+        if linked_subject and linked_subject.casefold() == key:
+            candidate_ids.add(person.id)
+
+    for person in db.query(Person).all():
         if person.name.casefold() == key:
             candidate_ids.add(person.id)
 
@@ -536,6 +542,33 @@ def rename_compreface_subject(subject_name: str, new_name: str) -> bool:
         raise
 
 
+def delete_compreface_subject(subject_name: str) -> bool:
+    """Delete a CompreFace subject by subject name/id.
+
+    Returns True on success, False when CompreFace is not configured.
+    Raises requests.RequestException on API errors.
+    """
+    if not COMPREFACE_API_KEY or not COMPREFACE_BASE_URL:
+        logger.warning("CompreFace not configured; cannot delete subject.")
+        return False
+
+    try:
+        from urllib.parse import quote
+
+        encoded_name = quote(subject_name)
+        response = requests.delete(
+            f"{COMPREFACE_BASE_URL}/api/v1/recognition/subjects/{encoded_name}",
+            headers={"x-api-key": COMPREFACE_API_KEY},
+            timeout=COMPREFACE_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        logger.info("Deleted CompreFace subject %s", subject_name)
+        return True
+    except requests.RequestException as exc:
+        logger.error("CompreFace subject delete failed: %s", exc)
+        raise
+
+
 def find_compreface_subject_id_by_name(subject_name: str) -> Optional[str]:
     """Resolve a CompreFace subject id by display name.
 
@@ -548,6 +581,19 @@ def find_compreface_subject_id_by_name(subject_name: str) -> Optional[str]:
     if not COMPREFACE_API_KEY or not COMPREFACE_BASE_URL:
         return None
 
+    candidates = list_compreface_subjects()
+    wanted = normalized.casefold()
+    for candidate_name, candidate_id in candidates:
+        if candidate_name.casefold() == wanted:
+            return candidate_id or candidate_name
+    return None
+
+
+def list_compreface_subjects() -> list[tuple[str, Optional[str]]]:
+    """Return CompreFace subjects as (subject_name, subject_id) tuples."""
+    if not COMPREFACE_API_KEY or not COMPREFACE_BASE_URL:
+        return []
+
     try:
         response = requests.get(
             f"{COMPREFACE_BASE_URL}/api/v1/recognition/subjects",
@@ -557,29 +603,96 @@ def find_compreface_subject_id_by_name(subject_name: str) -> Optional[str]:
         response.raise_for_status()
         payload = response.json()
     except (requests.RequestException, ValueError):
-        return None
+        return []
 
-    candidates = payload.get("subjects") if isinstance(payload, dict) else None
-    if not isinstance(candidates, list):
-        return None
+    raw_subjects = payload.get("subjects") if isinstance(payload, dict) else None
+    if not isinstance(raw_subjects, list):
+        return []
 
-    wanted = normalized.casefold()
-    for item in candidates:
-        if isinstance(item, str) and item.casefold() == wanted:
-            # Some CompreFace deployments return subjects as a flat list of names.
-            # Return the matched name so callers can still use it as an identifier.
-            return item
+    subjects: list[tuple[str, Optional[str]]] = []
+    for item in raw_subjects:
+        if isinstance(item, str):
+            normalized_name = item.strip()
+            if normalized_name:
+                subjects.append((normalized_name, None))
+            continue
         if not isinstance(item, dict):
             continue
-        candidate_name = item.get("subject")
-        candidate_id = item.get("subject_id")
-        if (
-            isinstance(candidate_name, str)
-            and isinstance(candidate_id, str)
-            and candidate_name.casefold() == wanted
-        ):
-            return candidate_id
+        name_value = item.get("subject")
+        id_value = item.get("subject_id")
+        if not isinstance(name_value, str):
+            continue
+        normalized_name = name_value.strip()
+        if not normalized_name:
+            continue
+        normalized_id = id_value.strip() if isinstance(id_value, str) and id_value.strip() else None
+        subjects.append((normalized_name, normalized_id))
+    return subjects
+
+
+def resolve_compreface_subject_name(subject_query: str, fallback_name: str) -> Optional[str]:
+    """Resolve best matching existing CompreFace subject name from free text.
+
+    Matching order: exact -> case-insensitive contains -> fuzzy close match.
+    """
+    subjects = list_compreface_subjects()
+    if not subjects:
+        return None
+
+    requested = (subject_query or "").strip() or (fallback_name or "").strip()
+    if not requested:
+        return None
+
+    wanted = requested.casefold()
+    subject_names = [name for name, _ in subjects]
+
+    for name in subject_names:
+        if name.casefold() == wanted:
+            return name
+
+    for name in subject_names:
+        lowered = name.casefold()
+        if wanted in lowered or lowered in wanted:
+            return name
+
+    close = difflib.get_close_matches(requested, subject_names, n=1, cutoff=0.70)
+    if close:
+        return close[0]
     return None
+
+
+def link_person_to_existing_compreface_subject(
+    db: Session,
+    person_id: int,
+    subject_query: Optional[str],
+) -> Person:
+    """Link one person to an existing CompreFace subject by exact/fuzzy match."""
+    person = db.get(Person, person_id)
+    if person is None:
+        raise ValueError("person_not_found")
+
+    subject_name = resolve_compreface_subject_name(subject_query or "", person.name)
+    if not subject_name:
+        raise ValueError("subject_not_found")
+
+    subject_key = subject_name.casefold()
+    existing_owner = (
+        db.query(Person)
+        .filter(Person.id != person.id, Person.compreface_subject_id.isnot(None))
+        .all()
+    )
+    for owner in existing_owner:
+        if (owner.compreface_subject_id or "").strip().casefold() == subject_key:
+            raise ValueError("subject_already_linked")
+
+    person.compreface_subject_id = subject_name
+
+    linked_faces = db.query(AssetFace).filter(AssetFace.compreface_subject == subject_name).all()
+    for face in linked_faces:
+        face.person_id = person.id
+        face.unknown_face_group_id = None
+
+    return person
 
 
 def assign_face_to_person(db: Session, face_id: int, person_id: Optional[int]) -> AssetFace:

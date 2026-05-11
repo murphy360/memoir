@@ -1,11 +1,138 @@
+"""Directory service logic for people/places normalization and linking.
+
+This module owns directory CRUD helpers plus people merge behavior that keeps
+memory links, face links, aliases, and CompreFace subject linkage consistent.
+"""
+
 import json
+import logging
+import os
 from typing import Optional
+from urllib.parse import quote
 
 from sqlalchemy.orm import Session
 
 from app.models import Asset, AssetFace, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place
 from app.schemas import DirectoryEntryResponse
 from app.services.periods import normalize_directory_name
+
+
+logger = logging.getLogger("memoir.directory")
+_COMPREFACE_BASE_URL = (os.getenv("COMPREFACE_BASE_URL") or "").strip().rstrip("/")
+
+
+def _normalized_compreface_subject(subject: Optional[str]) -> Optional[str]:
+    normalized = (subject or "").strip()
+    return normalized or None
+
+
+def _build_compreface_subject_url(subject: Optional[str]) -> Optional[str]:
+    normalized = _normalized_compreface_subject(subject)
+    if not normalized or not _COMPREFACE_BASE_URL:
+        return None
+    return f"{_COMPREFACE_BASE_URL}/api/v1/recognition/subjects/{quote(normalized)}"
+
+
+def _merge_person_aliases(db: Session, source: Person, target: Person) -> None:
+    existing_aliases = {alias.alias.casefold() for alias in target.aliases}
+
+    for alias in source.aliases:
+        normalized_alias = normalize_directory_name(alias.alias)
+        if not normalized_alias:
+            continue
+        alias_key = normalized_alias.casefold()
+        if alias_key == target.name.casefold() or alias_key in existing_aliases:
+            continue
+        db.add(PersonAlias(person_id=target.id, alias=normalized_alias))
+        existing_aliases.add(alias_key)
+
+    source_name_key = source.name.casefold()
+    if source_name_key != target.name.casefold() and source_name_key not in existing_aliases:
+        db.add(PersonAlias(person_id=target.id, alias=source.name))
+
+
+def merge_people_records(db: Session, source: Person, target: Person) -> None:
+    """Merge one source person into a target person with CompreFace linkage integrity.
+
+    Rules:
+    - A person may exist without a CompreFace link.
+    - At most one person may hold a given non-null CompreFace subject link.
+    - When both people have different links, the target link is preserved.
+    """
+    _merge_person_aliases(db, source, target)
+
+    for memory in db.query(MemoryEntry).all():
+        if memory.recorder_person_id == source.id:
+            assign_recorder_person(db, memory, target.name)
+
+        already_linked = any(link.person_id == target.id for link in memory.people_links)
+        has_source_link = any(link.person_id == source.id for link in memory.people_links)
+
+        if has_source_link:
+            for link in list(memory.people_links):
+                if link.person_id == source.id:
+                    memory.people_links.remove(link)
+                    db.delete(link)
+            if not already_linked:
+                memory.people_links.append(MemoryPerson(person_id=target.id, role="mentioned"))
+            memory.people_json = json.dumps(memory.referenced_people)
+
+    source_faces = db.query(AssetFace).filter(AssetFace.person_id == source.id).all()
+    for face in source_faces:
+        face.person_id = target.id
+
+    source_subject = _normalized_compreface_subject(source.compreface_subject_id)
+    target_subject = _normalized_compreface_subject(target.compreface_subject_id)
+
+    if source_subject and not target_subject:
+        target.compreface_subject_id = source_subject
+        target_subject = source_subject
+
+    if source_subject and target_subject and source_subject.casefold() != target_subject.casefold():
+        subject_faces = (
+            db.query(AssetFace)
+            .filter(AssetFace.compreface_subject == source_subject)
+            .all()
+        )
+        for face in subject_faces:
+            face.compreface_subject = target_subject
+
+        from app.services.faces import delete_compreface_subject
+
+        try:
+            delete_compreface_subject(source_subject)
+        except Exception as exc:  # pragma: no cover - fail-open sync to upstream
+            logger.warning("Failed to remove merged source CompreFace subject %s: %s", source_subject, exc)
+
+    source.compreface_subject_id = None
+
+
+def detach_person_compreface_link(db: Session, person: Person) -> None:
+    """Remove one person's CompreFace link and clear matching local face subject labels.
+
+    This is used when a person record is deleted/split and no 1:1 link should
+    remain for that removed person identity.
+    """
+    subject = _normalized_compreface_subject(person.compreface_subject_id)
+    if not subject:
+        return
+
+    subject_faces = (
+        db.query(AssetFace)
+        .filter(AssetFace.compreface_subject == subject)
+        .all()
+    )
+    for face in subject_faces:
+        face.compreface_subject = None
+
+    from app.services.faces import delete_compreface_subject
+
+    try:
+        delete_compreface_subject(subject)
+    except Exception as exc:  # pragma: no cover - fail-open sync to upstream
+        logger.warning("Failed to delete CompreFace subject %s during person removal: %s", subject, exc)
+
+    person.compreface_subject_id = None
 
 
 def get_or_create_person(db: Session, raw_name: Optional[str]) -> Optional[Person]:
@@ -151,6 +278,8 @@ def build_directory_response(
     photo_count: int = 0,
     aliases: Optional[list[str]] = None,
     avatar_download_url: Optional[str] = None,
+    compreface_subject_id: Optional[str] = None,
+    compreface_subject_url: Optional[str] = None,
 ) -> DirectoryEntryResponse:
     return DirectoryEntryResponse(
         id=item_id,
@@ -159,6 +288,8 @@ def build_directory_response(
         photo_count=photo_count,
         aliases=aliases or [],
         avatar_download_url=avatar_download_url,
+        compreface_subject_id=_normalized_compreface_subject(compreface_subject_id),
+        compreface_subject_url=(compreface_subject_url or _build_compreface_subject_url(compreface_subject_id)),
     )
 
 
@@ -210,6 +341,7 @@ def list_people_directory(db: Session) -> list[DirectoryEntryResponse]:
             len(photo_counts.get(person.id, set())),
             [alias.alias for alias in person.aliases],
             avatars_by_person_id.get(person.id),
+            person.compreface_subject_id,
         )
         for person in people
     ]

@@ -360,12 +360,14 @@ class QuestionResponse(BaseModel):
 
 
 class DirectoryEntryResponse(BaseModel):
-    id: int
-    name: str
-    memory_count: int
-    photo_count: int = 0
+    id: int = Field(description="Directory entry id.")
+    name: str = Field(description="Display name of the directory entry.")
+    memory_count: int = Field(description="How many memories currently reference this entry.")
+    photo_count: int = Field(default=0, description="How many distinct photo assets are linked to this person.")
     aliases: list[str] = Field(default_factory=list)
     avatar_download_url: Optional[str] = Field(default=None, description="Photo URL for this person card avatar, when available.")
+    compreface_subject_id: Optional[str] = Field(default=None, description="CompreFace subject identifier linked 1:1 to this person when enrolled.")
+    compreface_subject_url: Optional[str] = Field(default=None, description="Direct CompreFace API URL for the linked subject when available.")
 
 
 class CreateDirectoryEntryRequest(BaseModel):
@@ -378,6 +380,10 @@ class UpdateDirectoryEntryRequest(BaseModel):
 
 class MergePersonRequest(BaseModel):
     into_person_id: int
+
+
+class LinkPersonComprefaceRequest(BaseModel):
+    subject_name: Optional[str] = Field(default=None, description="Existing CompreFace subject name to link, or empty to auto-match by person name.")
 
 
 class SplitPersonRequest(BaseModel):

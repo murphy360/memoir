@@ -558,6 +558,23 @@ export async function mergePeopleEntries(sourceId: number, intoId: number): Prom
   await expectOk(response, "Merge failed");
 }
 
+/** Link one person to an existing CompreFace subject via POST /api/people/{person_id}/link-compreface. */
+export async function linkPersonToCompreface(personId: number, subjectName: string): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/people/${personId}/link-compreface`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subject_name: subjectName }),
+  });
+  await expectOk(response, "CompreFace link failed");
+}
+
+/** Fetch list of available CompreFace subjects via GET /api/compreface/subjects. */
+export async function getComprefaceSubjects(): Promise<string[]> {
+  const response = await fetch(toAbsoluteApiUrl("/api/compreface/subjects"));
+  await expectOk(response, "Failed to fetch CompreFace subjects");
+  return response.json();
+}
+
 export async function splitPersonEntry(
   sourceId: number,
   newNames: string[],

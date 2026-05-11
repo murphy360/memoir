@@ -21,6 +21,7 @@ type DirectorySidebarProps = {
   onSplitPersonEntry: (sourceId: number, newNames: string[], keepAlias: boolean) => Promise<void>;
   onAddPersonAlias: (personId: number, alias: string) => Promise<void>;
   onRemovePersonAlias: (personId: number, alias: string) => Promise<void>;
+  onLinkPersonCompreface: (personId: number, subjectName: string) => Promise<void>;
   resolveApiUrl: (path: string) => string;
   peopleSortMode: "weighted" | "alphabetical" | "photos";
   setPeopleSortMode: (mode: "weighted" | "alphabetical" | "photos") => void;
@@ -47,6 +48,7 @@ export function DirectorySidebar(props: DirectorySidebarProps) {
     onSplitPersonEntry,
     onAddPersonAlias,
     onRemovePersonAlias,
+    onLinkPersonCompreface,
     resolveApiUrl,
     peopleSortMode,
     setPeopleSortMode,
@@ -159,6 +161,7 @@ export function DirectorySidebar(props: DirectorySidebarProps) {
               onSplit={onSplitPersonEntry}
               onAddAlias={onAddPersonAlias}
               onRemoveAlias={onRemovePersonAlias}
+              onLinkCompreface={onLinkPersonCompreface}
             />
           </>
         ) : (

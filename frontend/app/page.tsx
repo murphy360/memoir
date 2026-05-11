@@ -36,6 +36,7 @@ import {
   linkAssetToEvent,
   mergeEventInto,
   mergePeopleEntries,
+  linkPersonToCompreface,
   mergePeriodInto,
   reanalyzeMemoryById,
   removePersonAlias as removePersonAliasRequest,
@@ -1358,6 +1359,21 @@ export default function HomePage() {
     }
   }
 
+  async function linkPersonCompreface(personId: number, subjectName: string) {
+    setDirectoryBusyKey(`people:compreface:${personId}`);
+    setStatus("Linking person to CompreFace...");
+    try {
+      await linkPersonToCompreface(personId, subjectName);
+      await loadTimeline();
+      setStatus("CompreFace link saved.");
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : "Failed to link person to CompreFace.";
+      setStatus(message);
+    } finally {
+      setDirectoryBusyKey(null);
+    }
+  }
+
   async function createDirectoryEntry(kind: "people" | "places", name: string) {
     setDirectoryBusyKey(`${kind}:create`);
     setStatus(`Adding ${kind === "people" ? "person" : "place"}...`);
@@ -2061,6 +2077,7 @@ export default function HomePage() {
         onSplitPersonEntry={splitPersonEntry}
         onAddPersonAlias={addPersonAlias}
         onRemovePersonAlias={removePersonAlias}
+        onLinkPersonCompreface={linkPersonCompreface}
         resolveApiUrl={resolveApiUrl}
         peopleSortMode={peopleSortMode}
         setPeopleSortMode={setPeopleSortMode}

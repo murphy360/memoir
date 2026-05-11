@@ -399,6 +399,14 @@ button:disabled {
   font-weight: 700;
 }
 
+.badgeLink {
+  text-decoration: none;
+}
+
+.badgeLink:hover {
+  text-decoration: underline;
+}
+
 .directoryActions {
   display: flex;
   gap: 0.45rem;

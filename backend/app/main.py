@@ -37,6 +37,7 @@ from app.schemas import (
     MergeLifeEventRequest,
     MergeUnknownFaceGroupRequest,
     LinkAssetToEventRequest,
+    LinkPersonComprefaceRequest,
     MemoryResponse,
     MergePersonRequest,
     QuestionResponse,
@@ -68,7 +69,13 @@ from app.services.gemini_client import (
 from app.services.gemini_client import extract_text_from_document
 from app.services.image_metadata import compress_photo_for_storage, extract_and_apply_image_metadata
 from app.services.geocoding import backfill_asset_location_names
-from app.services.faces import assign_face_to_person, list_faces_for_event, rename_face_subject, sync_asset_faces_for_photo
+from app.services.faces import (
+    assign_face_to_person,
+    link_person_to_existing_compreface_subject,
+    list_faces_for_event,
+    rename_face_subject,
+    sync_asset_faces_for_photo,
+)
 from app.services.unknown_face_groups import (
     assign_unknown_group_to_person,
     reconcile_unknown_face_groups_for_asset,
@@ -80,10 +87,12 @@ from app.services.unknown_face_groups import (
 from app.services.directory import (
     assign_recorder_person,
     build_directory_response,
+    detach_person_compreface_link,
     get_or_create_person,
     get_or_create_place,
     list_people_directory,
     list_places_directory,
+    merge_people_records,
     sync_memory_people,
     sync_memory_places,
     update_memory_json_from_links,
@@ -1548,22 +1557,7 @@ def merge_person(
     if source.id == target.id:
         raise HTTPException(status_code=400, detail="Cannot merge a person into themselves")
 
-    for memory in db.query(MemoryEntry).all():
-        if memory.recorder_person_id == source.id:
-            assign_recorder_person(db, memory, target.name)
-
-        already_linked = any(link.person_id == target.id for link in memory.people_links)
-        has_source_link = any(link.person_id == source.id for link in memory.people_links)
-
-        if has_source_link:
-            for link in list(memory.people_links):
-                if link.person_id == source.id:
-                    memory.people_links.remove(link)
-                    db.delete(link)
-            if not already_linked:
-                memory.people_links.append(MemoryPerson(person_id=target.id, role="mentioned"))
-            memory.people_json = json.dumps(memory.referenced_people)
-
+    merge_people_records(db, source, target)
     db.delete(source)
     db.commit()
     db.refresh(target)
@@ -1572,6 +1566,33 @@ def merge_person(
     if updated:
         return updated
     return build_directory_response(target.name, target.id, 0)
+
+
+@app.post("/api/people/{person_id}/link-compreface", response_model=DirectoryEntryResponse)
+def link_person_compreface(
+    person_id: int,
+    body: LinkPersonComprefaceRequest,
+    db: Session = Depends(get_db),
+) -> DirectoryEntryResponse:
+    try:
+        person = link_person_to_existing_compreface_subject(db, person_id, body.subject_name)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "person_not_found":
+            raise HTTPException(status_code=404, detail="Person not found") from exc
+        if code == "subject_not_found":
+            raise HTTPException(status_code=404, detail="No matching CompreFace subject found") from exc
+        if code == "subject_already_linked":
+            raise HTTPException(status_code=409, detail="CompreFace subject is already linked to another person") from exc
+        raise HTTPException(status_code=400, detail="Could not link person to CompreFace") from exc
+
+    db.commit()
+    db.refresh(person)
+
+    updated = next((p for p in list_people_directory(db) if p.id == person.id), None)
+    if updated:
+        return updated
+    return build_directory_response(person.name, person.id, 0)
 
 
 @app.post("/api/people/{person_id}/split", response_model=list[DirectoryEntryResponse])
@@ -1627,6 +1648,8 @@ def split_person(
             )
             if not already_has_alias:
                 db.add(PersonAlias(person_id=new_person.id, alias=source_name))
+
+    detach_person_compreface_link(db, source)
 
     db.delete(source)
     db.commit()
@@ -1708,9 +1731,19 @@ def delete_person(person_id: int, db: Session = Depends(get_db)) -> dict:
         if removed:
             update_memory_json_from_links(memory)
 
+    detach_person_compreface_link(db, person)
+
     db.delete(person)
     db.commit()
     return {"status": "deleted", "person_id": person_id}
+
+
+@app.get("/api/compreface/subjects", response_model=list[str])
+def list_compreface_subjects_endpoint() -> list[str]:
+    """List all available CompreFace subjects for linking to people."""
+    from app.services.faces import list_compreface_subjects
+    subjects = list_compreface_subjects()
+    return [name for name, _ in subjects]
 
 
 @app.get("/api/places", response_model=list[DirectoryEntryResponse])

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { DirectoryEntry } from "../types";
+import { getComprefaceSubjects } from "../lib/memoirApi";
 
 type DirectoryManagerProps = {
   title: string;
@@ -18,6 +19,7 @@ type DirectoryManagerProps = {
   onSplit?: (sourceId: number, newNames: string[], keepAlias: boolean) => Promise<void>;
   onAddAlias?: (itemId: number, alias: string) => Promise<void>;
   onRemoveAlias?: (itemId: number, alias: string) => Promise<void>;
+  onLinkCompreface?: (itemId: number, subjectName: string) => Promise<void>;
 };
 
 export function DirectoryManager({
@@ -35,6 +37,7 @@ export function DirectoryManager({
   onSplit,
   onAddAlias,
   onRemoveAlias,
+  onLinkCompreface,
 }: DirectoryManagerProps) {
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -46,6 +49,11 @@ export function DirectoryManager({
   const [splitKeepAlias, setSplitKeepAlias] = useState(true);
   const [addingAliasId, setAddingAliasId] = useState<number | null>(null);
   const [newAlias, setNewAlias] = useState("");
+  const [linkingComprefaceId, setLinkingComprefaceId] = useState<number | null>(null);
+  const [comprefaceSubjectName, setComprefaceSubjectName] = useState("");
+  const [comprefaceSubjects, setComprefaceSubjects] = useState<string[]>([]);
+  const [loadingSubjects, setLoadingSubjects] = useState(false);
+  const [subjectsError, setSubjectsError] = useState<string | null>(null);
 
   useEffect(() => {
     const editingStillExists = editingId === null || items.some((item) => item.id === editingId);
@@ -65,7 +73,40 @@ export function DirectoryManager({
       setSplittingId(null);
       setSplitNames("");
     }
-  }, [editingId, mergingId, splittingId, items]);
+
+    const linkingStillExists = linkingComprefaceId === null || items.some((item) => item.id === linkingComprefaceId);
+    if (!linkingStillExists) {
+      setLinkingComprefaceId(null);
+      setComprefaceSubjectName("");
+    }
+  }, [editingId, linkingComprefaceId, mergingId, splittingId, items]);
+
+  useEffect(() => {
+    if (linkingComprefaceId === null) {
+      setComprefaceSubjects([]);
+      setSubjectsError(null);
+      return;
+    }
+
+    const fetchSubjects = async () => {
+      setLoadingSubjects(true);
+      setSubjectsError(null);
+      try {
+        const subjects = await getComprefaceSubjects();
+        setComprefaceSubjects(subjects);
+        if (subjects.length > 0) {
+          setComprefaceSubjectName(subjects[0]);
+        }
+      } catch (error) {
+        setSubjectsError(error instanceof Error ? error.message : "Failed to load subjects");
+        setComprefaceSubjects([]);
+      } finally {
+        setLoadingSubjects(false);
+      }
+    };
+
+    fetchSubjects();
+  }, [linkingComprefaceId]);
 
   return (
     <section className="directoryCard">
@@ -103,6 +144,7 @@ export function DirectoryManager({
           const isMerging = mergingId === item.id;
           const isSplitting = splittingId === item.id;
           const isAddingAlias = addingAliasId === item.id;
+          const isLinkingCompreface = linkingComprefaceId === item.id;
           const mergeTargets = items.filter((other) => other.id !== item.id);
 
           return (
@@ -156,6 +198,25 @@ export function DirectoryManager({
                 )}
                 <span className="badge">{item.memory_count} memories</span>
                 {showAvatars && <span className="badge">{item.photo_count} photos</span>}
+                {showAvatars && (
+                  item.compreface_subject_id ? (
+                    item.compreface_subject_url ? (
+                      <a
+                        className="badge badgeLink"
+                        href={item.compreface_subject_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={item.compreface_subject_id}
+                      >
+                        CompreFace linked
+                      </a>
+                    ) : (
+                      <span className="badge" title={item.compreface_subject_id}>CompreFace linked</span>
+                    )
+                  ) : (
+                    <span className="badge">CompreFace unlinked</span>
+                  )
+                )}
               </div>
 
               {isMerging && (
@@ -284,6 +345,56 @@ export function DirectoryManager({
                 </div>
               )}
 
+              {isLinkingCompreface && onLinkCompreface && (
+                <div className="directoryMergeRow">
+                  <span className="meta">Link <strong>{item.name}</strong> to CompreFace subject:</span>
+                  {loadingSubjects ? (
+                    <span className="meta">Loading subjects...</span>
+                  ) : subjectsError ? (
+                    <span className="meta" style={{ color: "red" }}>{subjectsError}</span>
+                  ) : comprefaceSubjects.length === 0 ? (
+                    <span className="meta">No CompreFace subjects found</span>
+                  ) : (
+                    <select
+                      className="directoryInput"
+                      value={comprefaceSubjectName}
+                      onChange={(event) => setComprefaceSubjectName(event.target.value)}
+                      disabled={isBusy || loadingSubjects}
+                      style={{ padding: "0.5rem", cursor: "pointer" }}
+                    >
+                      {comprefaceSubjects.map((subject) => (
+                        <option key={subject} value={subject}>
+                          {subject}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    className="secondary"
+                    type="button"
+                    disabled={isBusy || loadingSubjects || comprefaceSubjects.length === 0}
+                    onClick={async () => {
+                      await onLinkCompreface(item.id, comprefaceSubjectName.trim());
+                      setLinkingComprefaceId(null);
+                      setComprefaceSubjectName("");
+                    }}
+                  >
+                    Link subject
+                  </button>
+                  <button
+                    className="ghost"
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => {
+                      setLinkingComprefaceId(null);
+                      setComprefaceSubjectName("");
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
               <div className="directoryActions">
                 {isEditing ? (
                   <>
@@ -335,6 +446,19 @@ export function DirectoryManager({
                         }}
                       >
                         + Alias
+                      </button>
+                    )}
+                    {onLinkCompreface && showAvatars && (
+                      <button
+                        className="ghost"
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => {
+                          setLinkingComprefaceId(isLinkingCompreface ? null : item.id);
+                          setComprefaceSubjectName(item.name);
+                        }}
+                      >
+                        {item.compreface_subject_id ? "Relink CF" : "Link CF"}
                       </button>
                     )}
                     {onSplit && (

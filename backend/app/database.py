@@ -81,6 +81,45 @@ def ensure_schema_migrations() -> None:
         }
         if "compreface_subject_id" not in people_columns:
             connection.execute(text("ALTER TABLE people ADD COLUMN compreface_subject_id VARCHAR(255)"))
+        duplicate_subject_rows = connection.execute(
+            text(
+                """
+                SELECT compreface_subject_id
+                FROM people
+                WHERE compreface_subject_id IS NOT NULL
+                  AND TRIM(compreface_subject_id) <> ''
+                GROUP BY compreface_subject_id
+                HAVING COUNT(*) > 1
+                """
+            )
+        ).fetchall()
+        for (subject_id,) in duplicate_subject_rows:
+            people_with_subject = connection.execute(
+                text(
+                    """
+                    SELECT id
+                    FROM people
+                    WHERE compreface_subject_id = :subject_id
+                    ORDER BY created_at ASC, id ASC
+                    """
+                ),
+                {"subject_id": subject_id},
+            ).fetchall()
+            for row in people_with_subject[1:]:
+                connection.execute(
+                    text("UPDATE people SET compreface_subject_id = NULL WHERE id = :person_id"),
+                    {"person_id": row[0]},
+                )
+        connection.execute(
+            text(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_people_compreface_subject_id
+                ON people (compreface_subject_id)
+                WHERE compreface_subject_id IS NOT NULL
+                  AND TRIM(compreface_subject_id) <> ''
+                """
+            )
+        )
 
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS places (

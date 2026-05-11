@@ -54,6 +54,10 @@ export type DirectoryEntry = {
   photo_count: number;
   aliases: string[];
   avatar_download_url: string | null;
+  /** Non-null when this person is linked to exactly one CompreFace subject. */
+  compreface_subject_id: string | null;
+  /** Direct CompreFace API URL for the linked subject when NEXT_PUBLIC_API_BASE_URL can reach it. */
+  compreface_subject_url: string | null;
 };
 
 export type Question = {
