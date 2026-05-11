@@ -363,6 +363,7 @@ class DirectoryEntryResponse(BaseModel):
     id: int
     name: str
     memory_count: int
+    photo_count: int = 0
     aliases: list[str] = Field(default_factory=list)
     avatar_download_url: Optional[str] = Field(default=None, description="Photo URL for this person card avatar, when available.")
 

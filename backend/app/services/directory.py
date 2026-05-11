@@ -148,6 +148,7 @@ def build_directory_response(
     name: str,
     item_id: int,
     memory_count: int,
+    photo_count: int = 0,
     aliases: Optional[list[str]] = None,
     avatar_download_url: Optional[str] = None,
 ) -> DirectoryEntryResponse:
@@ -155,6 +156,7 @@ def build_directory_response(
         id=item_id,
         name=name,
         memory_count=memory_count,
+        photo_count=photo_count,
         aliases=aliases or [],
         avatar_download_url=avatar_download_url,
     )
@@ -163,12 +165,25 @@ def build_directory_response(
 def list_people_directory(db: Session) -> list[DirectoryEntryResponse]:
     memories = db.query(MemoryEntry).all()
     counts: dict[int, set[int]] = {}
+    photo_counts: dict[int, set[int]] = {}
 
     for memory in memories:
         if memory.recorder_person_id is not None:
             counts.setdefault(memory.recorder_person_id, set()).add(memory.id)
         for link in memory.people_links:
             counts.setdefault(link.person_id, set()).add(memory.id)
+
+    # Track distinct photo assets tagged to each person.
+    tagged_photo_rows = (
+        db.query(AssetFace.person_id, AssetFace.asset_id)
+        .join(Asset, Asset.id == AssetFace.asset_id)
+        .filter(AssetFace.person_id.isnot(None), Asset.kind == "photo")
+        .all()
+    )
+    for person_id, asset_id in tagged_photo_rows:
+        if person_id is None:
+            continue
+        photo_counts.setdefault(person_id, set()).add(asset_id)
 
     # Pick one avatar photo per person using their most recent assigned face.
     avatars_by_person_id: dict[int, str] = {}
@@ -192,6 +207,7 @@ def list_people_directory(db: Session) -> list[DirectoryEntryResponse]:
             person.name,
             person.id,
             len(counts.get(person.id, set())),
+            len(photo_counts.get(person.id, set())),
             [alias.alias for alias in person.aliases],
             avatars_by_person_id.get(person.id),
         )

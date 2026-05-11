@@ -1837,8 +1837,9 @@ export default function HomePage() {
     }
   }
 
+  const [peopleSortMode, setPeopleSortMode] = useState<"weighted" | "alphabetical" | "photos">("weighted");
   const normalizedDirectorySearch = directorySearch.trim().toLowerCase();
-  const filteredPeopleDirectory = peopleDirectory.filter((entry) => {
+  let filteredPeopleDirectory = peopleDirectory.filter((entry) => {
     if (!normalizedDirectorySearch) {
       return true;
     }
@@ -1846,6 +1847,17 @@ export default function HomePage() {
       return true;
     }
     return entry.aliases.some((alias) => alias.toLowerCase().includes(normalizedDirectorySearch));
+  });
+  // Sort people by selected mode
+  filteredPeopleDirectory = [...filteredPeopleDirectory].sort((a, b) => {
+    if (peopleSortMode === "alphabetical") {
+      return a.name.localeCompare(b.name);
+    }
+    if (peopleSortMode === "photos") {
+      return b.photo_count - a.photo_count || b.memory_count - a.memory_count || a.name.localeCompare(b.name);
+    }
+    // weighted (descending by memory_count)
+    return b.memory_count - a.memory_count || a.name.localeCompare(b.name);
   });
   const filteredPlacesDirectory = placesDirectory.filter((entry) => {
     if (!normalizedDirectorySearch) {
@@ -2050,6 +2062,8 @@ export default function HomePage() {
         onAddPersonAlias={addPersonAlias}
         onRemovePersonAlias={removePersonAlias}
         resolveApiUrl={resolveApiUrl}
+        peopleSortMode={peopleSortMode}
+        setPeopleSortMode={setPeopleSortMode}
       />
 
       <div className="workspaceColumn">

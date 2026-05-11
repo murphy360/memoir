@@ -51,6 +51,7 @@ export type DirectoryEntry = {
   id: number;
   name: string;
   memory_count: number;
+  photo_count: number;
   aliases: string[];
   avatar_download_url: string | null;
 };

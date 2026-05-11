@@ -22,30 +22,35 @@ type DirectorySidebarProps = {
   onAddPersonAlias: (personId: number, alias: string) => Promise<void>;
   onRemovePersonAlias: (personId: number, alias: string) => Promise<void>;
   resolveApiUrl: (path: string) => string;
+  peopleSortMode: "weighted" | "alphabetical" | "photos";
+  setPeopleSortMode: (mode: "weighted" | "alphabetical" | "photos") => void;
 };
 
-export function DirectorySidebar({
-  isDirectoryDrawerOpen,
-  setIsDirectoryDrawerOpen,
-  activeDirectoryTab,
-  setActiveDirectoryTab,
-  directorySearch,
-  setDirectorySearch,
-  activeDirectoryCount,
-  activeDirectoryTotal,
-  normalizedDirectorySearch,
-  filteredPeopleDirectory,
-  filteredPlacesDirectory,
-  isBusy,
-  onCreateDirectoryEntry,
-  onRenameDirectoryEntry,
-  onDeleteDirectoryEntry,
-  onMergePersonEntry,
-  onSplitPersonEntry,
-  onAddPersonAlias,
-  onRemovePersonAlias,
-  resolveApiUrl,
-}: DirectorySidebarProps) {
+export function DirectorySidebar(props: DirectorySidebarProps) {
+  const {
+    isDirectoryDrawerOpen,
+    setIsDirectoryDrawerOpen,
+    activeDirectoryTab,
+    setActiveDirectoryTab,
+    directorySearch,
+    setDirectorySearch,
+    activeDirectoryCount,
+    activeDirectoryTotal,
+    normalizedDirectorySearch,
+    filteredPeopleDirectory,
+    filteredPlacesDirectory,
+    isBusy,
+    onCreateDirectoryEntry,
+    onRenameDirectoryEntry,
+    onDeleteDirectoryEntry,
+    onMergePersonEntry,
+    onSplitPersonEntry,
+    onAddPersonAlias,
+    onRemovePersonAlias,
+    resolveApiUrl,
+    peopleSortMode,
+    setPeopleSortMode,
+  } = props;
   return (
     <>
       <button
@@ -125,22 +130,37 @@ export function DirectorySidebar({
         />
 
         {activeDirectoryTab === "people" ? (
-          <DirectoryManager
-            title="People Directory"
-            addLabel="Add a person"
-            emptyLabel={normalizedDirectorySearch ? "No matching people for this search." : "No people have been added yet."}
-            items={filteredPeopleDirectory}
-            showAvatars
-            resolveApiUrl={resolveApiUrl}
-            isBusy={isBusy}
-            onCreate={(name) => onCreateDirectoryEntry("people", name)}
-            onRename={(itemId, name) => onRenameDirectoryEntry("people", itemId, name)}
-            onDelete={(itemId) => onDeleteDirectoryEntry("people", itemId)}
-            onMerge={onMergePersonEntry}
-            onSplit={onSplitPersonEntry}
-            onAddAlias={onAddPersonAlias}
-            onRemoveAlias={onRemovePersonAlias}
-          />
+          <>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+              <label htmlFor="people-sort-mode" style={{ marginRight: 8, fontSize: 14 }}>Sort by:</label>
+              <select
+                id="people-sort-mode"
+                value={peopleSortMode}
+                onChange={(e) => setPeopleSortMode(e.target.value as "weighted" | "alphabetical" | "photos")}
+                style={{ fontSize: 14 }}
+              >
+                <option value="weighted">Most memories</option>
+                <option value="photos">Most photos</option>
+                <option value="alphabetical">A-Z</option>
+              </select>
+            </div>
+            <DirectoryManager
+              title="People Directory"
+              addLabel="Add a person"
+              emptyLabel={normalizedDirectorySearch ? "No matching people for this search." : "No people have been added yet."}
+              items={filteredPeopleDirectory}
+              showAvatars
+              resolveApiUrl={resolveApiUrl}
+              isBusy={isBusy}
+              onCreate={(name) => onCreateDirectoryEntry("people", name)}
+              onRename={(itemId, name) => onRenameDirectoryEntry("people", itemId, name)}
+              onDelete={(itemId) => onDeleteDirectoryEntry("people", itemId)}
+              onMerge={onMergePersonEntry}
+              onSplit={onSplitPersonEntry}
+              onAddAlias={onAddPersonAlias}
+              onRemoveAlias={onRemovePersonAlias}
+            />
+          </>
         ) : (
           <DirectoryManager
             title="Places Directory"

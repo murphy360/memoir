@@ -155,6 +155,7 @@ export function DirectoryManager({
                   </div>
                 )}
                 <span className="badge">{item.memory_count} memories</span>
+                {showAvatars && <span className="badge">{item.photo_count} photos</span>}
               </div>
 
               {isMerging && (
@@ -169,7 +170,7 @@ export function DirectoryManager({
                     <option value="">Select target person</option>
                     {mergeTargets.map((target) => (
                       <option key={target.id} value={target.id}>
-                        {target.name} ({target.memory_count} memories)
+                        {target.name} ({target.memory_count} memories, {target.photo_count} photos)
                       </option>
                     ))}
                   </select>
