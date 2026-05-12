@@ -15,6 +15,13 @@ class Person(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
+    # Optional person contact fields edited from the dedicated person details view.
+    phone: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    address: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Free-text birthday keeps compatibility with fuzzy date inputs used elsewhere.
+    birthday_text: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     # CompreFace subject UUID, created when the first unknown face is assigned to this person.
     compreface_subject_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

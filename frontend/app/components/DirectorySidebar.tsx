@@ -162,6 +162,8 @@ export function DirectorySidebar(props: DirectorySidebarProps) {
               onAddAlias={onAddPersonAlias}
               onRemoveAlias={onRemovePersonAlias}
               onLinkCompreface={onLinkPersonCompreface}
+              detailsHrefBuilder={(itemId) => `/people/${itemId}`}
+              showDetailActions={false}
             />
           </>
         ) : (

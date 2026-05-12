@@ -85,6 +85,16 @@ def ensure_schema_migrations() -> None:
         }
         if "compreface_subject_id" not in people_columns:
             connection.execute(text("ALTER TABLE people ADD COLUMN compreface_subject_id VARCHAR(255)"))
+        if "phone" not in people_columns:
+            connection.execute(text("ALTER TABLE people ADD COLUMN phone VARCHAR(80)"))
+        if "email" not in people_columns:
+            connection.execute(text("ALTER TABLE people ADD COLUMN email VARCHAR(255)"))
+        if "address" not in people_columns:
+            connection.execute(text("ALTER TABLE people ADD COLUMN address VARCHAR(255)"))
+        if "notes" not in people_columns:
+            connection.execute(text("ALTER TABLE people ADD COLUMN notes TEXT"))
+        if "birthday_text" not in people_columns:
+            connection.execute(text("ALTER TABLE people ADD COLUMN birthday_text VARCHAR(100)"))
         duplicate_subject_rows = connection.execute(
             text(
                 """

@@ -150,6 +150,7 @@ class CreateLifeEpicRequest(BaseModel):
 
 class UpdateLifeEpicRequest(BaseModel):
     title: Optional[str] = Field(default=None, description="Updated epic title.")
+    period_id: Optional[int] = Field(default=None, description="Move this epic into another period.")
     thread_id: Optional[int] = Field(default=None, description="Set or clear the thread association for this epic.")
     description: Optional[str] = Field(default=None, description="Updated epic description.")
     weight: Optional[int] = Field(default=None, ge=1, le=10, description="Updated visual prominence from 1 to 10.")
@@ -403,6 +404,50 @@ class SplitPersonRequest(BaseModel):
 
 class AddAliasRequest(BaseModel):
     alias: str
+
+
+class UpdatePersonContactRequest(BaseModel):
+    phone: Optional[str] = Field(default=None, description="Updated phone number for the person; null clears it.")
+    email: Optional[str] = Field(default=None, description="Updated email for the person; null clears it.")
+    address: Optional[str] = Field(default=None, description="Updated mailing or home address; null clears it.")
+    notes: Optional[str] = Field(default=None, description="Free-form person notes shown in person details.")
+    birthday_text: Optional[str] = Field(default=None, description="Free-text birthday value supporting fuzzy dates.")
+
+
+class PersonContactResponse(BaseModel):
+    phone: Optional[str] = Field(default=None, description="Person phone number as entered by the user.")
+    email: Optional[str] = Field(default=None, description="Person email address as entered by the user.")
+    address: Optional[str] = Field(default=None, description="Person address text as entered by the user.")
+    notes: Optional[str] = Field(default=None, description="Free-form notes about this person.")
+    birthday_text: Optional[str] = Field(default=None, description="Free-text birthday string.")
+
+
+class PersonDetailResponse(BaseModel):
+    id: int = Field(description="Person id.")
+    name: str = Field(description="Person display name.")
+    aliases: list[str] = Field(default_factory=list, description="All known aliases for this person.")
+    memory_count: int = Field(default=0, description="Count of related memories.")
+    event_count: int = Field(default=0, description="Count of related events.")
+    photo_count: int = Field(default=0, description="Count of related photo assets.")
+    avatar_download_url: Optional[str] = Field(default=None, description="Avatar image URL chosen from related photo faces.")
+    compreface_subject_id: Optional[str] = Field(default=None, description="Linked CompreFace subject id or name.")
+    compreface_subject_url: Optional[str] = Field(default=None, description="CompreFace subject URL when configured.")
+    contact: PersonContactResponse = Field(description="Contact details block for this person.")
+
+
+class PersonActivityResponse(BaseModel):
+    memories: list[MemoryResponse] = Field(default_factory=list, description="Memories associated to this person.")
+    events: list[LifeEventResponse] = Field(default_factory=list, description="Events associated to this person.")
+    assets: list[AssetResponse] = Field(default_factory=list, description="Photo assets associated to this person.")
+
+
+class CreatePersonQuickMemoryRequest(BaseModel):
+    text: str = Field(description="Short memory text about this person.")
+    estimated_date_text: Optional[str] = Field(default=None, description="Optional free-text estimated date for the memory.")
+
+
+class ApprovePersonFaceRequest(BaseModel):
+    person_id: int = Field(description="Person id to approve this face assignment for.")
 
 
 class UpdateMemoryRecorderRequest(BaseModel):

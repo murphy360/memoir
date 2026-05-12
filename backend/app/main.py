@@ -25,7 +25,9 @@ from app.schemas import (
     CreateLifeEpicRequest,
     EventFaceResponse,
     AddAliasRequest,
+    ApprovePersonFaceRequest,
     AnswerQuestionRequest,
+    CreatePersonQuickMemoryRequest,
     CreateLifeEventRequest,
     CreateLifePeriodRequest,
     CreateLifeThreadRequest,
@@ -50,12 +52,16 @@ from app.schemas import (
     UpdateLifePeriodRequest,
     UpdateLifeThreadRequest,
     MergePeriodsRequest,
+    PersonActivityResponse,
+    PersonContactResponse,
+    PersonDetailResponse,
     SettingsResponse,
     SplitPersonRequest,
     SplitUnknownFaceGroupRequest,
     UnknownFaceGroupResponse,
     UpdateDirectoryEntryRequest,
     UpdateMemoryRequest,
+    UpdatePersonContactRequest,
     UpdateMemoryRecorderRequest,
     UpdateSettingRequest,
     AssignUnknownFaceGroupRequest,
@@ -72,6 +78,7 @@ from app.services.gemini_client import extract_text_from_document
 from app.services.image_metadata import compress_photo_for_storage, extract_and_apply_image_metadata
 from app.services.geocoding import backfill_asset_location_names
 from app.services.faces import (
+    approve_face_for_person,
     assign_face_to_person,
     link_person_to_existing_compreface_subject,
     list_faces_for_event,
@@ -92,6 +99,9 @@ from app.services.directory import (
     detach_person_compreface_link,
     get_or_create_person,
     get_or_create_place,
+    list_person_assets,
+    list_person_events,
+    list_person_memories,
     list_people_directory,
     list_places_directory,
     merge_people_records,
@@ -475,6 +485,8 @@ def update_epic(epic_id: int, body: UpdateLifeEpicRequest, db: Session = Depends
     if not epic:
         raise HTTPException(status_code=404, detail="Epic not found")
 
+    previous_period_id = epic.period_id
+
     if body.title is not None:
         clean_title = normalize_directory_name(body.title)
         if not clean_title:
@@ -485,6 +497,17 @@ def update_epic(epic_id: int, body: UpdateLifeEpicRequest, db: Session = Depends
         if body.thread_id is not None and not db.get(LifeThread, body.thread_id):
             raise HTTPException(status_code=404, detail="Thread not found")
         epic.thread_id = body.thread_id
+
+    if "period_id" in body.model_fields_set:
+        if body.period_id is None:
+            raise HTTPException(status_code=400, detail="Epic period cannot be cleared")
+        target_period = db.get(LifePeriod, body.period_id)
+        if not target_period:
+            raise HTTPException(status_code=404, detail="Target period not found")
+        epic.period_id = body.period_id
+
+        # Keep event/epic period alignment intact after an epic move.
+        db.query(LifeEvent).filter(LifeEvent.epic_id == epic.id).update({"period_id": body.period_id})
 
     if "description" in body.model_fields_set:
         epic.description = (body.description or "").strip()[:2000] or None
@@ -499,6 +522,15 @@ def update_epic(epic_id: int, body: UpdateLifeEpicRequest, db: Session = Depends
         epic.end_date_text = clean_date_text(body.end_date_text)
 
     epic.start_sort, epic.end_sort = resolve_start_end_dates(epic.start_date_text, epic.end_date_text)
+
+    if epic.period_id != previous_period_id:
+        if previous_period_id is not None:
+            previous_period = db.get(LifePeriod, previous_period_id)
+            if previous_period:
+                refresh_period_summary(db, previous_period)
+        next_period = db.get(LifePeriod, epic.period_id)
+        if next_period:
+            refresh_period_summary(db, next_period)
 
     db.commit()
     db.refresh(epic)
@@ -1649,6 +1681,174 @@ def list_memories(db: Session = Depends(get_db)) -> list[MemoryEntry]:
 @app.get("/api/people", response_model=list[DirectoryEntryResponse])
 def list_people(db: Session = Depends(get_db)) -> list[DirectoryEntryResponse]:
     return list_people_directory(db)
+
+
+@app.get("/api/people/{person_id}", response_model=PersonDetailResponse)
+def get_person_details(person_id: int, db: Session = Depends(get_db)) -> PersonDetailResponse:
+    person = db.get(Person, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    directory_row = next((row for row in list_people_directory(db) if row.id == person_id), None)
+    memories = list_person_memories(db, person_id)
+    events = list_person_events(db, person_id)
+
+    return PersonDetailResponse(
+        id=person.id,
+        name=person.name,
+        aliases=[alias.alias for alias in person.aliases],
+        memory_count=(directory_row.memory_count if directory_row else len(memories)),
+        event_count=len(events),
+        photo_count=(directory_row.photo_count if directory_row else 0),
+        avatar_download_url=(directory_row.avatar_download_url if directory_row else None),
+        compreface_subject_id=person.compreface_subject_id,
+        compreface_subject_url=(directory_row.compreface_subject_url if directory_row else None),
+        contact=PersonContactResponse(
+            phone=person.phone,
+            email=person.email,
+            address=person.address,
+            notes=person.notes,
+            birthday_text=person.birthday_text,
+        ),
+    )
+
+
+@app.patch("/api/people/{person_id}/contact", response_model=PersonDetailResponse)
+def update_person_contact(
+    person_id: int,
+    body: UpdatePersonContactRequest,
+    db: Session = Depends(get_db),
+) -> PersonDetailResponse:
+    person = db.get(Person, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    if "phone" in body.model_fields_set:
+        person.phone = (body.phone or "").strip() or None
+    if "email" in body.model_fields_set:
+        person.email = (body.email or "").strip() or None
+    if "address" in body.model_fields_set:
+        person.address = (body.address or "").strip() or None
+    if "notes" in body.model_fields_set:
+        person.notes = (body.notes or "").strip() or None
+    if "birthday_text" in body.model_fields_set:
+        person.birthday_text = clean_date_text(body.birthday_text)
+
+    db.commit()
+    return get_person_details(person_id, db)
+
+
+@app.get("/api/people/{person_id}/activity", response_model=PersonActivityResponse)
+def get_person_activity(person_id: int, db: Session = Depends(get_db)) -> PersonActivityResponse:
+    person = db.get(Person, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    memories = list_person_memories(db, person_id)
+    events = list_person_events(db, person_id)
+    assets = list_person_assets(db, person_id)
+
+    return PersonActivityResponse(
+        memories=[MemoryResponse.model_validate(memory) for memory in memories],
+        events=[build_event_response(event) for event in events],
+        assets=[build_asset_response(asset) for asset in assets],
+    )
+
+
+@app.post("/api/people/{person_id}/memories/quick", response_model=MemoryResponse)
+def create_person_quick_memory(
+    person_id: int,
+    body: CreatePersonQuickMemoryRequest,
+    db: Session = Depends(get_db),
+) -> MemoryEntry:
+    person = db.get(Person, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    text_value = (body.text or "").strip()
+    if not text_value:
+        raise HTTPException(status_code=400, detail="Memory text is required")
+
+    clean_estimated_date = clean_date_text(body.estimated_date_text)
+    estimated_start, estimated_end = parse_text_date_range(clean_estimated_date)
+
+    memory = MemoryEntry(
+        transcript=text_value,
+        event_description=text_value[:180],
+        estimated_date_text=clean_estimated_date,
+        estimated_date_sort=estimated_start,
+        estimated_end_date_sort=estimated_end or estimated_start,
+        recorder_name=person.name,
+        recorder_person_id=person.id,
+        emotional_tone="neutral",
+        follow_up_question="Would you like to add more detail about this person?",
+        date_recorded=datetime.utcnow().date(),
+    )
+    db.add(memory)
+    db.flush()
+
+    sync_memory_people(db, memory, [person.name])
+
+    db.commit()
+    db.refresh(memory)
+    return memory
+
+
+@app.post("/api/people/{person_id}/faces/{face_id}/approve", response_model=EventFaceResponse)
+def approve_person_face(
+    person_id: int,
+    face_id: int,
+    body: ApprovePersonFaceRequest,
+    db: Session = Depends(get_db),
+) -> EventFaceResponse:
+    if body.person_id != person_id:
+        raise HTTPException(status_code=400, detail="Person id mismatch")
+
+    try:
+        face = approve_face_for_person(db, face_id, person_id)
+    except ValueError as exc:
+        if str(exc) == "face_not_found":
+            raise HTTPException(status_code=404, detail="Face not found") from exc
+        if str(exc) == "person_not_found":
+            raise HTTPException(status_code=404, detail="Person not found") from exc
+        raise HTTPException(status_code=400, detail="Could not approve face") from exc
+
+    db.commit()
+    db.refresh(face)
+    return _build_event_face_response(face)
+
+
+@app.get("/api/people/{person_id}/faces/suggested", response_model=list[EventFaceResponse])
+def list_person_suggested_faces(person_id: int, db: Session = Depends(get_db)) -> list[EventFaceResponse]:
+    person = db.get(Person, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    subject_candidates = {
+        value.casefold()
+        for value in [person.compreface_subject_id, person.name]
+        if (value or "").strip()
+    }
+    if not subject_candidates:
+        return []
+
+    candidate_faces = (
+        db.query(AssetFace)
+        .join(Asset, Asset.id == AssetFace.asset_id)
+        .filter(
+            Asset.kind == "photo",
+            AssetFace.person_id.is_(None),
+            AssetFace.compreface_subject.isnot(None),
+        )
+        .order_by(AssetFace.compreface_similarity.desc().nulls_last(), AssetFace.created_at.desc())
+        .all()
+    )
+
+    return [
+        _build_event_face_response(face)
+        for face in candidate_faces
+        if (face.compreface_subject or "").strip().casefold() in subject_candidates
+    ]
 
 
 @app.post("/api/people", response_model=DirectoryEntryResponse)

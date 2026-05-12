@@ -62,6 +62,7 @@ import {
   deleteEpic,
   renameThread,
   renameEpic,
+  assignEpicToPeriod,
   assignEpicToThread,
   assignEventToThread,
   API_BASE,
@@ -724,6 +725,17 @@ export default function HomePage() {
       setStatus("Epic thread updated.");
     } catch {
       setStatus("Failed to update epic thread.");
+    }
+  }
+
+  async function doAssignEpicToPeriod(epicId: number, periodId: number) {
+    setStatus("Moving epic to period...");
+    try {
+      await assignEpicToPeriod(epicId, periodId);
+      await loadTimeline();
+      setStatus("Epic moved to new period.");
+    } catch {
+      setStatus("Failed to move epic to period.");
     }
   }
 
@@ -2693,6 +2705,7 @@ export default function HomePage() {
                                     <EpicCard
                                       key={epic.id}
                                       epic={epic}
+                                      periods={lifePeriods}
                                       threads={lifeThreads}
                                       isOpen={isEpicExpanded}
                                       isRenamingTitle={editingEpicTitleId === epic.id}
@@ -2704,6 +2717,7 @@ export default function HomePage() {
                                       onCancelRenameTitle={() => { setEditingEpicTitleId(null); setEditingEpicTitleValue(""); }}
                                       onDelete={() => void doDeleteEpic(epic.id, epic.title)}
                                       onAssignThread={(threadId) => void doAssignEpicToThread(epic.id, threadId)}
+                                      onAssignPeriod={(periodId) => void doAssignEpicToPeriod(epic.id, periodId)}
                                       onCreateEvent={(title) => createLifeEventInEpic(epic.id, title)}
                                       isBusy={isSavingLifeStructure || isRecording || isLoading}
                                     >

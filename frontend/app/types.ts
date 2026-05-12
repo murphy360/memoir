@@ -62,6 +62,33 @@ export type DirectoryEntry = {
   compreface_subject_url: string | null;
 };
 
+export type PersonContact = {
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  notes: string | null;
+  birthday_text: string | null;
+};
+
+export type PersonDetail = {
+  id: number;
+  name: string;
+  aliases: string[];
+  memory_count: number;
+  event_count: number;
+  photo_count: number;
+  avatar_download_url: string | null;
+  compreface_subject_id: string | null;
+  compreface_subject_url: string | null;
+  contact: PersonContact;
+};
+
+export type PersonActivity = {
+  memories: MemoryEntry[];
+  events: LifeEvent[];
+  assets: AssetEntry[];
+};
+
 export type Question = {
   id: number;
   text: string;

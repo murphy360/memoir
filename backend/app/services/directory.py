@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 from sqlalchemy.orm import Session
 
-from app.models import Asset, AssetFace, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place
+from app.models import Asset, AssetFace, EventAsset, LifeEvent, MemoryEntry, MemoryPerson, MemoryPlace, Person, PersonAlias, Place
 from app.schemas import DirectoryEntryResponse
 from app.services.periods import normalize_directory_name
 
@@ -364,3 +364,98 @@ def list_places_directory(db: Session) -> list[DirectoryEntryResponse]:
 def update_memory_json_from_links(memory: MemoryEntry) -> None:
     memory.people_json = json.dumps(memory.referenced_people)
     memory.locations_json = json.dumps(memory.referenced_locations)
+
+
+def person_memory_ids(db: Session, person_id: int) -> set[int]:
+    """Collect memory ids where the person is recorder or referenced."""
+    memory_ids: set[int] = set()
+    for memory in db.query(MemoryEntry).all():
+        if memory.recorder_person_id == person_id:
+            memory_ids.add(memory.id)
+            continue
+        if any(link.person_id == person_id for link in memory.people_links):
+            memory_ids.add(memory.id)
+    return memory_ids
+
+
+def list_person_memories(db: Session, person_id: int) -> list[MemoryEntry]:
+    """Return person-linked memories in timeline order for the details page."""
+    ids = person_memory_ids(db, person_id)
+    if not ids:
+        return []
+    return (
+        db.query(MemoryEntry)
+        .filter(MemoryEntry.id.in_(ids))
+        .order_by(
+            MemoryEntry.estimated_date_sort.is_(None),
+            MemoryEntry.estimated_date_sort.asc(),
+            MemoryEntry.estimated_end_date_sort.asc().nulls_last(),
+            MemoryEntry.created_at.desc(),
+        )
+        .all()
+    )
+
+
+def list_person_events(db: Session, person_id: int) -> list[LifeEvent]:
+    """Return events associated through legacy memory links or face-tagged assets."""
+    memory_ids = person_memory_ids(db, person_id)
+    event_ids: set[int] = set()
+
+    if memory_ids:
+        legacy_events = (
+            db.query(LifeEvent.id)
+            .filter(LifeEvent.legacy_memory_id.isnot(None), LifeEvent.legacy_memory_id.in_(memory_ids))
+            .all()
+        )
+        event_ids.update(event_id for (event_id,) in legacy_events)
+
+    face_event_ids = (
+        db.query(EventAsset.event_id)
+        .join(AssetFace, AssetFace.asset_id == EventAsset.asset_id)
+        .filter(AssetFace.person_id == person_id)
+        .all()
+    )
+    event_ids.update(event_id for (event_id,) in face_event_ids)
+
+    if not event_ids:
+        return []
+
+    return (
+        db.query(LifeEvent)
+        .filter(LifeEvent.id.in_(event_ids))
+        .order_by(
+            LifeEvent.event_date_sort.is_(None),
+            LifeEvent.event_date_sort.asc(),
+            LifeEvent.created_at.asc(),
+        )
+        .all()
+    )
+
+
+def list_person_assets(db: Session, person_id: int) -> list[Asset]:
+    """Return distinct photo assets where this person is face-tagged."""
+    direct_asset_ids = {
+        asset_id
+        for (asset_id,) in db.query(AssetFace.asset_id).filter(AssetFace.person_id == person_id).all()
+    }
+
+    event_asset_ids = {
+        asset_id
+        for (asset_id,) in (
+            db.query(EventAsset.asset_id)
+            .join(AssetFace, AssetFace.asset_id == EventAsset.asset_id)
+            .filter(AssetFace.person_id == person_id)
+            .all()
+        )
+    }
+
+    asset_ids = direct_asset_ids.union(event_asset_ids)
+    if not asset_ids:
+        return []
+
+    return (
+        db.query(Asset)
+        .filter(Asset.id.in_(asset_ids), Asset.kind == "photo")
+        .order_by(Asset.captured_at.desc().nulls_last(), Asset.created_at.desc())
+        .all()
+    )

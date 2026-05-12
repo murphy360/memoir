@@ -791,6 +791,44 @@ def assign_face_to_person(db: Session, face_id: int, person_id: Optional[int]) -
     return face
 
 
+def approve_face_for_person(db: Session, face_id: int, person_id: int) -> AssetFace:
+    """Approve one face-to-person match and push training data to CompreFace when possible."""
+    face = assign_face_to_person(db, face_id, person_id)
+    person = db.get(Person, person_id)
+    if person is None:
+        raise ValueError("person_not_found")
+
+    subject_name = (person.compreface_subject_id or person.name or "").strip()
+    if not subject_name or not face.asset or not face.asset.storage_filename:
+        return face
+
+    try:
+        from app.main import DOCUMENT_STORAGE_DIR
+
+        file_path = DOCUMENT_STORAGE_DIR / face.asset.storage_filename
+        if not file_path.exists():
+            return face
+
+        image_bytes = file_path.read_bytes()
+        crop_bytes = _extract_face_crop_jpeg(
+            image_bytes,
+            FaceDetection(
+                bbox_x=face.bbox_x,
+                bbox_y=face.bbox_y,
+                bbox_w=face.bbox_w,
+                bbox_h=face.bbox_h,
+                confidence=face.confidence,
+            ),
+        )
+        if crop_bytes:
+            enroll_face_in_compreface_subject(subject_name, crop_bytes)
+            face.compreface_subject = person.name
+    except Exception as exc:
+        logger.warning("Face approval enrollment failed for person %s: %s", person_id, exc)
+
+    return face
+
+
 def rename_face_subject(db: Session, face_id: int, new_subject_name: str) -> AssetFace:
     """Rename a detected face's CompreFace subject and sync local face subject labels.
 

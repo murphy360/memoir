@@ -20,6 +20,8 @@ type DirectoryManagerProps = {
   onAddAlias?: (itemId: number, alias: string) => Promise<void>;
   onRemoveAlias?: (itemId: number, alias: string) => Promise<void>;
   onLinkCompreface?: (itemId: number, subjectName: string) => Promise<void>;
+  detailsHrefBuilder?: (itemId: number) => string;
+  showDetailActions?: boolean;
 };
 
 export function DirectoryManager({
@@ -38,6 +40,8 @@ export function DirectoryManager({
   onAddAlias,
   onRemoveAlias,
   onLinkCompreface,
+  detailsHrefBuilder,
+  showDetailActions = true,
 }: DirectoryManagerProps) {
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -396,7 +400,11 @@ export function DirectoryManager({
               )}
 
               <div className="directoryActions">
-                {isEditing ? (
+                {!showDetailActions && detailsHrefBuilder ? (
+                  <a className="ghost" href={detailsHrefBuilder(item.id)}>
+                    Open
+                  </a>
+                ) : isEditing ? (
                   <>
                     <button
                       className="secondary"

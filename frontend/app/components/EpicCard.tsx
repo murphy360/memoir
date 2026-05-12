@@ -1,9 +1,10 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import type { LifeEpic, LifeThread } from "../types";
+import type { LifeEpic, LifePeriod, LifeThread } from "../types";
 
 type EpicCardProps = {
   epic: LifeEpic;
+  periods: LifePeriod[];
   threads: LifeThread[];
   isOpen: boolean;
   isRenamingTitle: boolean;
@@ -15,6 +16,7 @@ type EpicCardProps = {
   onCancelRenameTitle: () => void;
   onDelete: () => void;
   onAssignThread: (threadId: number | null) => void;
+  onAssignPeriod: (periodId: number) => void;
   onCreateEvent: (title: string) => Promise<void>;
   isBusy: boolean;
   children: ReactNode;
@@ -22,6 +24,7 @@ type EpicCardProps = {
 
 export function EpicCard({
   epic,
+  periods,
   threads,
   isOpen,
   isRenamingTitle,
@@ -33,11 +36,13 @@ export function EpicCard({
   onCancelRenameTitle,
   onDelete,
   onAssignThread,
+  onAssignPeriod,
   onCreateEvent,
   isBusy,
   children,
 }: EpicCardProps) {
   const [showThreadPicker, setShowThreadPicker] = useState(false);
+  const [showPeriodPicker, setShowPeriodPicker] = useState(false);
   const [newEventDraft, setNewEventDraft] = useState("");
   const assignedThread = threads.find((t) => t.id === epic.thread_id) ?? null;
 
@@ -112,6 +117,16 @@ export function EpicCard({
               <button
                 className="secondary"
                 type="button"
+                title="Move epic to period"
+                style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem" }}
+                onClick={() => setShowPeriodPicker((v) => !v)}
+                disabled={isBusy}
+              >
+                📁
+              </button>
+              <button
+                className="secondary"
+                type="button"
                 title="Rename epic"
                 style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem" }}
                 onClick={onStartRenameTitle}
@@ -165,6 +180,28 @@ export function EpicCard({
               Clear
             </button>
           )}
+        </div>
+      )}
+      {isOpen && showPeriodPicker && (
+        <div className="controls" style={{ padding: "0.4rem 0.8rem", gap: "0.4rem", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "0.85rem", color: "var(--text-muted, #888)" }}>Move to period:</span>
+          {periods.map((period) => (
+            <button
+              key={period.id}
+              className={`secondary${epic.period_id === period.id ? " active" : ""}`}
+              type="button"
+              style={{ fontSize: "0.8rem", padding: "0.15rem 0.5rem" }}
+              onClick={() => {
+                if (epic.period_id !== period.id) {
+                  onAssignPeriod(period.id);
+                }
+                setShowPeriodPicker(false);
+              }}
+              disabled={isBusy}
+            >
+              {period.title}
+            </button>
+          ))}
         </div>
       )}
       {isOpen && (

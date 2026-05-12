@@ -9,6 +9,8 @@ import {
   LifePeriodAnalysis,
   LifeThread,
   MemoryEntry,
+  PersonActivity,
+  PersonDetail,
   Question,
 } from "../types";
 
@@ -225,6 +227,17 @@ export async function assignEpicToThread(epicId: number, threadId: number | null
     body: JSON.stringify({ thread_id: threadId }),
   });
   await expectOk(response, "Failed to assign epic to thread");
+  return response.json();
+}
+
+/** Move an epic into a different period via PATCH /api/epics/{epic_id}. */
+export async function assignEpicToPeriod(epicId: number, periodId: number): Promise<LifeEpic> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/epics/${epicId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ period_id: periodId }),
+  });
+  await expectOk(response, "Failed to move epic to period");
   return response.json();
 }
 
@@ -560,6 +573,79 @@ export async function assignRecorderPerson(memoryId: number, personId: number): 
     body: JSON.stringify({ person_id: personId }),
   });
   await expectOk(response, "Recorder update failed");
+}
+
+/** Load full person profile details via GET /api/people/{person_id}. */
+export async function fetchPersonDetail(personId: number): Promise<PersonDetail> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/people/${personId}`), { cache: "no-store" });
+  await expectOk(response, "Failed to load person details");
+  return response.json();
+}
+
+/** Load person activity bundles via GET /api/people/{person_id}/activity. */
+export async function fetchPersonActivity(personId: number): Promise<PersonActivity> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/people/${personId}/activity`), { cache: "no-store" });
+  await expectOk(response, "Failed to load person activity");
+  return response.json();
+}
+
+/** Load people directory rows for merge targets from GET /api/people. */
+export async function fetchPeopleDirectory(): Promise<DirectoryEntry[]> {
+  const response = await fetch(toAbsoluteApiUrl("/api/people"), { cache: "no-store" });
+  await expectOk(response, "Failed to load people directory");
+  return response.json();
+}
+
+/** Patch person contact fields via PATCH /api/people/{person_id}/contact. */
+export async function updatePersonContact(
+  personId: number,
+  payload: {
+    phone?: string | null;
+    email?: string | null;
+    address?: string | null;
+    notes?: string | null;
+    birthday_text?: string | null;
+  },
+): Promise<PersonDetail> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/people/${personId}/contact`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  await expectOk(response, "Failed to update person contact details");
+  return response.json();
+}
+
+/** Create a quick person-scoped text memory via POST /api/people/{person_id}/memories/quick. */
+export async function createPersonQuickMemory(
+  personId: number,
+  payload: { text: string; estimated_date_text?: string | null },
+): Promise<MemoryEntry> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/people/${personId}/memories/quick`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  await expectOk(response, "Failed to create quick memory");
+  return response.json();
+}
+
+/** Fetch pending suggested face matches for approval via GET /api/people/{person_id}/faces/suggested. */
+export async function fetchPersonSuggestedFaces(personId: number): Promise<EventFaceEntry[]> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/people/${personId}/faces/suggested`), { cache: "no-store" });
+  await expectOk(response, "Failed to load suggested faces");
+  return response.json();
+}
+
+/** Approve one suggested face match and sync CompreFace via POST /api/people/{person_id}/faces/{face_id}/approve. */
+export async function approvePersonFace(personId: number, faceId: number): Promise<EventFaceEntry> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/people/${personId}/faces/${faceId}/approve`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ person_id: personId }),
+  });
+  await expectOk(response, "Failed to approve face");
+  return response.json();
 }
 
 export async function mergePeopleEntries(sourceId: number, intoId: number): Promise<void> {

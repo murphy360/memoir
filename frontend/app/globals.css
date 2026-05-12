@@ -413,6 +413,16 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.directoryActions a.ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+}
+
 .directoryMergeRow {
   width: 100%;
   display: flex;
@@ -1024,6 +1034,143 @@ button.ghost {
 button.ghost:hover:not(:disabled) {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+a.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+}
+
+a.ghost:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.personDetailsHero {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.personDetailsHero h1 {
+  margin: 0;
+}
+
+.personDetailsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.personColumn {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+}
+
+.personColumn label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.personColumn input,
+.personColumn select,
+.personColumn textarea,
+.personInlineRow input,
+.personFullMemoryForm input,
+.personFullMemoryForm textarea {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  background: #fff;
+  color: var(--ink);
+}
+
+.personInlineRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.personInlineRow input {
+  flex: 1;
+  min-width: 180px;
+}
+
+.personCheckboxRow {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.personSection {
+  margin-top: 1rem;
+}
+
+.personSimpleList {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.personListCard {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fffdf9;
+  padding: 0.7rem 0.8rem;
+}
+
+.personListCard p {
+  margin: 0.35rem 0 0;
+}
+
+.personAssetGrid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+
+.personAssetCard {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin: 0;
+  background: #fff;
+  overflow: hidden;
+}
+
+.personAssetCard img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+}
+
+.personAssetCard figcaption {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.personFacePreview {
+  width: 180px;
+  max-width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  display: block;
+  margin: 0.45rem 0;
+}
+
+.personFullMemoryForm {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.5rem 0 0.8rem;
 }
 
 .questionsSection {
