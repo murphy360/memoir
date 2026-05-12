@@ -41,14 +41,13 @@ import {
   reanalyzeMemoryById,
   removePersonAlias as removePersonAliasRequest,
   renameDirectoryEntry as renameDirectoryEntryRequest,
-  renamePeriodTitle,
-  updatePeriodDates,
-  renameEventTitle,
+  updatePeriodById,
   resolveApiUrl,
   saveMainCharacterName as saveMainCharacterNameRequest,
   splitPersonEntry as splitPersonEntryRequest,
   addPersonAlias as addPersonAliasRequest,
   updateEventById,
+  updateEpicById,
   updateMemoryTitle as updateMemoryTitleById,
   updateAssetNotes as updateAssetNotesById,
   updateAssetCapturedDate as updateAssetCapturedDateById,
@@ -61,10 +60,6 @@ import {
   deleteThread,
   deleteEpic,
   renameThread,
-  renameEpic,
-  assignEpicToPeriod,
-  assignEpicToThread,
-  assignEventToThread,
   API_BASE,
 } from "./lib/memoirApi";
 import {
@@ -457,6 +452,39 @@ export default function HomePage() {
     setStatus,
   });
 
+  // Keep Period/Epic/Event edits and moves on one async UX path (status, busy state, timeline refresh).
+  async function runHierarchyMutation<T>(options: {
+    startStatus: string;
+    successStatus: string;
+    failureStatus: string;
+    action: () => Promise<T>;
+    refreshTimeline?: boolean;
+    useBusyState?: boolean;
+    onSuccess?: (result: T) => void;
+  }): Promise<T | null> {
+    const { startStatus, successStatus, failureStatus, action, refreshTimeline = true, useBusyState = false, onSuccess } = options;
+    if (useBusyState) {
+      setIsSavingLifeStructure(true);
+    }
+    setStatus(startStatus);
+    try {
+      const result = await action();
+      onSuccess?.(result);
+      if (refreshTimeline) {
+        await loadTimeline();
+      }
+      setStatus(successStatus);
+      return result;
+    } catch {
+      setStatus(failureStatus);
+      return null;
+    } finally {
+      if (useBusyState) {
+        setIsSavingLifeStructure(false);
+      }
+    }
+  }
+
   async function createLifePeriod() {
     if (!newPeriodTitle.trim()) {
       return;
@@ -590,74 +618,75 @@ export default function HomePage() {
   }
 
   async function savePeriodDates(periodId: number) {
-    setStatus("Saving period dates...");
-    try {
-      await updatePeriodDates(
-        periodId,
-        editingPeriodStartValue.trim() || null,
-        editingPeriodEndValue.trim() || null,
-      );
+    const updated = await runHierarchyMutation({
+      startStatus: "Saving period dates...",
+      successStatus: "Period dates updated.",
+      failureStatus: "Failed to update period dates.",
+      action: () => updatePeriodById(periodId, {
+        start_date_text: editingPeriodStartValue.trim() || null,
+        end_date_text: editingPeriodEndValue.trim() || null,
+      }),
+    });
+    if (updated) {
       setEditingPeriodDatesId(null);
-      await loadTimeline();
-      setStatus("Period dates updated.");
-    } catch {
-      setStatus("Failed to update period dates.");
+      setEditingPeriodStartValue("");
+      setEditingPeriodEndValue("");
     }
   }
 
   async function renamePeriod(periodId: number, newTitle: string) {
     const trimmed = newTitle.trim();
     if (!trimmed) return;
-    setStatus("Saving period title...");
-    try {
-      await renamePeriodTitle(periodId, trimmed);
+    const updated = await runHierarchyMutation({
+      startStatus: "Saving period title...",
+      successStatus: "Period title updated.",
+      failureStatus: "Failed to rename period.",
+      action: () => updatePeriodById(periodId, { title: trimmed }),
+    });
+    if (updated) {
       setEditingPeriodTitleId(null);
       setEditingPeriodTitleValue("");
-      await loadTimeline();
-      setStatus("Period title updated.");
-    } catch {
-      setStatus("Failed to rename period.");
     }
   }
 
   async function renameEvent(eventId: number, newTitle: string) {
     const trimmed = newTitle.trim();
     if (!trimmed) return;
-    setStatus("Saving event title...");
-    try {
-      await renameEventTitle(eventId, trimmed);
+    const updated = await runHierarchyMutation({
+      startStatus: "Saving event title...",
+      successStatus: "Event title updated.",
+      failureStatus: "Failed to rename event.",
+      action: () => updateEventById(eventId, { title: trimmed }),
+    });
+    if (updated) {
       setEditingEventTitleId(null);
       setEditingEventTitleValue("");
-      await loadTimeline();
-      setStatus("Event title updated.");
-    } catch {
-      setStatus("Failed to rename event.");
     }
   }
 
   async function saveEventDate(eventId: number, newDateText: string) {
-    setStatus("Saving event date...");
-    try {
-      await updateEventById(eventId, { event_date_text: newDateText.trim() || null });
+    const updated = await runHierarchyMutation({
+      startStatus: "Saving event date...",
+      successStatus: "Event date updated.",
+      failureStatus: "Failed to update event date.",
+      action: () => updateEventById(eventId, { event_date_text: newDateText.trim() || null }),
+    });
+    if (updated) {
       setEditingEventDateId(null);
       setEditingEventDateValue("");
-      await loadTimeline();
-      setStatus("Event date updated.");
-    } catch {
-      setStatus("Failed to update event date.");
     }
   }
 
   async function saveEventLocation(eventId: number, newLocation: string) {
-    setStatus("Saving event location...");
-    try {
-      await updateEventById(eventId, { location: newLocation.trim() || null });
+    const updated = await runHierarchyMutation({
+      startStatus: "Saving event location...",
+      successStatus: "Event location updated.",
+      failureStatus: "Failed to update event location.",
+      action: () => updateEventById(eventId, { location: newLocation.trim() || null }),
+    });
+    if (updated) {
       setEditingEventLocationId(null);
       setEditingEventLocationValue("");
-      await loadTimeline();
-      setStatus("Event location updated.");
-    } catch {
-      setStatus("Failed to update event location.");
     }
   }
 
@@ -718,36 +747,33 @@ export default function HomePage() {
   }
 
   async function doAssignEpicToThread(epicId: number, threadId: number | null) {
-    setStatus("Updating epic thread...");
-    try {
-      const updated = await assignEpicToThread(epicId, threadId);
-      setLifeEpics((prev) => prev.map((e) => (e.id === epicId ? updated : e)));
-      setStatus("Epic thread updated.");
-    } catch {
-      setStatus("Failed to update epic thread.");
-    }
+    await runHierarchyMutation({
+      startStatus: "Updating epic thread...",
+      successStatus: "Epic thread updated.",
+      failureStatus: "Failed to update epic thread.",
+      refreshTimeline: false,
+      action: () => updateEpicById(epicId, { thread_id: threadId }),
+      onSuccess: (updated) => setLifeEpics((prev) => prev.map((e) => (e.id === epicId ? updated : e))),
+    });
   }
 
   async function doAssignEpicToPeriod(epicId: number, periodId: number) {
-    setStatus("Moving epic to period...");
-    try {
-      await assignEpicToPeriod(epicId, periodId);
-      await loadTimeline();
-      setStatus("Epic moved to new period.");
-    } catch {
-      setStatus("Failed to move epic to period.");
-    }
+    await runHierarchyMutation({
+      startStatus: "Moving epic to period...",
+      successStatus: "Epic moved to new period.",
+      failureStatus: "Failed to move epic to period.",
+      useBusyState: true,
+      action: () => updateEpicById(epicId, { period_id: periodId }),
+    });
   }
 
   async function doAssignEventToThread(eventId: number, threadId: number | null) {
-    setStatus("Updating event thread...");
-    try {
-      await assignEventToThread(eventId, threadId);
-      await loadTimeline();
-      setStatus("Event thread updated.");
-    } catch {
-      setStatus("Failed to update event thread.");
-    }
+    await runHierarchyMutation({
+      startStatus: "Updating event thread...",
+      successStatus: "Event thread updated.",
+      failureStatus: "Failed to update event thread.",
+      action: () => updateEventById(eventId, { thread_id: threadId }),
+    });
   }
 
   async function doAssignPeriodToThread(_periodId: number, _threadId: number | null) {
@@ -788,17 +814,13 @@ export default function HomePage() {
   }
 
   async function moveEventToEpic(event: LifeEvent, epicId: number | null) {
-    setIsSavingLifeStructure(true);
-    setStatus("Assigning event to epic...");
-    try {
-      await updateEventById(event.id, { epic_id: epicId });
-      await loadTimeline();
-      setStatus("Event assigned.");
-    } catch {
-      setStatus("Failed to assign event.");
-    } finally {
-      setIsSavingLifeStructure(false);
-    }
+    await runHierarchyMutation({
+      startStatus: "Assigning event to epic...",
+      successStatus: "Event assigned.",
+      failureStatus: "Failed to assign event.",
+      useBusyState: true,
+      action: () => updateEventById(event.id, { epic_id: epicId }),
+    });
   }
 
   async function doDeleteEpic(epicId: number, epicTitle: string) {
@@ -815,15 +837,15 @@ export default function HomePage() {
 
   async function saveEpicTitle(epicId: number, title: string) {
     if (!title.trim()) return;
-    setStatus("Renaming epic...");
-    try {
-      await renameEpic(epicId, title.trim());
+    const updated = await runHierarchyMutation({
+      startStatus: "Renaming epic...",
+      successStatus: "Epic renamed.",
+      failureStatus: "Failed to rename epic.",
+      action: () => updateEpicById(epicId, { title: title.trim() }),
+    });
+    if (updated) {
       setEditingEpicTitleId(null);
       setEditingEpicTitleValue("");
-      await loadTimeline();
-      setStatus("Epic renamed.");
-    } catch {
-      setStatus("Failed to rename epic.");
     }
   }
 
@@ -1009,22 +1031,20 @@ export default function HomePage() {
       return;
     }
 
-    setIsSavingLifeStructure(true);
-    setStatus("Moving event to selected period...");
-    try {
-      await updateEventById(event.id, { period_id: nextPeriodId });
+    const moved = await runHierarchyMutation({
+      startStatus: "Moving event to selected period...",
+      successStatus: "Event moved.",
+      failureStatus: "Failed to move event.",
+      useBusyState: true,
+      action: () => updateEventById(event.id, { period_id: nextPeriodId }),
+    });
+    if (moved) {
       setEventMoveTargets((current) => {
         const next = { ...current };
         delete next[event.id];
         return next;
       });
-      await loadTimeline();
       focusEventInTimeline(event.id, nextPeriodId);
-      setStatus("Event moved.");
-    } catch {
-      setStatus("Failed to move event.");
-    } finally {
-      setIsSavingLifeStructure(false);
     }
   }
 
@@ -1132,11 +1152,12 @@ export default function HomePage() {
     }
   }
 
-  async function saveAssetTitle(assetId: number, eventId?: number) {
+  async function saveAssetTitle(assetId: number, eventId?: number, nextTitle?: string) {
     setAssetTitleSavingId(assetId);
     setStatus("Saving asset title...");
     try {
-      await updateAssetTitleById(assetId, editingAssetTitleValue.trim() || null);
+      const titleToSave = nextTitle !== undefined ? nextTitle : editingAssetTitleValue;
+      await updateAssetTitleById(assetId, titleToSave.trim() || null);
       setEditingAssetTitleId(null);
       setEditingAssetTitleValue("");
       if (eventId !== undefined) {

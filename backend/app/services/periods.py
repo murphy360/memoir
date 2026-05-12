@@ -2,6 +2,7 @@ import re
 from datetime import date
 from typing import Optional
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models import Asset, EventAsset, LifeEpic, LifeEvent, LifePeriod, LifeThread, MemoryEntry
@@ -12,7 +13,11 @@ from app.schemas import (
     LifePeriodAnalysisResponse,
     LifePeriodResponse,
     LifeThreadResponse,
+    UpdateLifeEpicRequest,
+    UpdateLifeEventRequest,
+    UpdateLifePeriodRequest,
 )
+from app.services.date_normalization import clean_date_text, parse_text_date_range, resolve_start_end_dates
 from app.services.gemini_client import generate_period_biography
 
 
@@ -61,6 +66,129 @@ def unique_thread_slug(db: Session, title: str, existing_id: Optional[int] = Non
             return candidate
         candidate = f"{base}-{suffix}"
         suffix += 1
+
+
+def apply_period_updates(db: Session, period: LifePeriod, body: UpdateLifePeriodRequest) -> None:
+    """Apply mutable period fields, including normalized date sort bounds."""
+    if body.title is not None:
+        clean_title = normalize_period_title(body.title)
+        if not clean_title:
+            raise HTTPException(status_code=400, detail="Period title cannot be empty")
+        period.title = clean_title
+        period.slug = unique_period_slug(db, clean_title, existing_id=period.id)
+
+    if body.start_date_text is not None:
+        period.start_date_text = clean_date_text(body.start_date_text)
+
+    if body.end_date_text is not None:
+        period.end_date_text = clean_date_text(body.end_date_text)
+
+    period.start_sort, period.end_sort = resolve_start_end_dates(period.start_date_text, period.end_date_text)
+
+
+def apply_epic_updates(db: Session, epic: LifeEpic, body: UpdateLifeEpicRequest) -> None:
+    """Apply epic edits and keep epic/event period alignment intact."""
+    previous_period_id = epic.period_id
+
+    if body.title is not None:
+        clean_title = normalize_directory_name(body.title)
+        if not clean_title:
+            raise HTTPException(status_code=400, detail="Epic title cannot be empty")
+        epic.title = clean_title
+
+    if "thread_id" in body.model_fields_set:
+        if body.thread_id is not None and not db.get(LifeThread, body.thread_id):
+            raise HTTPException(status_code=404, detail="Thread not found")
+        epic.thread_id = body.thread_id
+
+    if "period_id" in body.model_fields_set:
+        if body.period_id is None:
+            raise HTTPException(status_code=400, detail="Epic period cannot be cleared")
+        target_period = db.get(LifePeriod, body.period_id)
+        if not target_period:
+            raise HTTPException(status_code=404, detail="Target period not found")
+        epic.period_id = body.period_id
+        db.query(LifeEvent).filter(LifeEvent.epic_id == epic.id).update({"period_id": body.period_id})
+
+    if "description" in body.model_fields_set:
+        epic.description = (body.description or "").strip()[:2000] or None
+
+    if body.weight is not None:
+        epic.weight = body.weight
+
+    if "start_date_text" in body.model_fields_set:
+        epic.start_date_text = clean_date_text(body.start_date_text)
+
+    if "end_date_text" in body.model_fields_set:
+        epic.end_date_text = clean_date_text(body.end_date_text)
+
+    epic.start_sort, epic.end_sort = resolve_start_end_dates(epic.start_date_text, epic.end_date_text)
+
+    if epic.period_id != previous_period_id:
+        if previous_period_id is not None:
+            refresh_period_summary(db, db.get(LifePeriod, previous_period_id))
+        refresh_period_summary(db, db.get(LifePeriod, epic.period_id))
+
+
+def apply_event_updates(db: Session, event: LifeEvent, body: UpdateLifeEventRequest) -> None:
+    """Apply event edits and enforce valid period/epic relationships for move operations."""
+    previous_period_id = event.period_id
+
+    if body.title is not None:
+        clean_title = body.title.strip()
+        if not clean_title:
+            raise HTTPException(status_code=400, detail="Event title cannot be empty")
+        event.title = clean_title
+
+    if "description" in body.model_fields_set:
+        event.description = (body.description or "").strip()[:1200] or None
+
+    if "location" in body.model_fields_set:
+        event.location = (body.location or "").strip()[:255] or None
+
+    if "event_date_text" in body.model_fields_set:
+        event.event_date_text = clean_date_text(body.event_date_text) or None
+        parsed_start, parsed_end = parse_text_date_range(event.event_date_text)
+        if parsed_start is not None and parsed_end is None:
+            parsed_end = parsed_start
+        event.event_date_sort = parsed_start
+        event.event_end_date_sort = parsed_end
+
+    next_period_id = event.period_id
+    next_epic_id = event.epic_id
+
+    if "period_id" in body.model_fields_set:
+        next_period_id = body.period_id
+    if "epic_id" in body.model_fields_set:
+        next_epic_id = body.epic_id
+
+    if next_epic_id is not None:
+        resolved_epic = db.get(LifeEpic, next_epic_id)
+        if not resolved_epic:
+            raise HTTPException(status_code=404, detail="Epic not found")
+        if next_period_id is not None and resolved_epic.period_id != next_period_id:
+            raise HTTPException(status_code=400, detail="Epic does not belong to the provided period")
+        next_period_id = resolved_epic.period_id
+
+    if next_period_id is not None and not db.get(LifePeriod, next_period_id):
+        raise HTTPException(status_code=404, detail="Target period not found")
+    if next_period_id is None:
+        raise HTTPException(status_code=400, detail="Event requires period_id or epic_id")
+
+    event.period_id = next_period_id
+    event.epic_id = next_epic_id
+
+    if "thread_id" in body.model_fields_set:
+        if body.thread_id is not None and not db.get(LifeThread, body.thread_id):
+            raise HTTPException(status_code=404, detail="Thread not found")
+        event.thread_id = body.thread_id
+
+    if body.weight is not None:
+        event.weight = body.weight
+
+    if event.period_id != previous_period_id:
+        refresh_period_summary(db, db.get(LifePeriod, previous_period_id) if previous_period_id is not None else None)
+        refresh_period_summary(db, db.get(LifePeriod, event.period_id) if event.period_id is not None else None)
 
 
 def period_asset_count_from_events(events: list[LifeEvent]) -> int:

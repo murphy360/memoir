@@ -41,6 +41,20 @@ async function expectOk(response: Response, message: string): Promise<void> {
   }
 }
 
+/**
+ * Send a JSON PATCH request and return a parsed response body.
+ * Used to keep Period/Epic/Event mutation calls on one shared code path.
+ */
+async function patchJson<T>(path: string, payload: unknown, message: string): Promise<T> {
+  const response = await fetch(toAbsoluteApiUrl(path), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  await expectOk(response, message);
+  return response.json();
+}
+
 export function resolveApiUrl(path: string): string {
   return toAbsoluteApiUrl(path);
 }
@@ -221,35 +235,17 @@ export async function deleteEpic(epicId: number): Promise<void> {
 
 /** Assign or clear a thread on an epic via PATCH /api/epics/{epic_id}. */
 export async function assignEpicToThread(epicId: number, threadId: number | null): Promise<LifeEpic> {
-  const response = await fetch(toAbsoluteApiUrl(`/api/epics/${epicId}`), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ thread_id: threadId }),
-  });
-  await expectOk(response, "Failed to assign epic to thread");
-  return response.json();
+  return updateEpicById(epicId, { thread_id: threadId });
 }
 
 /** Move an epic into a different period via PATCH /api/epics/{epic_id}. */
 export async function assignEpicToPeriod(epicId: number, periodId: number): Promise<LifeEpic> {
-  const response = await fetch(toAbsoluteApiUrl(`/api/epics/${epicId}`), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ period_id: periodId }),
-  });
-  await expectOk(response, "Failed to move epic to period");
-  return response.json();
+  return updateEpicById(epicId, { period_id: periodId });
 }
 
 /** Assign or clear a thread on an event via PATCH /api/events/{event_id}. */
 export async function assignEventToThread(eventId: number, threadId: number | null): Promise<LifeEvent> {
-  const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}`), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ thread_id: threadId }),
-  });
-  await expectOk(response, "Failed to assign event to thread");
-  return response.json();
+  return updateEventById(eventId, { thread_id: threadId });
 }
 
 /** Rename a thread via PATCH /api/threads/{thread_id}. */
@@ -264,12 +260,23 @@ export async function renameThread(threadId: number, title: string): Promise<voi
 
 /** Rename an epic via PATCH /api/epics/{epic_id}. */
 export async function renameEpic(epicId: number, title: string): Promise<void> {
-  const response = await fetch(toAbsoluteApiUrl(`/api/epics/${epicId}`), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title }),
-  });
-  await expectOk(response, "Failed to rename epic");
+  await updateEpicById(epicId, { title });
+}
+
+/** Update an epic by id via PATCH /api/epics/{epic_id}. */
+export async function updateEpicById(
+  epicId: number,
+  payload: {
+    title?: string;
+    period_id?: number;
+    thread_id?: number | null;
+    description?: string | null;
+    weight?: number;
+    start_date_text?: string | null;
+    end_date_text?: string | null;
+  },
+): Promise<LifeEpic> {
+  return patchJson<LifeEpic>(`/api/epics/${epicId}`, payload, "Failed to update epic");
 }
 
 export async function createEvent(payload: {
@@ -304,12 +311,7 @@ export async function analyzeLifePeriod(
 }
 
 export async function renameEventTitle(eventId: number, title: string): Promise<void> {
-  const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}`), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title }),
-  });
-  await expectOk(response, "Failed to rename event");
+  await updateEventById(eventId, { title });
 }
 
 export async function updateEventById(
@@ -325,22 +327,11 @@ export async function updateEventById(
     weight?: number;
   },
 ): Promise<LifeEvent> {
-  const response = await fetch(toAbsoluteApiUrl(`/api/events/${eventId}`), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  await expectOk(response, "Failed to update event");
-  return response.json();
+  return patchJson<LifeEvent>(`/api/events/${eventId}`, payload, "Failed to update event");
 }
 
 export async function renamePeriodTitle(periodId: number, title: string): Promise<void> {
-  const response = await fetch(toAbsoluteApiUrl(`/api/periods/${periodId}`), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title }),
-  });
-  await expectOk(response, "Failed to rename period");
+  await updatePeriodById(periodId, { title });
 }
 
 export async function updatePeriodDates(
@@ -348,12 +339,19 @@ export async function updatePeriodDates(
   startDateText: string | null,
   endDateText: string | null,
 ): Promise<void> {
-  const response = await fetch(toAbsoluteApiUrl(`/api/periods/${periodId}`), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ start_date_text: startDateText, end_date_text: endDateText }),
-  });
-  await expectOk(response, "Failed to update period dates");
+  await updatePeriodById(periodId, { start_date_text: startDateText, end_date_text: endDateText });
+}
+
+/** Update a period by id via PATCH /api/periods/{period_id}. */
+export async function updatePeriodById(
+  periodId: number,
+  payload: {
+    title?: string;
+    start_date_text?: string | null;
+    end_date_text?: string | null;
+  },
+): Promise<LifePeriod> {
+  return patchJson<LifePeriod>(`/api/periods/${periodId}`, payload, "Failed to update period");
 }
 
 export async function deletePeriodById(periodId: number): Promise<void> {

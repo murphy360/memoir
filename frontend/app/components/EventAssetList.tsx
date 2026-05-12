@@ -19,7 +19,7 @@ type EventAssetListProps = {
   editingAssetTitleValue: string;
   setEditingAssetTitleValue: (value: string) => void;
   assetTitleSavingId: number | null;
-  saveAssetTitle: (assetId: number, eventId?: number) => Promise<void>;
+  saveAssetTitle: (assetId: number, eventId?: number, nextTitle?: string) => Promise<void>;
   editingAssetNotesId: number | null;
   setEditingAssetNotesId: (id: number | null) => void;
   editingAssetNotesValue: string;
@@ -498,7 +498,7 @@ export function EventAssetList({
                   onChange={(e) => setModalEditingTitleValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      void saveAssetTitle(previewAsset.id, eventId);
+                      void saveAssetTitle(previewAsset.id, eventId, modalEditingTitleValue);
                       setModalEditingTitleId(null);
                     }
                     if (e.key === "Escape") {
@@ -507,13 +507,23 @@ export function EventAssetList({
                     }
                   }}
                 />
-                <button className="primary" type="button" onClick={() => { void saveAssetTitle(previewAsset.id, eventId); setModalEditingTitleId(null); }} disabled={assetTitleSavingId === previewAsset.id}>Save</button>
+                <button className="primary" type="button" onClick={() => { void saveAssetTitle(previewAsset.id, eventId, modalEditingTitleValue); setModalEditingTitleId(null); }} disabled={assetTitleSavingId === previewAsset.id}>Save</button>
                 <button className="secondary" type="button" onClick={() => { setModalEditingTitleId(null); setModalEditingTitleValue(""); }}>Cancel</button>
               </div>
             ) : (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flex: 1 }}>
                 <h3>{previewAsset.title || previewAsset.original_filename || `Asset ${previewAsset.id}`}</h3>
-                <button className="secondary" type="button" style={{ whiteSpace: "nowrap" }} onClick={() => { setModalEditingTitleId(previewAsset.id); setModalEditingTitleValue(previewAsset.title || ""); }}>Edit Title</button>
+                <button
+                  className="secondary"
+                  type="button"
+                  style={{ whiteSpace: "nowrap" }}
+                  onClick={() => {
+                    setModalEditingTitleId(previewAsset.id);
+                    setModalEditingTitleValue(previewAsset.title || previewAsset.original_filename || "");
+                  }}
+                >
+                  Edit Title
+                </button>
               </div>
             )}
             <button className="secondary" type="button" onClick={handleCloseModal} style={{ marginLeft: "0.5rem" }}>Close</button>

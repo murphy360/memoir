@@ -116,7 +116,7 @@ type EventCardProps = {
   editingAssetTitleValue: string;
   setEditingAssetTitleValue: (value: string) => void;
   assetTitleSavingId: number | null;
-  saveAssetTitle: (assetId: number, eventId?: number) => Promise<void>;
+  saveAssetTitle: (assetId: number, eventId?: number, nextTitle?: string) => Promise<void>;
   editingAssetNotesId: number | null;
   setEditingAssetNotesId: (id: number | null) => void;
   editingAssetNotesValue: string;
