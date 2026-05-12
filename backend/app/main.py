@@ -5,13 +5,15 @@ import logging
 import os
 import re
 from collections import Counter
+from io import BytesIO
 from pathlib import Path
 from datetime import date, datetime
 from typing import Optional
 
 from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from PIL import Image, UnidentifiedImageError
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine, ensure_schema_migrations, get_db
@@ -146,6 +148,7 @@ from app.services.memory_analysis import (
     fallback_metadata_from_transcript,
     generate_questions_from_memory,
 )
+from app.services.date_normalization import clean_date_text, parse_text_date_range, resolve_start_end_dates
 
 
 def _generate_questions(transcript: str, event_description: str, metadata) -> list[str]:
@@ -191,6 +194,8 @@ def on_startup() -> None:
     try:
         backfill_normalized_directory(db)
         backfill_life_hierarchy(db)
+        backfill_sortable_dates(db)
+        db.commit()
         backfill_asset_location_names(db)
         seed_initial_questions(db)
     finally:
@@ -213,6 +218,48 @@ def derive_asset_title(filename: Optional[str]) -> Optional[str]:
         return None
     stem = Path(candidate).stem.strip() or candidate
     return stem[:180]
+
+
+def backfill_sortable_dates(db: Session) -> None:
+    for period in db.query(LifePeriod).all():
+        start_sort, end_sort = resolve_start_end_dates(period.start_date_text, period.end_date_text)
+        period.start_sort = start_sort
+        period.end_sort = end_sort
+
+    for epic in db.query(LifeEpic).all():
+        start_sort, end_sort = resolve_start_end_dates(epic.start_date_text, epic.end_date_text)
+        epic.start_sort = start_sort
+        epic.end_sort = end_sort
+
+    for event in db.query(LifeEvent).all():
+        start_sort, end_sort = parse_text_date_range(event.event_date_text)
+        if event.date_precision:
+            start_sort = build_sort_date(
+                event.date_precision,
+                event.date_year,
+                event.date_month,
+                event.date_day,
+                event.date_decade,
+            ) or start_sort
+        event.event_date_sort = start_sort
+        event.event_end_date_sort = end_sort or start_sort
+
+    for memory in db.query(MemoryEntry).all():
+        start_sort, end_sort = parse_text_date_range(memory.estimated_date_text)
+        if memory.date_precision:
+            start_sort = build_sort_date(
+                memory.date_precision,
+                memory.date_year,
+                memory.date_month,
+                memory.date_day,
+                memory.date_decade,
+            ) or start_sort
+        memory.estimated_date_sort = start_sort
+        memory.estimated_end_date_sort = end_sort or start_sort
+
+    for asset in db.query(Asset).all():
+        if asset.captured_at is not None:
+            asset.captured_end_at = asset.captured_at
 
 
 @app.get("/api/threads", response_model=list[LifeThreadResponse])
@@ -291,10 +338,12 @@ def update_period(period_id: int, body: UpdateLifePeriodRequest, db: Session = D
         period.slug = unique_period_slug(db, clean_title, existing_id=period.id)
 
     if body.start_date_text is not None:
-        period.start_date_text = body.start_date_text.strip() or None
+        period.start_date_text = clean_date_text(body.start_date_text)
 
     if body.end_date_text is not None:
-        period.end_date_text = body.end_date_text.strip() or None
+        period.end_date_text = clean_date_text(body.end_date_text)
+
+    period.start_sort, period.end_sort = resolve_start_end_dates(period.start_date_text, period.end_date_text)
 
     db.commit()
     db.refresh(period)
@@ -345,10 +394,11 @@ def create_period(body: CreateLifePeriodRequest, db: Session = Depends(get_db)) 
     period = LifePeriod(
         title=title,
         slug=unique_period_slug(db, title),
-        start_date_text=body.start_date_text,
-        end_date_text=body.end_date_text,
+        start_date_text=clean_date_text(body.start_date_text),
+        end_date_text=clean_date_text(body.end_date_text),
         summary=body.summary,
     )
+    period.start_sort, period.end_sort = resolve_start_end_dates(period.start_date_text, period.end_date_text)
     db.add(period)
     db.commit()
     db.refresh(period)
@@ -379,7 +429,7 @@ def list_period_epics(period_id: int, db: Session = Depends(get_db)) -> list[Lif
     epics = (
         db.query(LifeEpic)
         .filter(LifeEpic.period_id == period_id)
-        .order_by(LifeEpic.created_at.asc())
+        .order_by(LifeEpic.start_sort.is_(None), LifeEpic.start_sort.asc(), LifeEpic.created_at.asc())
         .all()
     )
     return [build_epic_response(epic) for epic in epics]
@@ -390,7 +440,7 @@ def list_epics(period_id: Optional[int] = None, db: Session = Depends(get_db)) -
     query = db.query(LifeEpic)
     if period_id is not None:
         query = query.filter(LifeEpic.period_id == period_id)
-    epics = query.order_by(LifeEpic.created_at.asc()).all()
+    epics = query.order_by(LifeEpic.start_sort.is_(None), LifeEpic.start_sort.asc(), LifeEpic.created_at.asc()).all()
     return [build_epic_response(epic) for epic in epics]
 
 
@@ -409,9 +459,10 @@ def create_epic(body: CreateLifeEpicRequest, db: Session = Depends(get_db)) -> L
         title=title,
         description=body.description,
         weight=body.weight,
-        start_date_text=body.start_date_text,
-        end_date_text=body.end_date_text,
+        start_date_text=clean_date_text(body.start_date_text),
+        end_date_text=clean_date_text(body.end_date_text),
     )
+    epic.start_sort, epic.end_sort = resolve_start_end_dates(epic.start_date_text, epic.end_date_text)
     db.add(epic)
     db.commit()
     db.refresh(epic)
@@ -442,10 +493,12 @@ def update_epic(epic_id: int, body: UpdateLifeEpicRequest, db: Session = Depends
         epic.weight = body.weight
 
     if "start_date_text" in body.model_fields_set:
-        epic.start_date_text = (body.start_date_text or "").strip()[:100] or None
+        epic.start_date_text = clean_date_text(body.start_date_text)
 
     if "end_date_text" in body.model_fields_set:
-        epic.end_date_text = (body.end_date_text or "").strip()[:100] or None
+        epic.end_date_text = clean_date_text(body.end_date_text)
+
+    epic.start_sort, epic.end_sort = resolve_start_end_dates(epic.start_date_text, epic.end_date_text)
 
     db.commit()
     db.refresh(epic)
@@ -499,17 +552,9 @@ def analyze_life_period(
     analysis = analyze_period(period, events, period_asset_count_from_events(events), pipeline_stats=pipeline_stats)
 
     if body.apply_dates and analysis.recommended_start_date_text and analysis.recommended_end_date_text:
-        try:
-            start_year = int(analysis.recommended_start_date_text)
-            end_year = int(analysis.recommended_end_date_text)
-            period.start_date_text = analysis.recommended_start_date_text
-            period.end_date_text = analysis.recommended_end_date_text
-            period.start_sort = date(start_year, 1, 1)
-            period.end_sort = date(end_year, 12, 31)
-        except ValueError:
-            # Keep textual recommendations without applying sort dates.
-            period.start_date_text = analysis.recommended_start_date_text
-            period.end_date_text = analysis.recommended_end_date_text
+        period.start_date_text = analysis.recommended_start_date_text
+        period.end_date_text = analysis.recommended_end_date_text
+        period.start_sort, period.end_sort = resolve_start_end_dates(period.start_date_text, period.end_date_text)
 
     if body.apply_title and analysis.recommended_titles:
         period.title = analysis.recommended_titles[0]
@@ -564,6 +609,10 @@ def create_event(body: CreateLifeEventRequest, db: Session = Depends(get_db)) ->
     if period_id is None:
         raise HTTPException(status_code=400, detail="Event requires period_id or epic_id")
 
+    parsed_event_start, parsed_event_end = parse_text_date_range(body.event_date_text)
+    if parsed_event_start is not None and parsed_event_end is None:
+        parsed_event_end = parsed_event_start
+
     event = LifeEvent(
         period_id=period_id,
         epic_id=epic_id,
@@ -577,13 +626,17 @@ def create_event(body: CreateLifeEventRequest, db: Session = Depends(get_db)) ->
         date_month=body.date_month,
         date_day=body.date_day,
         date_decade=body.date_decade,
-        event_date_sort=build_sort_date(
-            body.date_precision,
-            body.date_year,
-            body.date_month,
-            body.date_day,
-            body.date_decade,
+        event_date_sort=(
+            build_sort_date(
+                body.date_precision,
+                body.date_year,
+                body.date_month,
+                body.date_day,
+                body.date_decade,
+            )
+            or parsed_event_start
         ),
+        event_end_date_sort=parsed_event_end,
     )
     db.add(event)
     # Period summary refresh is deferred — triggered explicitly via "Analyze Period".
@@ -622,8 +675,13 @@ def update_event(event_id: int, body: UpdateLifeEventRequest, db: Session = Depe
         event.location = (body.location or "").strip()[:255] or None
 
     if "event_date_text" in body.model_fields_set:
-        next_date_text = (body.event_date_text or "").strip()[:100]
+        next_date_text = clean_date_text(body.event_date_text)
         event.event_date_text = next_date_text or None
+        parsed_start, parsed_end = parse_text_date_range(event.event_date_text)
+        if parsed_start is not None and parsed_end is None:
+            parsed_end = parsed_start
+        event.event_date_sort = parsed_start
+        event.event_end_date_sort = parsed_end
 
     next_period_id = event.period_id
     next_epic_id = event.epic_id
@@ -700,6 +758,7 @@ def merge_event(
     if not target.event_date_text and source.event_date_text:
         target.event_date_text = source.event_date_text
         target.event_date_sort = source.event_date_sort
+        target.event_end_date_sort = source.event_end_date_sort
         target.date_precision = source.date_precision
         target.date_year = source.date_year
         target.date_month = source.date_month
@@ -810,6 +869,69 @@ def list_event_faces(event_id: int, db: Session = Depends(get_db)) -> list[Event
 
     faces = list_faces_for_event(db, event_id)
     return [_build_event_face_response(face) for face in faces if face.asset]
+
+
+@app.get("/api/faces/{face_id}/thumbnail")
+def get_face_thumbnail(
+    face_id: int,
+    size: int = 96,
+    padding: float = 0.35,
+    db: Session = Depends(get_db),
+) -> Response:
+    """Return a cropped thumbnail image for a detected face."""
+    face = db.get(AssetFace, face_id)
+    if not face:
+        raise HTTPException(status_code=404, detail="Face not found")
+
+    asset = face.asset
+    if not asset or not asset.storage_filename:
+        raise HTTPException(status_code=404, detail="Source photo not found")
+
+    content_type = (asset.content_type or "").lower()
+    if asset.kind != "photo" and not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Face thumbnail is only available for photo assets")
+
+    bounded_size = max(32, min(512, size))
+    bounded_padding = max(0.0, min(1.5, padding))
+
+    image_path = DOCUMENT_STORAGE_DIR / asset.storage_filename
+    if not image_path.exists():
+        raise HTTPException(status_code=404, detail="Source photo file not found")
+
+    try:
+        with Image.open(image_path) as image:
+            image = image.convert("RGB")
+            width, height = image.size
+
+            x = max(0.0, min(1.0, face.bbox_x))
+            y = max(0.0, min(1.0, face.bbox_y))
+            w = max(0.0001, min(1.0, face.bbox_w))
+            h = max(0.0001, min(1.0, face.bbox_h))
+
+            left = int(max(0, (x - (w * bounded_padding)) * width))
+            top = int(max(0, (y - (h * bounded_padding)) * height))
+            right = int(min(width, (x + w + (w * bounded_padding)) * width))
+            bottom = int(min(height, (y + h + (h * bounded_padding)) * height))
+
+            if right <= left:
+                right = min(width, left + 1)
+            if bottom <= top:
+                bottom = min(height, top + 1)
+
+            cropped = image.crop((left, top, right, bottom))
+            cropped.thumbnail((bounded_size, bounded_size), Image.LANCZOS)
+
+            buffer = BytesIO()
+            cropped.save(buffer, format="JPEG", quality=88)
+            return Response(
+                content=buffer.getvalue(),
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+    except UnidentifiedImageError as exc:
+        raise HTTPException(status_code=415, detail="Source file is not a readable image") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="Could not render face thumbnail") from exc
 
 
 @app.get("/api/events/{event_id}/unknown-face-groups", response_model=list[UnknownFaceGroupResponse])
@@ -1085,6 +1207,11 @@ def apply_event_research_suggestion(event_id: int, db: Session = Depends(get_db)
             event.title = next_title[:180]
         if next_date_text:
             event.event_date_text = next_date_text[:100]
+            parsed_start, parsed_end = parse_text_date_range(event.event_date_text)
+            if parsed_start is not None and parsed_end is None:
+                parsed_end = parsed_start
+            event.event_date_sort = parsed_start
+            event.event_end_date_sort = parsed_end
         if next_description:
             event.description = next_description[:1200]
 
@@ -1107,7 +1234,11 @@ def dismiss_event_research_suggestion(event_id: int, db: Session = Depends(get_d
 
 @app.get("/api/assets/unlinked", response_model=list[AssetResponse])
 def list_unlinked_assets(db: Session = Depends(get_db)) -> list[AssetResponse]:
-    assets = db.query(Asset).order_by(Asset.created_at.desc()).all()
+    assets = (
+        db.query(Asset)
+        .order_by(Asset.captured_at.is_(None), Asset.captured_at.asc(), Asset.created_at.desc())
+        .all()
+    )
     unlinked = [asset for asset in assets if not asset.event_links]
     return [build_asset_response(asset) for asset in unlinked]
 
@@ -1119,6 +1250,7 @@ async def upload_asset(
     period_id: Optional[int] = Form(None),
     event_id: Optional[int] = Form(None),
     notes: Optional[str] = Form(None),
+    captured_at_text: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ) -> AssetResponse:
     file_bytes = await file.read()
@@ -1169,6 +1301,15 @@ async def upload_asset(
     )
     if normalized_kind != "audio":
         extract_and_apply_image_metadata(asset, file_bytes, content_type, skip_geocoding=True)
+        captured_text_override = clean_date_text(captured_at_text)
+        if captured_text_override:
+            start_date, end_date = parse_text_date_range(captured_text_override)
+            if start_date is None:
+                raise HTTPException(status_code=400, detail="Could not parse captured date text override")
+            resolved_end_date = end_date or start_date
+            asset.captured_at_text = captured_text_override
+            asset.captured_at = datetime.combine(start_date, datetime.min.time())
+            asset.captured_end_at = datetime.combine(resolved_end_date, datetime.min.time())
 
     db.add(asset)
     db.flush()
@@ -1429,6 +1570,21 @@ def update_asset(asset_id: int, body: UpdateAssetRequest, db: Session = Depends(
         clean_notes = body.notes.strip() if body.notes is not None else None
         asset.notes = clean_notes or None
 
+    if "captured_at_text" in body.model_fields_set:
+        cleaned_captured_text = clean_date_text(body.captured_at_text)
+        if not cleaned_captured_text:
+            asset.captured_at_text = None
+            asset.captured_at = None
+            asset.captured_end_at = None
+        else:
+            start_date, end_date = parse_text_date_range(cleaned_captured_text)
+            if start_date is None:
+                raise HTTPException(status_code=400, detail="Could not parse captured date text")
+            resolved_end_date = end_date or start_date
+            asset.captured_at_text = cleaned_captured_text
+            asset.captured_at = datetime.combine(start_date, datetime.min.time())
+            asset.captured_end_at = datetime.combine(resolved_end_date, datetime.min.time())
+
     db.commit()
     db.refresh(asset)
     return build_asset_response(asset)
@@ -1478,7 +1634,13 @@ def download_asset(asset_id: int, download: bool = True, db: Session = Depends(g
 def list_memories(db: Session = Depends(get_db)) -> list[MemoryEntry]:
     memories = (
         db.query(MemoryEntry)
-        .order_by(MemoryEntry.estimated_date_sort.is_(None), MemoryEntry.estimated_date_sort.asc(), MemoryEntry.date_recorded.desc().nulls_last(), MemoryEntry.created_at.desc())
+        .order_by(
+            MemoryEntry.estimated_date_sort.is_(None),
+            MemoryEntry.estimated_date_sort.asc(),
+            MemoryEntry.estimated_end_date_sort.asc().nulls_last(),
+            MemoryEntry.date_recorded.desc().nulls_last(),
+            MemoryEntry.created_at.desc(),
+        )
         .all()
     )
     return memories
@@ -1883,12 +2045,16 @@ async def create_memory(
         follow_up_question,
         metadata,
     ) = analyze_memory_audio(audio_filename, mp3_bytes, transcription_enabled)
+    parsed_memory_start, parsed_memory_end = parse_text_date_range(estimated_date_text)
+    if parsed_memory_start is not None and parsed_memory_end is None:
+        parsed_memory_end = parsed_memory_start
 
     entry = MemoryEntry(
         transcript=transcript,
         event_description=event_description,
         estimated_date_text=estimated_date_text,
-        estimated_date_sort=estimated_date_sort,
+        estimated_date_sort=estimated_date_sort or parsed_memory_start,
+        estimated_end_date_sort=parsed_memory_end,
         date_recorded=date.today(),
         date_precision=metadata.date_precision,
         date_year=metadata.date_year,
@@ -2033,11 +2199,16 @@ async def create_memory_from_document(
     event_description = f"Document analysis: {document_original_filename}"
     follow_up_question = "What additional factual details should be captured from this document?"
 
+    document_start, document_end = parse_text_date_range(metadata.date_text)
+    if document_start is not None and document_end is None:
+        document_end = document_start
+
     entry = MemoryEntry(
         transcript=transcript,
         event_description=event_description,
         estimated_date_text=metadata.date_text,
-        estimated_date_sort=metadata.sort_date,
+        estimated_date_sort=metadata.sort_date or document_start,
+        estimated_end_date_sort=document_end,
         date_recorded=date.today(),
         date_precision=metadata.date_precision,
         date_year=metadata.date_year,
@@ -2135,8 +2306,12 @@ def reanalyze_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEnt
             metadata = fallback_metadata_from_transcript(transcript)
 
         memory.transcript = transcript
-        memory.estimated_date_sort = metadata.sort_date
         memory.estimated_date_text = metadata.date_text
+        parsed_memory_start, parsed_memory_end = parse_text_date_range(memory.estimated_date_text)
+        if parsed_memory_start is not None and parsed_memory_end is None:
+            parsed_memory_end = parsed_memory_start
+        memory.estimated_date_sort = metadata.sort_date or parsed_memory_start
+        memory.estimated_end_date_sort = parsed_memory_end
         memory.date_precision = metadata.date_precision
         memory.date_year = metadata.date_year
         memory.date_month = metadata.date_month
@@ -2182,8 +2357,12 @@ def reanalyze_memory(memory_id: int, db: Session = Depends(get_db)) -> MemoryEnt
 
     memory.transcript = transcript
     memory.event_description = event_description
-    memory.estimated_date_sort = estimated_date_sort
     memory.estimated_date_text = estimated_date_text
+    parsed_memory_start, parsed_memory_end = parse_text_date_range(memory.estimated_date_text)
+    if parsed_memory_start is not None and parsed_memory_end is None:
+        parsed_memory_end = parsed_memory_start
+    memory.estimated_date_sort = estimated_date_sort or parsed_memory_start
+    memory.estimated_end_date_sort = parsed_memory_end
     memory.emotional_tone = emotional_tone
     memory.follow_up_question = follow_up_question
     memory.research_summary = None
@@ -2254,13 +2433,17 @@ def apply_research_suggestion(memory_id: int, db: Session = Depends(get_db)) -> 
     memory.date_month = suggestion.get("date_month")
     memory.date_day = suggestion.get("date_day")
     memory.date_decade = suggestion.get("date_decade")
+    parsed_memory_start, parsed_memory_end = parse_text_date_range(memory.estimated_date_text)
+    if parsed_memory_start is not None and parsed_memory_end is None:
+        parsed_memory_end = parsed_memory_start
     memory.estimated_date_sort = build_sort_date(
         memory.date_precision,
         memory.date_year,
         memory.date_month,
         memory.date_day,
         memory.date_decade,
-    )
+    ) or parsed_memory_start
+    memory.estimated_end_date_sort = parsed_memory_end
     memory.research_suggested_metadata_json = None
     db.commit()
     db.refresh(memory)
@@ -2289,6 +2472,16 @@ def update_memory(memory_id: int, body: UpdateMemoryRequest, db: Session = Depen
         if not next_value:
             raise HTTPException(status_code=400, detail="Memory title cannot be empty")
         memory.event_description = next_value[:240]
+
+    if "estimated_date_text" in body.model_fields_set:
+        memory.estimated_date_text = clean_date_text(body.estimated_date_text)
+        parsed_memory_start, parsed_memory_end = parse_text_date_range(memory.estimated_date_text)
+        if parsed_memory_start is not None and parsed_memory_end is None:
+            parsed_memory_end = parsed_memory_start
+        memory.estimated_date_sort = parsed_memory_start
+        memory.estimated_end_date_sort = parsed_memory_end
+        # Date edits should immediately propagate to linked life hierarchy records.
+        sync_life_hierarchy_for_memory(db, memory)
 
     db.commit()
     db.refresh(memory)

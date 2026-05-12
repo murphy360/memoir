@@ -19,6 +19,12 @@ type UnlinkedAssetsInboxProps = {
   setEditingAssetNotesValue: (value: string) => void;
   assetNotesSavingId: number | null;
   saveAssetNotes: (assetId: number, eventId?: number) => Promise<void>;
+  editingAssetCapturedDateId: number | null;
+  setEditingAssetCapturedDateId: (id: number | null) => void;
+  editingAssetCapturedDateValue: string;
+  setEditingAssetCapturedDateValue: (value: string) => void;
+  assetCapturedDateSavingId: number | null;
+  saveAssetCapturedDate: (assetId: number, eventId?: number) => Promise<void>;
   resolveApiUrl: (path: string) => string;
   formatBytes: (bytes: number) => string;
   deleteAsset: (assetId: number, eventId?: number) => Promise<void>;
@@ -55,6 +61,12 @@ export function UnlinkedAssetsInbox({
   setEditingAssetNotesValue,
   assetNotesSavingId,
   saveAssetNotes,
+  editingAssetCapturedDateId,
+  setEditingAssetCapturedDateId,
+  editingAssetCapturedDateValue,
+  setEditingAssetCapturedDateValue,
+  assetCapturedDateSavingId,
+  saveAssetCapturedDate,
   resolveApiUrl,
   formatBytes,
   deleteAsset,
@@ -91,6 +103,12 @@ export function UnlinkedAssetsInbox({
           setEditingAssetNotesValue={setEditingAssetNotesValue}
           assetNotesSavingId={assetNotesSavingId}
           saveAssetNotes={saveAssetNotes}
+          editingAssetCapturedDateId={editingAssetCapturedDateId}
+          setEditingAssetCapturedDateId={setEditingAssetCapturedDateId}
+          editingAssetCapturedDateValue={editingAssetCapturedDateValue}
+          setEditingAssetCapturedDateValue={setEditingAssetCapturedDateValue}
+          assetCapturedDateSavingId={assetCapturedDateSavingId}
+          saveAssetCapturedDate={saveAssetCapturedDate}
           resolveApiUrl={resolveApiUrl}
           formatBytes={formatBytes}
           deleteAsset={deleteAsset}

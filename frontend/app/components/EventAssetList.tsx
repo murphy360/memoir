@@ -2,8 +2,9 @@ import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import {
   formatAssetCaptureDate,
-  parsePeriodYearHint,
   formatAssetGps,
+  parsePeriodYearHint,
+  parseOptionalDateTimestamp,
   renderImageMetadataBadges,
 } from "../lib/homePageHelpers";
 import type { AssetEntry, EventFaceEntry, LifeEpic, LifeEvent, LifePeriod } from "../types";
@@ -25,6 +26,12 @@ type EventAssetListProps = {
   setEditingAssetNotesValue: (value: string) => void;
   assetNotesSavingId: number | null;
   saveAssetNotes: (assetId: number, eventId?: number) => Promise<void>;
+  editingAssetCapturedDateId: number | null;
+  setEditingAssetCapturedDateId: (id: number | null) => void;
+  editingAssetCapturedDateValue: string;
+  setEditingAssetCapturedDateValue: (value: string) => void;
+  assetCapturedDateSavingId: number | null;
+  saveAssetCapturedDate: (assetId: number, eventId?: number) => Promise<void>;
   resolveApiUrl: (path: string) => string;
   formatBytes: (bytes: number) => string;
   deleteAsset: (assetId: number, eventId?: number) => Promise<void>;
@@ -152,6 +159,10 @@ function dateRangeScore(year: number, startYear: number | null, endYear: number 
 }
 
 function eventYearHint(event: LifeEvent): number | null {
+  const sortableDate = event.event_date_sort ? new Date(event.event_date_sort) : null;
+  if (sortableDate && !Number.isNaN(sortableDate.getTime())) {
+    return sortableDate.getFullYear();
+  }
   if (event.date_year !== null) {
     return event.date_year;
   }
@@ -162,6 +173,10 @@ function eventYearHint(event: LifeEvent): number | null {
 }
 
 function eventTimestampHint(event: LifeEvent): number | null {
+  const sortableTime = parseOptionalDateTimestamp(event.event_date_sort);
+  if (sortableTime !== null) {
+    return sortableTime;
+  }
   if (event.date_year === null) {
     return null;
   }
@@ -181,10 +196,12 @@ function pickDefaultPeriodId(asset: AssetEntry, lifePeriods: LifePeriod[]): stri
   let bestPeriod: LifePeriod | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
   for (const period of lifePeriods) {
+    const normalizedStartYear = period.start_sort ? new Date(period.start_sort).getFullYear() : null;
+    const normalizedEndYear = period.end_sort ? new Date(period.end_sort).getFullYear() : null;
     const score = dateRangeScore(
       year,
-      parsePeriodYearHint(period.start_date_text),
-      parsePeriodYearHint(period.end_date_text),
+      normalizedStartYear ?? parsePeriodYearHint(period.start_date_text),
+      normalizedEndYear ?? parsePeriodYearHint(period.end_date_text),
     );
     if (score < bestScore) {
       bestScore = score;
@@ -203,10 +220,12 @@ function pickDefaultEpicId(asset: AssetEntry, epicsInScope: LifeEpic[]): string 
   let bestEpic: LifeEpic | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
   for (const epic of epicsInScope) {
+    const normalizedStartYear = epic.start_sort ? new Date(epic.start_sort).getFullYear() : null;
+    const normalizedEndYear = epic.end_sort ? new Date(epic.end_sort).getFullYear() : null;
     const score = dateRangeScore(
       year,
-      parsePeriodYearHint(epic.start_date_text),
-      parsePeriodYearHint(epic.end_date_text),
+      normalizedStartYear ?? parsePeriodYearHint(epic.start_date_text),
+      normalizedEndYear ?? parsePeriodYearHint(epic.end_date_text),
     );
     if (score < bestScore) {
       bestScore = score;
@@ -274,6 +293,12 @@ export function EventAssetList({
   setEditingAssetNotesValue,
   assetNotesSavingId,
   saveAssetNotes,
+  editingAssetCapturedDateId,
+  setEditingAssetCapturedDateId,
+  editingAssetCapturedDateValue,
+  setEditingAssetCapturedDateValue,
+  assetCapturedDateSavingId,
+  saveAssetCapturedDate,
   resolveApiUrl,
   formatBytes,
   deleteAsset,
@@ -623,9 +648,28 @@ export function EventAssetList({
                     const canEditSubject = Boolean(renameFaceSubject && eventId !== undefined && face.compreface_subject);
                     const isEditingSubject = editingFaceSubjectId === face.id;
                     const isSavingSubject = renamingFaceSubjectId === face.id;
+                    const faceThumbnailUrl = resolveApiUrl(`/api/faces/${face.id}/thumbnail?size=96`);
                     return (
                       <article key={`meta-${face.id}`} className="assetPreviewFaceMetaCard">
-                        <h4>Face {index + 1}</h4>
+                        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginBottom: "0.45rem" }}>
+                          <img
+                            src={faceThumbnailUrl}
+                            alt={`Face ${index + 1} thumbnail`}
+                            width={72}
+                            height={72}
+                            loading="lazy"
+                            style={{
+                              width: "72px",
+                              height: "72px",
+                              borderRadius: "8px",
+                              border: "1px solid var(--border)",
+                              objectFit: "cover",
+                              background: "#f2f2f2",
+                              flexShrink: 0,
+                            }}
+                          />
+                          <h4 style={{ margin: 0 }}>Face {index + 1}</h4>
+                        </div>
                         <p className="meta"><strong>Assigned Person:</strong> {face.person_name || "n/a"}</p>
                         {isEditingSubject ? (
                           <div className="controls" style={{ marginBottom: "0.45rem" }}>
@@ -724,7 +768,51 @@ export function EventAssetList({
             {previewAsset.gemini_suggested_title && (
               <p className="meta"><strong>Gemini Suggested Title:</strong> {previewAsset.gemini_suggested_title}</p>
             )}
-            {formatAssetCaptureDate(previewAsset) && <p className="meta"><strong>Captured:</strong> {formatAssetCaptureDate(previewAsset)}</p>}
+            {editingAssetCapturedDateId === previewAsset.id ? (
+              <div className="controls" style={{ marginTop: "0.35rem" }}>
+                <label style={{ display: "block", marginBottom: "0.25rem" }}><strong>Captured Date</strong></label>
+                <input
+                  className="directoryInput"
+                  type="text"
+                  value={editingAssetCapturedDateValue}
+                  autoFocus
+                  onChange={(e) => setEditingAssetCapturedDateValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      void saveAssetCapturedDate(previewAsset.id, eventId);
+                      setEditingAssetCapturedDateId(null);
+                    }
+                    if (e.key === "Escape") {
+                      setEditingAssetCapturedDateId(null);
+                      setEditingAssetCapturedDateValue("");
+                    }
+                  }}
+                  style={{ flex: 1, width: "100%" }}
+                  placeholder="e.g. April 10-12, 2026 or 2026-04-10"
+                />
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.35rem" }}>
+                  <button className="primary" type="button" onClick={() => { void saveAssetCapturedDate(previewAsset.id, eventId); setEditingAssetCapturedDateId(null); }} disabled={assetCapturedDateSavingId === previewAsset.id}>Save</button>
+                  <button className="secondary" type="button" onClick={() => { setEditingAssetCapturedDateId(null); setEditingAssetCapturedDateValue(""); }}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginTop: "0.15rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <p className="meta" style={{ margin: 0 }}><strong>Captured:</strong> {formatAssetCaptureDate(previewAsset) || "unknown"}</p>
+                  <button
+                    className="secondary"
+                    type="button"
+                    style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem" }}
+                    onClick={() => {
+                      setEditingAssetCapturedDateId(previewAsset.id);
+                      setEditingAssetCapturedDateValue(previewAsset.captured_at_text || "");
+                    }}
+                  >
+                    Edit
+                  </button>
+                </div>
+              </div>
+            )}
             {previewAsset.exif_place_name && <p className="meta"><strong>EXIF Place:</strong> {previewAsset.exif_place_name}</p>}
             {previewAsset.reverse_geocode_location_name && (
               <p className="meta"><strong>Reverse Geocode:</strong> {previewAsset.reverse_geocode_location_name}</p>

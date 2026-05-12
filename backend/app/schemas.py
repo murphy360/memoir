@@ -34,6 +34,8 @@ class MemoryResponse(BaseModel):
     transcript: str
     event_description: str
     estimated_date_text: Optional[str]
+    estimated_date_sort: Optional[date] = Field(default=None, description="Normalized start date used for timeline sorting.")
+    estimated_end_date_sort: Optional[date] = Field(default=None, description="Normalized end date inferred from estimated_date_text when available.")
     date_precision: Optional[str]
     response_to_question_id: Optional[int]
     response_to_question_text: Optional[str]
@@ -64,6 +66,8 @@ class LifePeriodResponse(BaseModel):
     slug: Optional[str]
     start_date_text: Optional[str]
     end_date_text: Optional[str]
+    start_sort: Optional[date] = Field(default=None, description="Normalized period start date used for sorting.")
+    end_sort: Optional[date] = Field(default=None, description="Normalized period end date used for range comparisons.")
     summary: Optional[str]
     event_count: int = 0
     epic_count: int = Field(default=0, description="How many epics belong to this period.")
@@ -127,6 +131,8 @@ class LifeEpicResponse(BaseModel):
     weight: int = Field(description="Visual prominence from 1 (light) to 10 (high).")
     start_date_text: Optional[str]
     end_date_text: Optional[str]
+    start_sort: Optional[date] = Field(default=None, description="Normalized epic start date used for sorting.")
+    end_sort: Optional[date] = Field(default=None, description="Normalized epic end date used for range comparisons.")
     event_count: int = 0
     created_at: datetime
     updated_at: datetime
@@ -195,6 +201,8 @@ class LifeEventResponse(BaseModel):
     research_suggested_edit: Optional[EventEditSuggestionResponse] = None
     location: Optional[str]
     event_date_text: Optional[str]
+    event_date_sort: Optional[date] = Field(default=None, description="Normalized event start date used for sorting.")
+    event_end_date_sort: Optional[date] = Field(default=None, description="Normalized event end date when a date range is inferred.")
     date_precision: Optional[str]
     date_year: Optional[int]
     date_month: Optional[int]
@@ -255,6 +263,7 @@ class AssetResponse(BaseModel):
     content_type: Optional[str]
     size_bytes: Optional[int]
     captured_at: Optional[datetime]
+    captured_end_at: Optional[datetime] = Field(default=None, description="Normalized asset end datetime; defaults to captured_at when no range exists.")
     captured_at_text: Optional[str]
     gps_latitude: Optional[float]
     gps_longitude: Optional[float]
@@ -283,6 +292,7 @@ class LinkAssetToEventRequest(BaseModel):
 class UpdateAssetRequest(BaseModel):
     title: Optional[str] = None
     notes: Optional[str] = None
+    captured_at_text: Optional[str] = Field(default=None, description="Manual captured date/time text override used to correct EXIF dates.")
 
 
 class EventFaceResponse(BaseModel):
@@ -402,6 +412,7 @@ class UpdateMemoryRecorderRequest(BaseModel):
 
 class UpdateMemoryRequest(BaseModel):
     event_description: Optional[str] = None
+    estimated_date_text: Optional[str] = Field(default=None, description="Updated textual memory date; supports year/month/day and ranges.")
 
 
 class AnswerQuestionRequest(BaseModel):

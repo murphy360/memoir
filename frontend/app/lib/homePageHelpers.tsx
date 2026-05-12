@@ -97,6 +97,15 @@ export function parsePeriodYearHint(value: string | null): number | null {
   return null;
 }
 
+export function parseOptionalDateTimestamp(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  const time = parsed.getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
 export function compareDateStringsDesc(left: string, right: string): number {
   const leftTime = new Date(left).getTime();
   const rightTime = new Date(right).getTime();

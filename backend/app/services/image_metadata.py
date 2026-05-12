@@ -239,6 +239,7 @@ def extract_image_metadata(file_bytes: bytes, content_type: Optional[str], *, sk
 
 def apply_image_metadata_to_asset(asset: Any, metadata: ImageMetadata) -> None:
     asset.captured_at = metadata.captured_at
+    asset.captured_end_at = metadata.captured_at
     asset.captured_at_text = metadata.captured_at_text
     asset.gps_latitude = metadata.gps_latitude
     asset.gps_longitude = metadata.gps_longitude

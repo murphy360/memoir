@@ -51,6 +51,7 @@ import {
   updateEventById,
   updateMemoryTitle as updateMemoryTitleById,
   updateAssetNotes as updateAssetNotesById,
+  updateAssetCapturedDate as updateAssetCapturedDateById,
   updateAssetTitle as updateAssetTitleById,
   processEventPhotoAssets,
   processSinglePhotoAsset,
@@ -78,7 +79,7 @@ import {
   PeriodSortMode,
   UNASSIGNED_PERIOD_VALUE,
   compareDateStringsDesc,
-  parsePeriodYearHint,
+  parseOptionalDateTimestamp,
 } from "./lib/homePageHelpers";
 
 type PendingRecording = {
@@ -152,6 +153,9 @@ export default function HomePage() {
   const [editingAssetNotesId, setEditingAssetNotesId] = useState<number | null>(null);
   const [editingAssetNotesValue, setEditingAssetNotesValue] = useState("");
   const [assetNotesSavingId, setAssetNotesSavingId] = useState<number | null>(null);
+  const [editingAssetCapturedDateId, setEditingAssetCapturedDateId] = useState<number | null>(null);
+  const [editingAssetCapturedDateValue, setEditingAssetCapturedDateValue] = useState("");
+  const [assetCapturedDateSavingId, setAssetCapturedDateSavingId] = useState<number | null>(null);
   const [pendingRecording, setPendingRecording] = useState<PendingRecording | null>(null);
   const [recordingForEventId, setRecordingForEventId] = useState<number | null>(null);
   const [recordingForAssetId, setRecordingForAssetId] = useState<number | null>(null);
@@ -244,35 +248,35 @@ export default function HomePage() {
   const sortedLifePeriods = useMemo(() => {
     const periods = [...lifePeriods];
     periods.sort((left, right) => {
-      const leftStartYear = parsePeriodYearHint(left.start_date_text);
-      const rightStartYear = parsePeriodYearHint(right.start_date_text);
-      const leftEndYear = parsePeriodYearHint(left.end_date_text);
-      const rightEndYear = parsePeriodYearHint(right.end_date_text);
+      const leftStartTime = parseOptionalDateTimestamp(left.start_sort) ?? parseOptionalDateTimestamp(left.start_date_text);
+      const rightStartTime = parseOptionalDateTimestamp(right.start_sort) ?? parseOptionalDateTimestamp(right.start_date_text);
+      const leftEndTime = parseOptionalDateTimestamp(left.end_sort) ?? parseOptionalDateTimestamp(left.end_date_text);
+      const rightEndTime = parseOptionalDateTimestamp(right.end_sort) ?? parseOptionalDateTimestamp(right.end_date_text);
       const leftEventCount = eventCountByPeriod[left.id] ?? left.event_count ?? 0;
       const rightEventCount = eventCountByPeriod[right.id] ?? right.event_count ?? 0;
 
       if (periodSortMode === "timeline-asc" || periodSortMode === "timeline-desc") {
-        if (leftStartYear === null && rightStartYear !== null) {
+        if (leftStartTime === null && rightStartTime !== null) {
           return 1;
         }
-        if (leftStartYear !== null && rightStartYear === null) {
+        if (leftStartTime !== null && rightStartTime === null) {
           return -1;
         }
-        if (leftStartYear !== null && rightStartYear !== null && leftStartYear !== rightStartYear) {
+        if (leftStartTime !== null && rightStartTime !== null && leftStartTime !== rightStartTime) {
           return periodSortMode === "timeline-asc"
-            ? leftStartYear - rightStartYear
-            : rightStartYear - leftStartYear;
+            ? leftStartTime - rightStartTime
+            : rightStartTime - leftStartTime;
         }
-        if (leftEndYear === null && rightEndYear !== null) {
+        if (leftEndTime === null && rightEndTime !== null) {
           return 1;
         }
-        if (leftEndYear !== null && rightEndYear === null) {
+        if (leftEndTime !== null && rightEndTime === null) {
           return -1;
         }
-        if (leftEndYear !== null && rightEndYear !== null && leftEndYear !== rightEndYear) {
+        if (leftEndTime !== null && rightEndTime !== null && leftEndTime !== rightEndTime) {
           return periodSortMode === "timeline-asc"
-            ? leftEndYear - rightEndYear
-            : rightEndYear - leftEndYear;
+            ? leftEndTime - rightEndTime
+            : rightEndTime - leftEndTime;
         }
       }
 
@@ -874,7 +878,7 @@ export default function HomePage() {
     }
   }
 
-  async function uploadAssetToActiveEvent(file: File) {
+  async function uploadAssetToActiveEvent(file: File, capturedDateText: string | null = null) {
     if (!activeEventId) {
       return;
     }
@@ -886,6 +890,9 @@ export default function HomePage() {
       formData.append("file", file, file.name);
       formData.append("kind", kind);
       formData.append("event_id", `${activeEventId}`);
+      if (capturedDateText) {
+        formData.append("captured_at_text", capturedDateText);
+      }
       const uploaded = await uploadAsset(formData);
 
       if (eventAssetInputRef.current) {
@@ -1148,6 +1155,25 @@ export default function HomePage() {
       setStatus("Failed to update asset notes.");
     } finally {
       setAssetNotesSavingId(null);
+    }
+  }
+
+  async function saveAssetCapturedDate(assetId: number, eventId?: number) {
+    setAssetCapturedDateSavingId(assetId);
+    setStatus("Saving captured date...");
+    try {
+      await updateAssetCapturedDateById(assetId, editingAssetCapturedDateValue.trim() || null);
+      setEditingAssetCapturedDateId(null);
+      setEditingAssetCapturedDateValue("");
+      if (eventId !== undefined) {
+        await loadAssetsForEvent(eventId);
+      }
+      await loadTimeline();
+      setStatus("Captured date updated.");
+    } catch {
+      setStatus("Failed to update captured date.");
+    } finally {
+      setAssetCapturedDateSavingId(null);
     }
   }
 
@@ -1667,7 +1693,7 @@ export default function HomePage() {
     }
   }
 
-  async function uploadDocument(file: File) {
+  async function uploadDocument(file: File, capturedDateText: string | null = null) {
     setIsUploadingDocument(true);
     setDocumentUploadError(null);
     setStatus("Uploading file...");
@@ -1676,6 +1702,9 @@ export default function HomePage() {
       formData.append("file", file, file.name);
       const kind = file.type.startsWith("image/") ? "photo" : "document";
       formData.append("kind", kind);
+      if (capturedDateText) {
+        formData.append("captured_at_text", capturedDateText);
+      }
       const uploaded = await uploadAsset(formData);
 
       await loadTimeline();
@@ -1711,7 +1740,7 @@ export default function HomePage() {
     uploadDocument,
   });
 
-  async function uploadDocumentsToEvent(files: File[], eventId: number) {
+  async function uploadDocumentsToEvent(files: File[], eventId: number, capturedDateText: string | null = null) {
     if (files.length === 0) {
       return;
     }
@@ -1738,6 +1767,9 @@ export default function HomePage() {
           const kind = file.type.startsWith("image/") ? "photo" : "document";
           formData.append("kind", kind);
           formData.append("event_id", String(eventId));
+          if (capturedDateText) {
+            formData.append("captured_at_text", capturedDateText);
+          }
           const uploaded = await uploadAsset(formData);
           uploadedAssetIds.push(uploaded.id);
           if (kind === "photo") photoAssetIds.push(uploaded.id);
@@ -1925,7 +1957,37 @@ export default function HomePage() {
       questionsWithNoContext.push(item);
     }
   }
-  const unassignedEvents = lifeEvents.filter((event) => event.period_id === null);
+  const compareEventsByStartDate = (left: LifeEvent, right: LifeEvent): number => {
+    const leftStart = parseOptionalDateTimestamp(left.event_date_sort) ?? parseOptionalDateTimestamp(left.event_date_text);
+    const rightStart = parseOptionalDateTimestamp(right.event_date_sort) ?? parseOptionalDateTimestamp(right.event_date_text);
+    if (leftStart === null && rightStart !== null) {
+      return 1;
+    }
+    if (leftStart !== null && rightStart === null) {
+      return -1;
+    }
+    if (leftStart !== null && rightStart !== null && leftStart !== rightStart) {
+      return leftStart - rightStart;
+    }
+    return compareDateStringsDesc(left.created_at, right.created_at);
+  };
+
+  const compareEpicsByStartDate = (left: LifeEpic, right: LifeEpic): number => {
+    const leftStart = parseOptionalDateTimestamp(left.start_sort) ?? parseOptionalDateTimestamp(left.start_date_text);
+    const rightStart = parseOptionalDateTimestamp(right.start_sort) ?? parseOptionalDateTimestamp(right.start_date_text);
+    if (leftStart === null && rightStart !== null) {
+      return 1;
+    }
+    if (leftStart !== null && rightStart === null) {
+      return -1;
+    }
+    if (leftStart !== null && rightStart !== null && leftStart !== rightStart) {
+      return leftStart - rightStart;
+    }
+    return compareDateStringsDesc(left.created_at, right.created_at);
+  };
+
+  const unassignedEvents = [...lifeEvents.filter((event) => event.period_id === null)].sort(compareEventsByStartDate);
   const timelineStandaloneMemories = timeline.filter((memory) => !lifeEventMemoryIds.has(memory.id));
 
   function renderEventCard(event: LifeEvent, mergeCandidates: LifeEvent[], epicsInPeriod: LifeEpic[] = []) {
@@ -2024,6 +2086,12 @@ export default function HomePage() {
         setEditingAssetNotesValue={setEditingAssetNotesValue}
         assetNotesSavingId={assetNotesSavingId}
         saveAssetNotes={saveAssetNotes}
+        editingAssetCapturedDateId={editingAssetCapturedDateId}
+        setEditingAssetCapturedDateId={setEditingAssetCapturedDateId}
+        editingAssetCapturedDateValue={editingAssetCapturedDateValue}
+        setEditingAssetCapturedDateValue={setEditingAssetCapturedDateValue}
+        assetCapturedDateSavingId={assetCapturedDateSavingId}
+        saveAssetCapturedDate={saveAssetCapturedDate}
         resolveApiUrl={resolveApiUrl}
         formatBytes={formatBytes}
         deleteAsset={deleteAsset}
@@ -2254,7 +2322,7 @@ export default function HomePage() {
               <div className="lifePeriodList">
                 {lifePeriods.length === 0 && <p className="meta">No periods created yet.</p>}
                 {sortedLifePeriods.map((period) => {
-                  const eventsForPeriod = lifeEvents.filter((event) => event.period_id === period.id);
+                  const eventsForPeriod = [...lifeEvents.filter((event) => event.period_id === period.id)].sort(compareEventsByStartDate);
                   const eventsForPeriodIds = new Set(eventsForPeriod.map((e) => e.id));
                   const periodQuestionCount =
                     (questionsByPeriodNoEvent.get(period.id)?.length ?? 0) +
@@ -2608,7 +2676,7 @@ export default function HomePage() {
                           )}
 
                           {(() => {
-                            const epicsForPeriod = lifeEpics.filter((e) => e.period_id === period.id);
+                            const epicsForPeriod = [...lifeEpics.filter((e) => e.period_id === period.id)].sort(compareEpicsByStartDate);
                             const ungroupedEvents = eventsForPeriod.filter((ev) => ev.epic_id === null || !epicsForPeriod.some((ep) => ep.id === ev.epic_id));
                             return (
                               <div className="lifeEventList">
@@ -2683,6 +2751,12 @@ export default function HomePage() {
                 setEditingAssetNotesValue={setEditingAssetNotesValue}
                 assetNotesSavingId={assetNotesSavingId}
                 saveAssetNotes={saveAssetNotes}
+                editingAssetCapturedDateId={editingAssetCapturedDateId}
+                setEditingAssetCapturedDateId={setEditingAssetCapturedDateId}
+                editingAssetCapturedDateValue={editingAssetCapturedDateValue}
+                setEditingAssetCapturedDateValue={setEditingAssetCapturedDateValue}
+                assetCapturedDateSavingId={assetCapturedDateSavingId}
+                saveAssetCapturedDate={saveAssetCapturedDate}
                 resolveApiUrl={resolveApiUrl}
                 formatBytes={formatBytes}
                 deleteAsset={deleteAsset}

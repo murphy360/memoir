@@ -25,6 +25,8 @@ export type MemoryEntry = {
   transcript: string;
   event_description: string;
   estimated_date_text: string | null;
+  estimated_date_sort: string | null;
+  estimated_end_date_sort: string | null;
   date_precision: string | null;
   response_to_question_id: number | null;
   response_to_question_text: string | null;
@@ -78,6 +80,8 @@ export type LifePeriod = {
   slug: string | null;
   start_date_text: string | null;
   end_date_text: string | null;
+  start_sort: string | null;
+  end_sort: string | null;
   summary: string | null;
   event_count: number;
   epic_count: number;
@@ -108,6 +112,8 @@ export type LifeEpic = {
   weight: number;
   start_date_text: string | null;
   end_date_text: string | null;
+  start_sort: string | null;
+  end_sort: string | null;
   event_count: number;
   created_at: string;
   updated_at: string;
@@ -150,6 +156,8 @@ export type LifeEvent = {
   research_sources: ResearchSource[];
   research_suggested_edit: EventEditSuggestion | null;
   event_date_text: string | null;
+  event_date_sort: string | null;
+  event_end_date_sort: string | null;
   location: string | null;
   date_precision: string | null;
   date_year: number | null;
@@ -179,6 +187,7 @@ export type AssetEntry = {
   content_type: string | null;
   size_bytes: number | null;
   captured_at: string | null;
+  captured_end_at: string | null;
   captured_at_text: string | null;
   gps_latitude: number | null;
   gps_longitude: number | null;

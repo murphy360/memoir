@@ -42,11 +42,11 @@ type EventCapturePanelProps = {
   eventDocumentUploadingId: number | null;
   eventDocumentErrors: Record<number, string | null>;
   eventDocumentUploadProgress: EventDocumentUploadProgressItem[];
-  uploadDocumentsToEvent: (files: File[], eventId: number) => void;
+  uploadDocumentsToEvent: (files: File[], eventId: number, capturedDateText: string | null) => void;
   eventAssetInputRef: RefObject<HTMLInputElement>;
   isUploadingAsset: boolean;
   isSavingLifeStructure: boolean;
-  uploadAssetToActiveEvent: (file: File) => void;
+  uploadAssetToActiveEvent: (file: File, capturedDateText: string | null) => void;
 };
 
 export function EventCapturePanel({
@@ -72,6 +72,7 @@ export function EventCapturePanel({
   uploadAssetToActiveEvent,
 }: EventCapturePanelProps) {
   const [isDragOverDocumentTarget, setIsDragOverDocumentTarget] = useState(false);
+  const [capturedDateOverride, setCapturedDateOverride] = useState("");
   const documentDragDepthRef = useRef(0);
 
   const onDocumentDragEnter: DragEventHandler<HTMLDivElement> = (event) => {
@@ -114,7 +115,7 @@ export function EventCapturePanel({
       return;
     }
 
-    uploadDocumentsToEvent(droppedFiles, eventId);
+    uploadDocumentsToEvent(droppedFiles, eventId, capturedDateOverride.trim() || null);
   };
 
   return (
@@ -174,6 +175,15 @@ export function EventCapturePanel({
       <div className="captureBlock">
         <h4 className="captureBlockTitle">Upload a Document</h4>
         <p className="meta">Upload one or many PDFs, images, or text files and link them directly to this event as assets.</p>
+        <input
+          className="directoryInput"
+          type="text"
+          placeholder="Captured date override (e.g. Apr 2, 1988 or 1988-04-02)"
+          value={capturedDateOverride}
+          onChange={(e) => setCapturedDateOverride(e.target.value)}
+          disabled={eventDocumentUploadingId === eventId || isRecording || isLoading}
+          style={{ marginBottom: "0.45rem" }}
+        />
         <div className="controls">
           <input
             type="file"
@@ -183,7 +193,7 @@ export function EventCapturePanel({
             onChange={(e) => {
               const files = Array.from(e.target.files ?? []);
               if (files.length > 0) {
-                uploadDocumentsToEvent(files, eventId);
+                uploadDocumentsToEvent(files, eventId, capturedDateOverride.trim() || null);
               }
               e.currentTarget.value = "";
             }}
@@ -248,13 +258,22 @@ export function EventCapturePanel({
         <h4 className="captureBlockTitle">Upload Asset</h4>
         <p className="meta">Upload a photo, audio, or file directly as an asset without AI analysis.</p>
         <input
+          className="directoryInput"
+          type="text"
+          placeholder="Captured date override (optional)"
+          value={capturedDateOverride}
+          onChange={(e) => setCapturedDateOverride(e.target.value)}
+          disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
+          style={{ marginBottom: "0.45rem" }}
+        />
+        <input
           ref={eventAssetInputRef}
           type="file"
           accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.txt,.mp3,.wav,.m4a,.ogg,.webm,audio/*"
           disabled={isUploadingAsset || isSavingLifeStructure || isRecording || isLoading}
           onChange={(e) => {
             const file = e.target.files?.[0];
-            if (file) uploadAssetToActiveEvent(file);
+            if (file) uploadAssetToActiveEvent(file, capturedDateOverride.trim() || null);
           }}
         />
       </div>

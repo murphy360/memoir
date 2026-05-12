@@ -62,6 +62,10 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE memories ADD COLUMN locations_json TEXT"))
         if "date_recorded" not in columns:
             connection.execute(text("ALTER TABLE memories ADD COLUMN date_recorded DATE"))
+        if "estimated_date_sort" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN estimated_date_sort DATE"))
+        if "estimated_end_date_sort" not in columns:
+            connection.execute(text("ALTER TABLE memories ADD COLUMN estimated_end_date_sort DATE"))
         if "recorder_person_id" not in columns:
             connection.execute(text("ALTER TABLE memories ADD COLUMN recorder_person_id INTEGER"))
 
@@ -285,6 +289,8 @@ def ensure_schema_migrations() -> None:
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_analysis_status ON life_events (analysis_status)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_analysis_input_hash ON life_events (analysis_input_hash)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_events_epic_id ON life_events (epic_id)"))
+        if "event_end_date_sort" not in event_columns:
+            connection.execute(text("ALTER TABLE life_events ADD COLUMN event_end_date_sort DATE"))
 
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS assets (
@@ -334,6 +340,8 @@ def ensure_schema_migrations() -> None:
             connection.execute(text("ALTER TABLE assets ADD COLUMN gemini_suggested_title VARCHAR(180)"))
         if "captured_at" not in asset_columns:
             connection.execute(text("ALTER TABLE assets ADD COLUMN captured_at DATETIME"))
+        if "captured_end_at" not in asset_columns:
+            connection.execute(text("ALTER TABLE assets ADD COLUMN captured_end_at DATETIME"))
         if "captured_at_text" not in asset_columns:
             connection.execute(text("ALTER TABLE assets ADD COLUMN captured_at_text VARCHAR(100)"))
         if "gps_latitude" not in asset_columns:
@@ -465,6 +473,11 @@ def ensure_schema_migrations() -> None:
         if "thread_id" not in epic_columns:
             connection.execute(text("ALTER TABLE life_epics ADD COLUMN thread_id INTEGER REFERENCES life_threads(id) ON DELETE SET NULL"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_epics_thread_id ON life_epics (thread_id)"))
+        if "start_sort" not in epic_columns:
+            connection.execute(text("ALTER TABLE life_epics ADD COLUMN start_sort DATE"))
+        if "end_sort" not in epic_columns:
+            connection.execute(text("ALTER TABLE life_epics ADD COLUMN end_sort DATE"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_life_epics_start_sort ON life_epics (start_sort)"))
 
         # Add thread_id to life_events (threads now tag events, not periods)
         if "thread_id" not in event_columns:

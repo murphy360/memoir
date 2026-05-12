@@ -432,6 +432,19 @@ export async function updateAssetTitle(assetId: number, title: string | null): P
   await expectOk(response, "Update asset title failed");
 }
 
+/**
+ * PATCH /api/assets/{assetId}
+ * Sends a manual captured date text override so backend normalization can replace or clear captured_at fields.
+ */
+export async function updateAssetCapturedDate(assetId: number, capturedAtText: string | null): Promise<void> {
+  const response = await fetch(toAbsoluteApiUrl(`/api/assets/${assetId}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ captured_at_text: capturedAtText }),
+  });
+  await expectOk(response, "Update asset captured date failed");
+}
+
 export async function linkAssetToEvent(
   assetId: number,
   eventId: number,

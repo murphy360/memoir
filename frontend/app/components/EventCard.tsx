@@ -102,10 +102,10 @@ type EventCardProps = {
   eventDocumentUploadingId: number | null;
   eventDocumentErrors: Record<number, string | null>;
   eventDocumentUploadProgressByEventId: Record<number, EventDocumentUploadProgressItem[]>;
-  uploadDocumentsToEvent: (files: File[], eventId: number) => Promise<void>;
+  uploadDocumentsToEvent: (files: File[], eventId: number, capturedDateText: string | null) => Promise<void>;
   eventAssetInputRef: RefObject<HTMLInputElement>;
   isUploadingAsset: boolean;
-  uploadAssetToActiveEvent: (file: File) => Promise<void>;
+  uploadAssetToActiveEvent: (file: File, capturedDateText: string | null) => Promise<void>;
   activeEventAssets: AssetEntry[];
   eventFaces: EventFaceEntry[];
   highlightedElementId: string | null;
@@ -123,6 +123,12 @@ type EventCardProps = {
   setEditingAssetNotesValue: (value: string) => void;
   assetNotesSavingId: number | null;
   saveAssetNotes: (assetId: number, eventId?: number) => Promise<void>;
+  editingAssetCapturedDateId: number | null;
+  setEditingAssetCapturedDateId: (id: number | null) => void;
+  editingAssetCapturedDateValue: string;
+  setEditingAssetCapturedDateValue: (value: string) => void;
+  assetCapturedDateSavingId: number | null;
+  saveAssetCapturedDate: (assetId: number, eventId?: number) => Promise<void>;
   resolveApiUrl: (path: string) => string;
   formatBytes: (bytes: number) => string;
   deleteAsset: (assetId: number, eventId?: number) => Promise<void>;
@@ -241,6 +247,12 @@ export function EventCard({
   setEditingAssetNotesValue,
   assetNotesSavingId,
   saveAssetNotes,
+  editingAssetCapturedDateId,
+  setEditingAssetCapturedDateId,
+  editingAssetCapturedDateValue,
+  setEditingAssetCapturedDateValue,
+  assetCapturedDateSavingId,
+  saveAssetCapturedDate,
   resolveApiUrl,
   formatBytes,
   deleteAsset,
@@ -958,11 +970,11 @@ export function EventCard({
               eventDocumentUploadingId={eventDocumentUploadingId}
               eventDocumentErrors={eventDocumentErrors}
               eventDocumentUploadProgress={eventDocumentUploadProgressByEventId[event.id] ?? []}
-              uploadDocumentsToEvent={(files, eventId) => { void uploadDocumentsToEvent(files, eventId); }}
+              uploadDocumentsToEvent={(files, eventId, capturedDateText) => { void uploadDocumentsToEvent(files, eventId, capturedDateText); }}
               eventAssetInputRef={eventAssetInputRef}
               isUploadingAsset={isUploadingAsset}
               isSavingLifeStructure={isSavingLifeStructure}
-              uploadAssetToActiveEvent={(file) => { void uploadAssetToActiveEvent(file); }}
+              uploadAssetToActiveEvent={(file, capturedDateText) => { void uploadAssetToActiveEvent(file, capturedDateText); }}
             />
           )}
 
@@ -991,6 +1003,12 @@ export function EventCard({
                 setEditingAssetNotesValue={setEditingAssetNotesValue}
                 assetNotesSavingId={assetNotesSavingId}
                 saveAssetNotes={saveAssetNotes}
+                editingAssetCapturedDateId={editingAssetCapturedDateId}
+                setEditingAssetCapturedDateId={setEditingAssetCapturedDateId}
+                editingAssetCapturedDateValue={editingAssetCapturedDateValue}
+                setEditingAssetCapturedDateValue={setEditingAssetCapturedDateValue}
+                assetCapturedDateSavingId={assetCapturedDateSavingId}
+                saveAssetCapturedDate={saveAssetCapturedDate}
                 resolveApiUrl={resolveApiUrl}
                 formatBytes={formatBytes}
                 deleteAsset={deleteAsset}

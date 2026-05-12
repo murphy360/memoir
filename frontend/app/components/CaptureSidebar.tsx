@@ -34,7 +34,7 @@ type CaptureSidebarProps = {
   isReadingClipboard: boolean;
   isDragOverDocumentTarget: boolean;
   documentUploadError: string | null;
-  uploadDocument: (file: File) => void;
+  uploadDocument: (file: File, capturedDateText: string | null) => void;
   pasteImageFromClipboard: () => void;
   onDocumentPasteZonePaste: ClipboardEventHandler<HTMLDivElement>;
   onDocumentDragEnter: DragEventHandler<HTMLDivElement>;
@@ -78,6 +78,7 @@ export function CaptureSidebar({
   audioDeviceStorageKey,
 }: CaptureSidebarProps) {
   const [showAdvancedAudio, setShowAdvancedAudio] = useState(false);
+  const [capturedDateOverride, setCapturedDateOverride] = useState("");
 
   return (
     <>
@@ -202,6 +203,15 @@ export function CaptureSidebar({
         <div className="captureBlock">
           <h3 className="captureBlockTitle">Upload a Document</h3>
           <p className="meta">Upload a PDF, image, or text file, or paste a screen clipping. It will be saved as an asset in the unlinked inbox.</p>
+          <input
+            className="directoryInput"
+            type="text"
+            placeholder="Captured date override (e.g. Apr 2, 1988 or 1988-04-02)"
+            value={capturedDateOverride}
+            onChange={(e) => setCapturedDateOverride(e.target.value)}
+            disabled={isUploadingDocument || isReadingClipboard || isRecording || isLoading}
+            style={{ marginBottom: "0.45rem" }}
+          />
           <div className="controls">
             <input
               ref={documentFileInputRef}
@@ -211,7 +221,7 @@ export function CaptureSidebar({
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
-                  uploadDocument(file);
+                  uploadDocument(file, capturedDateOverride.trim() || null);
                 }
               }}
               style={{ flex: 1 }}
@@ -229,11 +239,15 @@ export function CaptureSidebar({
             className={`pasteTarget ${isDragOverDocumentTarget ? "dragOver" : ""}`}
             role="button"
             tabIndex={0}
-            onPaste={onDocumentPasteZonePaste}
+            onPaste={(event) => {
+              onDocumentPasteZonePaste(event);
+            }}
             onDragEnter={onDocumentDragEnter}
             onDragOver={onDocumentDragOver}
             onDragLeave={onDocumentDragLeave}
-            onDrop={onDocumentDrop}
+            onDrop={(event) => {
+              onDocumentDrop(event);
+            }}
             aria-label="Paste image from clipboard"
           >
             <p className="pasteTargetTitle">Paste or Drop a File</p>

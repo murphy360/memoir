@@ -157,6 +157,17 @@ def sync_life_hierarchy_for_memory(db: Session, memory: MemoryEntry) -> None:
     # If a legacy-linked event exists with period_id=None, keep it unassigned
     # unless there are no periods at all (startup recovery case handled above).
 
+    if event is not None and event.legacy_memory_id == memory.id:
+        # Keep event timeline metadata synchronized with the source memory.
+        event.event_date_text = memory.estimated_date_text
+        event.event_date_sort = memory.estimated_date_sort
+        event.event_end_date_sort = memory.estimated_end_date_sort
+        event.date_precision = memory.date_precision
+        event.date_year = memory.date_year
+        event.date_month = memory.date_month
+        event.date_day = memory.date_day
+        event.date_decade = memory.date_decade
+
     if memory.audio_filename:
         audio_asset = (
             db.query(Asset)
