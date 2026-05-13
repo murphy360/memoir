@@ -96,14 +96,13 @@ export function EpicCard({
               {epic.event_count} event{epic.event_count === 1 ? "" : "s"}
             </span>
             <div className="controls" style={{ marginLeft: "auto", gap: "0.3rem" }}>
-              <button
-                className="secondary"
-                type="button"
-                style={{ padding: "0.1rem 0.45rem", fontSize: "0.8rem", whiteSpace: "nowrap" }}
+              <h4
+                style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0, fontSize: "0.8rem" }}
                 onClick={onToggleOpen}
               >
-                {isOpen ? "Hide" : "Open"}
-              </button>
+                <span>{isOpen ? "▾" : "▸"}</span>
+                Details
+              </h4>
               <button
                 className="secondary"
                 type="button"

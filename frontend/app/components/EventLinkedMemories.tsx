@@ -122,18 +122,17 @@ export function EventLinkedMemories({
                   Edit Title
                 </button>
               )}
-              <button
-                className="secondary"
-                type="button"
-                style={{ padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
+              <h4
+                style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0, padding: "0.1rem 0.55rem", fontSize: "0.8rem", flexShrink: 0 }}
                 onClick={() => setExpandedMemoryRowIds((prev) => {
                   const next = new Set(prev);
                   if (next.has(linkedMemory.id)) next.delete(linkedMemory.id); else next.add(linkedMemory.id);
                   return next;
                 })}
               >
-                {expandedMemoryRowIds.has(linkedMemory.id) ? "Collapse" : "Expand"}
-              </button>
+                <span>{expandedMemoryRowIds.has(linkedMemory.id) ? "▾" : "▸"}</span>
+                Details
+              </h4>
             </div>
           </div>
           {expandedMemoryRowIds.has(linkedMemory.id) && (

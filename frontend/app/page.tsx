@@ -1172,11 +1172,12 @@ export default function HomePage() {
     }
   }
 
-  async function saveAssetNotes(assetId: number, eventId?: number) {
+  async function saveAssetNotes(assetId: number, eventId?: number, nextNotes?: string) {
     setAssetNotesSavingId(assetId);
     setStatus("Saving asset notes...");
     try {
-      await updateAssetNotesById(assetId, editingAssetNotesValue.trim() || null);
+      const notesToSave = nextNotes !== undefined ? nextNotes : editingAssetNotesValue;
+      await updateAssetNotesById(assetId, notesToSave.trim() || null);
       setEditingAssetNotesId(null);
       setEditingAssetNotesValue("");
       if (eventId !== undefined) {
@@ -1191,11 +1192,14 @@ export default function HomePage() {
     }
   }
 
-  async function saveAssetCapturedDate(assetId: number, eventId?: number) {
+  async function saveAssetCapturedDate(assetId: number, eventId?: number, nextCapturedDateText?: string) {
     setAssetCapturedDateSavingId(assetId);
     setStatus("Saving captured date...");
     try {
-      await updateAssetCapturedDateById(assetId, editingAssetCapturedDateValue.trim() || null);
+      const capturedDateToSave = nextCapturedDateText !== undefined
+        ? nextCapturedDateText
+        : editingAssetCapturedDateValue;
+      await updateAssetCapturedDateById(assetId, capturedDateToSave.trim() || null);
       setEditingAssetCapturedDateId(null);
       setEditingAssetCapturedDateValue("");
       if (eventId !== undefined) {
@@ -2217,13 +2221,13 @@ export default function HomePage() {
                   <h2>Life Threads</h2>
                   <p className="meta">Threads group related periods across time — e.g. "Military Career" or "Family".</p>
                 </div>
-                <button
-                  className="secondary"
-                  type="button"
+                <h2
+                  style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0 }}
                   onClick={() => setIsThreadComposerOpen((c) => !c)}
                 >
-                  {isThreadComposerOpen ? "Hide thread form" : "New thread"}
-                </button>
+                  <span>{isThreadComposerOpen ? "▾" : "▸"}</span>
+                  New thread
+                </h2>
               </div>
 
               {isThreadComposerOpen && (
@@ -2327,13 +2331,13 @@ export default function HomePage() {
                     <option value="updated-desc">Recently updated</option>
                     <option value="title-asc">Title: A to Z</option>
                   </select>
-                  <button
-                    className="secondary"
-                    type="button"
+                  <h3
+                    style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0 }}
                     onClick={() => setIsPeriodComposerOpen((current) => !current)}
                   >
-                    {isPeriodComposerOpen ? "Hide period form" : "New period"}
-                  </button>
+                    <span>{isPeriodComposerOpen ? "▾" : "▸"}</span>
+                    New period
+                  </h3>
                 </div>
               </div>
 
@@ -2464,14 +2468,15 @@ export default function HomePage() {
                             Events: <span className="badge">{eventsForPeriod.length}</span> Assets: <span className="badge">{period.asset_count}</span>{periodQuestionCount > 0 && <> Questions: <span className="badge">{periodQuestionCount}</span></>}
                           </p>
                         </div>
-                        <button
-                          className="secondary"
-                          type="button"
-                          onClick={() => togglePeriodExpanded(period.id)}
-                        >
-                          {isExpanded ? "Hide" : "Open"}
-                        </button>
                       </div>
+
+                      <h3
+                        style={{ marginTop: 0, cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: "0.4rem" }}
+                        onClick={() => togglePeriodExpanded(period.id)}
+                      >
+                        <span>{isExpanded ? "▾" : "▸"}</span>
+                        Period Details
+                      </h3>
 
                       {isExpanded && (
                         <>

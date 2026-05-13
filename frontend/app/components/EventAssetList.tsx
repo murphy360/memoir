@@ -25,13 +25,13 @@ type EventAssetListProps = {
   editingAssetNotesValue: string;
   setEditingAssetNotesValue: (value: string) => void;
   assetNotesSavingId: number | null;
-  saveAssetNotes: (assetId: number, eventId?: number) => Promise<void>;
+  saveAssetNotes: (assetId: number, eventId?: number, nextNotes?: string) => Promise<void>;
   editingAssetCapturedDateId: number | null;
   setEditingAssetCapturedDateId: (id: number | null) => void;
   editingAssetCapturedDateValue: string;
   setEditingAssetCapturedDateValue: (value: string) => void;
   assetCapturedDateSavingId: number | null;
-  saveAssetCapturedDate: (assetId: number, eventId?: number) => Promise<void>;
+  saveAssetCapturedDate: (assetId: number, eventId?: number, nextCapturedDateText?: string) => Promise<void>;
   resolveApiUrl: (path: string) => string;
   formatBytes: (bytes: number) => string;
   deleteAsset: (assetId: number, eventId?: number) => Promise<void>;
@@ -551,16 +551,16 @@ export function EventAssetList({
                     {processingPhotoAssetId === previewAsset.id ? "Analyzing..." : "Analyze Photo"}
                   </button>
                   {previewAssetFaces.length > 0 && (
-                    <button
-                      className="secondary"
-                      type="button"
+                    <h4
+                      style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0, padding: "0.2rem 0" }}
                       onClick={() => setShowFaceBoxesByAssetId((current) => ({
                         ...current,
                         [previewAsset.id]: !current[previewAsset.id],
                       }))}
                     >
-                      {showFaceBoxes ? "Hide Face Boxes" : `Show Face Boxes (${previewAssetFaces.length})`}
-                    </button>
+                      <span>{showFaceBoxes ? "▾" : "▸"}</span>
+                      Face Boxes ({previewAssetFaces.length})
+                    </h4>
                   )}
                   {canRecordPreviewPhoto && !isRecordingThisAsset && (
                     <button
@@ -789,7 +789,7 @@ export function EventAssetList({
                   onChange={(e) => setEditingAssetCapturedDateValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      void saveAssetCapturedDate(previewAsset.id, eventId);
+                      void saveAssetCapturedDate(previewAsset.id, eventId, editingAssetCapturedDateValue);
                       setEditingAssetCapturedDateId(null);
                     }
                     if (e.key === "Escape") {
@@ -801,7 +801,7 @@ export function EventAssetList({
                   placeholder="e.g. April 10-12, 2026 or 2026-04-10"
                 />
                 <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.35rem" }}>
-                  <button className="primary" type="button" onClick={() => { void saveAssetCapturedDate(previewAsset.id, eventId); setEditingAssetCapturedDateId(null); }} disabled={assetCapturedDateSavingId === previewAsset.id}>Save</button>
+                  <button className="primary" type="button" onClick={() => { void saveAssetCapturedDate(previewAsset.id, eventId, editingAssetCapturedDateValue); setEditingAssetCapturedDateId(null); }} disabled={assetCapturedDateSavingId === previewAsset.id}>Save</button>
                   <button className="secondary" type="button" onClick={() => { setEditingAssetCapturedDateId(null); setEditingAssetCapturedDateValue(""); }}>Cancel</button>
                 </div>
               </div>
@@ -861,7 +861,7 @@ export function EventAssetList({
                   onChange={(e) => setModalEditingNotesValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      void saveAssetNotes(previewAsset.id, eventId);
+                      void saveAssetNotes(previewAsset.id, eventId, modalEditingNotesValue);
                       setModalEditingNotesId(null);
                     }
                     if (e.key === "Escape") {
@@ -872,7 +872,7 @@ export function EventAssetList({
                   style={{ flex: 1, width: "100%" }}
                 />
                 <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.35rem" }}>
-                  <button className="primary" type="button" onClick={() => { void saveAssetNotes(previewAsset.id, eventId); setModalEditingNotesId(null); }} disabled={assetNotesSavingId === previewAsset.id}>Save</button>
+                  <button className="primary" type="button" onClick={() => { void saveAssetNotes(previewAsset.id, eventId, modalEditingNotesValue); setModalEditingNotesId(null); }} disabled={assetNotesSavingId === previewAsset.id}>Save</button>
                   <button className="secondary" type="button" onClick={() => { setModalEditingNotesId(null); setModalEditingNotesValue(""); }}>Cancel</button>
                 </div>
               </div>

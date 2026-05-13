@@ -108,16 +108,16 @@ export function CaptureSidebar({
         <div className="captureBlock">
           <h3 className="captureBlockTitle">Record Audio</h3>
           {/* Keep device controls optional so the default path stays focused on one-tap capture. */}
-          <button
-            className="ghost advancedAudioToggle"
-            type="button"
+          <h4
+            style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0, padding: 0 }}
             onClick={() => setShowAdvancedAudio((current) => !current)}
             aria-expanded={showAdvancedAudio}
             aria-controls="quick-memory-audio-settings"
-            disabled={isRecording || isLoading}
+            className={isRecording || isLoading ? "disabled" : ""}
           >
-            {showAdvancedAudio ? "Hide Advanced Audio" : "Advanced Audio"}
-          </button>
+            <span>{showAdvancedAudio ? "▾" : "▸"}</span>
+            Advanced Audio
+          </h4>
 
           {showAdvancedAudio && (
             <div className="inputSection" id="quick-memory-audio-settings">

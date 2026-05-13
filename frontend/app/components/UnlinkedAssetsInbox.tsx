@@ -18,13 +18,13 @@ type UnlinkedAssetsInboxProps = {
   editingAssetNotesValue: string;
   setEditingAssetNotesValue: (value: string) => void;
   assetNotesSavingId: number | null;
-  saveAssetNotes: (assetId: number, eventId?: number) => Promise<void>;
+  saveAssetNotes: (assetId: number, eventId?: number, nextNotes?: string) => Promise<void>;
   editingAssetCapturedDateId: number | null;
   setEditingAssetCapturedDateId: (id: number | null) => void;
   editingAssetCapturedDateValue: string;
   setEditingAssetCapturedDateValue: (value: string) => void;
   assetCapturedDateSavingId: number | null;
-  saveAssetCapturedDate: (assetId: number, eventId?: number) => Promise<void>;
+  saveAssetCapturedDate: (assetId: number, eventId?: number, nextCapturedDateText?: string) => Promise<void>;
   resolveApiUrl: (path: string) => string;
   formatBytes: (bytes: number) => string;
   deleteAsset: (assetId: number, eventId?: number) => Promise<void>;

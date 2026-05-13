@@ -73,14 +73,14 @@ export function MemoryCard({
               </p>
             </div>
           </div>
-          <button
-            className="secondary memoryToggle"
-            type="button"
+          <h4
+            style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0, padding: "0.2rem 0" }}
             onClick={() => setIsExpanded((current) => !current)}
             aria-expanded={isExpanded}
           >
-            {isExpanded ? "Collapse" : "Expand"}
-          </button>
+            <span>{isExpanded ? "▾" : "▸"}</span>
+            Details
+          </h4>
         </div>
       )}
 

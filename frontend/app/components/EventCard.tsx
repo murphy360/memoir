@@ -122,13 +122,13 @@ type EventCardProps = {
   editingAssetNotesValue: string;
   setEditingAssetNotesValue: (value: string) => void;
   assetNotesSavingId: number | null;
-  saveAssetNotes: (assetId: number, eventId?: number) => Promise<void>;
+  saveAssetNotes: (assetId: number, eventId?: number, nextNotes?: string) => Promise<void>;
   editingAssetCapturedDateId: number | null;
   setEditingAssetCapturedDateId: (id: number | null) => void;
   editingAssetCapturedDateValue: string;
   setEditingAssetCapturedDateValue: (value: string) => void;
   assetCapturedDateSavingId: number | null;
-  saveAssetCapturedDate: (assetId: number, eventId?: number) => Promise<void>;
+  saveAssetCapturedDate: (assetId: number, eventId?: number, nextCapturedDateText?: string) => Promise<void>;
   resolveApiUrl: (path: string) => string;
   formatBytes: (bytes: number) => string;
   deleteAsset: (assetId: number, eventId?: number) => Promise<void>;
@@ -287,7 +287,9 @@ export function EventCard({
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [isResearchOpen, setIsResearchOpen] = useState(false);
   const [showThreadPicker, setShowThreadPicker] = useState(false);
+  const [showMergeWorkflow, setShowMergeWorkflow] = useState(false);
   const assignedThread = threads.find((t) => t.id === event.thread_id) ?? null;
+  const mergeOptions = mergeCandidates.filter((candidate) => candidate.id !== event.id);
   // Keep photo analysis visibility on the event card so users can track progress without opening Add Memory.
   const photoProgressRows = eventDocumentUploadProgressByEventId[event.id] ?? [];
   const completedPhotoCount = photoProgressRows.filter((row) => row.stages?.gemini === "done" || row.stages?.gemini === "skipped").length;
@@ -456,9 +458,13 @@ export function EventCard({
           )}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", alignItems: "stretch" }}>
-          <button className="secondary" type="button" style={{ whiteSpace: "nowrap" }} onClick={() => void onToggleOpen()}>
-            {isOpen ? "Hide" : "Open"}
-          </button>
+          <h3
+            style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0, padding: 0 }}
+            onClick={() => void onToggleOpen()}
+          >
+            <span>{isOpen ? "▾" : "▸"}</span>
+            Details
+          </h3>
           <button
             className="secondary"
             type="button"
@@ -467,6 +473,16 @@ export function EventCard({
             disabled={isSavingLifeStructure || isRecording || isLoading}
           >
             Delete
+          </button>
+          <button
+            className="secondary"
+            type="button"
+            style={{ whiteSpace: "nowrap" }}
+            onClick={() => setShowMergeWorkflow((current) => !current)}
+            disabled={isSavingLifeStructure || isRecording || isLoading || mergeOptions.length === 0}
+            title={mergeOptions.length === 0 ? "No other events available to merge into" : "Merge this event into another event"}
+          >
+            {showMergeWorkflow ? "Cancel Merge" : "Merge Event"}
           </button>
         </div>
       </div>
@@ -520,16 +536,16 @@ export function EventCard({
               </button>
             </div>
           )}
-          {editingEventTitleId === event.id && (
+          {showMergeWorkflow && (
             <div className="lifeEventManagementRow" style={{ marginBottom: "0.55rem" }}>
               <select
                 className="directoryInput"
                 value={eventMergeTargets[event.id] || ""}
                 onChange={(e) => setEventMergeTargets((current) => ({ ...current, [event.id]: e.target.value }))}
-                disabled={isSavingLifeStructure}
+                disabled={isSavingLifeStructure || mergeOptions.length === 0}
               >
                 <option value="">Merge into another event</option>
-                {mergeCandidates.filter((candidate) => candidate.id !== event.id).map((candidate) => (
+                {mergeOptions.map((candidate) => (
                   <option key={candidate.id} value={candidate.id}>{candidate.title}</option>
                 ))}
               </select>
