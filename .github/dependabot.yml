@@ -1,0 +1,40 @@
+# From murphy360/standards (templates/dependabot.yml): weekly, one grouped pull request per ecosystem.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+    groups:
+      actions: {patterns: ["*"]}
+  - package-ecosystem: pip
+    directory: /api
+    schedule: {interval: weekly}
+    groups:
+      python: {patterns: ["*"]}
+  - package-ecosystem: docker
+    directories: [/api, /web]
+    schedule: {interval: weekly}
+    ignore:
+      # The API stays on Python 3.12 (ruff's target and the standards' lint) until a deliberate move.
+      - dependency-name: python
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # Node 22 is the LTS the web build and the standards' node-lint use.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule: {interval: weekly}
+    ignore:
+      # The tests run against the PostgreSQL major that the API's base image ships (17).
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: npm
+    directory: /web
+    schedule: {interval: weekly}
+    groups:
+      javascript: {patterns: ["*"]}
+    ignore:
+      # typescript-eslint supports TypeScript below 6.1 and openapi-typescript asks for 5.
+      # Lift this when both support a newer major.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]

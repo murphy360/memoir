@@ -1,0 +1,76 @@
+# CI from murphy360/standards (templates/ci.yml), for a repository with two parts: api/ (Python) and web/
+# (TypeScript). Every job calls a shared workflow; any other action must be pinned to a full commit SHA.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  standards:
+    uses: murphy360/standards/.github/workflows/standards-check.yml@v2
+  lint-api:
+    uses: murphy360/standards/.github/workflows/python-lint.yml@v2
+    with:
+      format-check: true
+      paths: api
+      format-only: ${{ contains(github.event.pull_request.labels.*.name, 'format-only') }}
+  lint-web:
+    # Pinned to murphy360/standards#2 until node-lint is released; then @v2 like the others.
+    uses: murphy360/standards/.github/workflows/node-lint.yml@5d52c5303ca6f7a1212d12d2385eb861badbd33b
+    with:
+      working-directory: web
+      format-check: true
+      standards-ref: 5d52c5303ca6f7a1212d12d2385eb861badbd33b
+  workflows:
+    uses: murphy360/standards/.github/workflows/actionlint.yml@v2
+  test-api:
+    uses: murphy360/standards/.github/workflows/test-docker.yml@v2
+    with:
+      context: api
+      file: api/Dockerfile
+      target: test
+      command: "cd api && pytest -q"
+  test-web:
+    uses: murphy360/standards/.github/workflows/test-docker.yml@v2
+    with:
+      context: web
+      file: web/Dockerfile
+      target: test
+      command: "cd web && npm run typecheck && npm test"
+  image-api:
+    needs: [lint-api, test-api]
+    uses: murphy360/standards/.github/workflows/image.yml@v2
+    with:
+      image: memoir-api
+      context: api
+      file: api/Dockerfile
+      target: api
+      push: ${{ github.event_name != 'pull_request' }}
+    permissions:
+      contents: read
+      packages: write
+  image-worker:
+    needs: [lint-api, test-api]
+    uses: murphy360/standards/.github/workflows/image.yml@v2
+    with:
+      image: memoir-worker
+      context: api
+      file: api/Dockerfile
+      target: worker
+      push: ${{ github.event_name != 'pull_request' }}
+    permissions:
+      contents: read
+      packages: write
+  image-web:
+    needs: [lint-web, test-web]
+    uses: murphy360/standards/.github/workflows/image.yml@v2
+    with:
+      image: memoir-web
+      context: web
+      file: web/Dockerfile
+      push: ${{ github.event_name != 'pull_request' }}
+    permissions:
+      contents: read
+      packages: write

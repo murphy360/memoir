@@ -9,6 +9,32 @@ This is the ground-up rewrite. Version 0 lives at [murphy360/memoir-v0](https://
 - **What we are building:** [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 - **In what order:** the GitHub milestones, each with a RUN ORDER in its description. Stories recorded per month is
   the number every milestone is judged by.
-- **Photo work** (metadata, faces, deep research) comes from [murphy360/photo-analysis](https://github.com/murphy360/photo-analysis).
+- **How it is put together:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **Photo work** (metadata, faces, deep research) comes from
+  [murphy360/photo-analysis](https://github.com/murphy360/photo-analysis).
 
-Nothing runs yet. The first milestone builds the repository, the login and Record on a phone.
+## Run it
+
+Docker is the only requirement.
+
+```bash
+make up        # builds and starts the database, API, worker and web app
+```
+
+Then open http://localhost:8080/memoir/. The page shows whether the database and the worker are up. The API answers
+on http://localhost:8010/api/health too (set `MEMOIR_WEB_PORT` or `MEMOIR_API_PORT` if a port is taken). `make down` stops everything; the data stays in Docker volumes.
+
+## Develop
+
+Everything runs in the project's images. Pass your own `TAG` so parallel sessions never share an image.
+
+| Command | What it does |
+|---|---|
+| `make test TAG=me` | API tests (with a throwaway PostgreSQL inside the image) and web typecheck plus tests |
+| `make lint TAG=me` | ruff, formatting and the complexity limits for `api/`; ESLint and Prettier for `web/` |
+| `make format TAG=me` | `ruff format` and `prettier --write` |
+| `make openapi TAG=me` | regenerate `web/src/api/openapi.json` after an API change; commit it |
+
+CI (`.github/workflows/ci.yml`) runs the same checks with the shared workflows of
+[murphy360/standards](https://github.com/murphy360/standards), and publishes three images from `main`:
+`ghcr.io/murphy360/memoir-api`, `memoir-worker` and `memoir-web`. Every file is clean: there is no lint baseline.
