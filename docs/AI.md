@@ -42,7 +42,7 @@ Photo work (metadata, faces, descriptions) is not here: it belongs to the photo-
 | `MEMOIR_GEMINI_TRANSCRIBE_MODEL`, `MEMOIR_GEMINI_EXTRACT_MODEL` | empty | A different model for one task |
 | `MEMOIR_ANTHROPIC_API_KEY` | none | Claude for extraction and questions. On dontpanic, from the stack's `ANTHROPIC_API_KEY` |
 | `MEMOIR_ANTHROPIC_MODEL` | `claude-sonnet-5` | |
-| `MEMOIR_GROK_API_KEY` | none | Grok for extraction and questions. On dontpanic, from the stack's `GROK_API_KEY_PHOTO_ANALYZER` |
+| `MEMOIR_GROK_API_KEY` | none | Grok for extraction and questions. On dontpanic, from the stack's `GROK_API_KEY_MEMOIR` (Memoir's own key) |
 | `MEMOIR_GROK_MODEL` | `grok-4.7` | |
 | `MEMOIR_AI_PROVIDER` | empty | `gemini`, `anthropic` or `grok` for the text tasks; empty means the first with a key |
 | `MEMOIR_AI_EXTRACT_PROVIDER`, `MEMOIR_AI_QUESTIONS_PROVIDER` | empty | One task's own provider |

@@ -17,7 +17,7 @@ validated in CI, and `deploy/Caddyfile` is the Caddy block. Commands below run o
 | On the host | What | Owner, mode |
 |---|---|---|
 | `/docker/memoir/memoir.env` | The app's secrets: `MEMOIR_DATABASE_URL`, `MEMOIR_GEMINI_API_KEY`, and optionally `MEMOIR_AI_PROVIDER` | root, 600 |
-| `~/Software/dontpanic/.env` | The stack's keys. Compose passes `ANTHROPIC_API_KEY` and `GROK_API_KEY_PHOTO_ANALYZER` to Memoir as `MEMOIR_ANTHROPIC_API_KEY` and `MEMOIR_GROK_API_KEY` | the owner |
+| `~/Software/dontpanic/.env` | The stack's keys. Compose passes `ANTHROPIC_API_KEY` (shared) and `GROK_API_KEY_MEMOIR` (Memoir's own) to Memoir as `MEMOIR_ANTHROPIC_API_KEY` and `MEMOIR_GROK_API_KEY` | the owner |
 | `/docker/memoir/postgres.env` | `POSTGRES_PASSWORD`, used only when the database is first created | root, 600 |
 | `/docker/memoir/postgres` | The database files | the image's postgres user |
 | `/docker/memoir/blobs` | Recordings and files, content-addressed | uid 1000 |
@@ -155,7 +155,7 @@ docker rm -f memoir-drill-db && sudo rm -r /tmp/memoir-drill-blobs
 ## Rotate a secret
 
 - **An AI key.** Gemini: edit `MEMOIR_GEMINI_API_KEY` in `/docker/memoir/memoir.env`. Claude or Grok: edit
-  `ANTHROPIC_API_KEY` or `GROK_API_KEY_PHOTO_ANALYZER` in the stack's `.env` (shared with other services). Then
+  `ANTHROPIC_API_KEY` or `GROK_API_KEY_MEMOIR` in the stack's `.env`. Then
   `docker compose up -d --force-recreate memoir-api memoir-worker`. A key is only ever in those files and in a
   request header; it is never logged.
 - **The database password.** Change it in the database, then in both files, then recreate the API and the worker:

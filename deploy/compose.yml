@@ -46,7 +46,7 @@ services:
       MEMOIR_FORWARDED_ALLOW_IPS: "*"
       # Claude and Grok for reading and questions, from the stack's .env (docs/AI.md).
       MEMOIR_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      MEMOIR_GROK_API_KEY: ${GROK_API_KEY_PHOTO_ANALYZER:-}
+      MEMOIR_GROK_API_KEY: ${GROK_API_KEY_MEMOIR:-}
     volumes: &blobs
       - /docker/memoir/blobs:/data/blobs
     networks: [memoir, media_network]
