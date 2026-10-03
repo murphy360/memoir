@@ -6,3 +6,4 @@ __pycache__/
 build/
 .standards/
 .env
+e2e/out/

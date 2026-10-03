@@ -1,18 +1,63 @@
-/* Minimal and readable until the shell ticket's design: 16 px text, real focus rings. */
+/*
+ * Memoir's look. Readable first: 16 px text, contrast to WCAG AA, a visible focus ring
+ * on everything, buttons big enough for a thumb. The phone posture sits below 768 px,
+ * the wide posture at and above it (src/app/usePosture.ts).
+ */
 :root {
-  font-family: system-ui, sans-serif;
+  --ink: #2a1d17;
+  --ink-soft: #5c4a40;
+  --paper: #fbf7f2;
+  --card: #ffffff;
+  --line: #d9cdc3;
+  --brand: #7a3e2b;
+  --brand-ink: #ffffff;
+  --danger: #9b1c1c;
+  --ok: #1d6b3a;
+  --focus: #1f6feb;
+  --radius: 0.6rem;
+  --tab-height: 4rem;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   font-size: 16px;
   line-height: 1.5;
-  color: #2a1d17;
-  background: #fbf7f2;
+  color: var(--ink);
+  background: var(--paper);
+}
+* {
+  box-sizing: border-box;
 }
 body {
   margin: 0;
-  padding: 1rem;
+}
+h1 {
+  font-size: 1.6rem;
+  line-height: 1.25;
+  margin: 0 0 1rem;
+}
+h2 {
+  font-size: 1.2rem;
+  margin: 1.5rem 0 0.5rem;
+}
+a {
+  color: var(--brand);
+}
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+main:focus {
+  outline: none;
 }
 main.narrow {
   max-width: 28rem;
+  padding: 1rem;
 }
+
+/* Fields and buttons */
 .field {
   display: flex;
   flex-direction: column;
@@ -21,30 +66,232 @@ main.narrow {
 }
 input,
 select,
-button {
+textarea {
   font: inherit;
-  padding: 0.5rem 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--ink-soft);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--ink);
+  min-height: 2.75rem;
 }
-button.primary {
-  background: #7a3e2b;
+button,
+.button {
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--ink-soft);
+  background: var(--card);
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+button.primary,
+.button.primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--brand-ink);
+}
+.button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
   color: #fff;
-  border: none;
-  border-radius: 0.5rem;
 }
-:focus-visible {
-  outline: 3px solid #1f6feb;
-  outline-offset: 2px;
+.button.ghost,
+button.ghost {
+  border-color: transparent;
+  background: transparent;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.button.big {
+  font-size: 1.25rem;
+  min-height: 4.5rem;
+  width: 100%;
+  border-radius: 1.25rem;
 }
 .hint {
-  color: #5c4a40;
-  font-size: 0.9rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
   margin: 0;
 }
 .error {
-  color: #9b1c1c;
+  color: var(--danger);
 }
 .warning {
   border-left: 4px solid #b45309;
   padding: 0.25rem 0.75rem;
   background: #fff7ed;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.list {
+  padding-left: 1.25rem;
+}
+.empty {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  background: var(--card);
+}
+.empty h2 {
+  margin-top: 0;
+}
+.skip {
+  position: absolute;
+  left: -999px;
+  top: 0.5rem;
+  background: var(--card);
+  padding: 0.5rem 1rem;
+  z-index: 20;
+}
+.skip:focus {
+  left: 0.5rem;
+}
+
+/* The phone posture: content, then five tabs fixed to the bottom. */
+.phone main {
+  padding: 1rem 1rem
+    calc(var(--tab-height) + 1.5rem + env(safe-area-inset-bottom));
+}
+.tabs {
+  position: fixed;
+  inset: auto 0 0 0;
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tabs ul {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tabs a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tab-height);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  text-decoration: none;
+  text-align: center;
+}
+.tabs a.active {
+  color: var(--brand);
+  font-weight: 700;
+  box-shadow: inset 0 3px 0 var(--brand);
+}
+.capture-home {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* The wide posture: header, navigation on the left, workspace. */
+.wide {
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+}
+.topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1.5rem;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+.topbar .record {
+  margin-left: auto;
+}
+.sidebar ul {
+  list-style: none;
+  margin: 0;
+  padding: 1rem 0.5rem;
+}
+.sidebar a {
+  display: block;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius);
+  color: var(--ink);
+  text-decoration: none;
+}
+.sidebar a.active {
+  background: #f1e4da;
+  font-weight: 700;
+}
+.workspace {
+  padding: 1.5rem 2rem;
+  max-width: 70rem;
+}
+
+/* Feedback */
+.toasts {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(var(--tab-height) + 1rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 30;
+  max-width: min(26rem, calc(100vw - 2rem));
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: #fff;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+}
+.toast .ghost {
+  color: #fff;
+}
+.toast-error {
+  background: var(--danger);
+}
+.toast-success {
+  background: var(--ok);
+}
+dialog.confirm {
+  border: none;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  max-width: 28rem;
+}
+dialog.confirm::backdrop {
+  background: rgb(0 0 0 / 0.4);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+@media (min-width: 768px) {
+  .toasts {
+    bottom: 1rem;
+  }
 }

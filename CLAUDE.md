@@ -68,6 +68,9 @@ recording.
   `memories.visible_to`, deletes are soft.
 - **Dates** are read by `api/app/dates/` (`docs/DATES.md`): save them with `set_point` or `set_range`, and
   from a job only with `set_by_job`, which never overwrites a date a person typed.
+- **The web app** has two postures (phone captures, wide reviews) over one route list; `docs/FRONTEND.md`
+  says where state lives and the component rules (under 300 lines, a dozen props, a section per page).
+  `make smoke` checks it in a real browser against `make up`.
 - **Errors** are always `{"error": {"code", "message", "field"}}` (`api/app/core/errors.py`). Raise
   `ApiError` from routes and services.
 - **Background work is a job** (`api/app/jobs/`): register a handler with `@handler("area.kind")`, enqueue
