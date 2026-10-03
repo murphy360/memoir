@@ -128,7 +128,9 @@ def test_a_stuck_job_is_reclaimed_after_its_heartbeat_lapses(session):
 
 
 def test_a_long_job_keeps_its_heartbeat_fresh(factory, settings):
+    """The job's heartbeat, and the worker's: a long job is not a dead worker."""
     seen = []
+    wid = worker.worker_id()
 
     @handler("test.slow")
     def slow(ctx, payload):
@@ -136,16 +138,22 @@ def test_a_long_job_keeps_its_heartbeat_fresh(factory, settings):
         threading.Event().wait(0.5)
         with factory() as other:
             seen.append(other.get(Job, ctx.job_id).heartbeat_at > first)
+            seen.append(other.get(WorkerHeartbeat, wid).last_seen > first)
         return {}
 
     fast = settings.model_copy(update={"worker_heartbeat_seconds": 0.1})
     try:
         with factory() as s:
+            worker.touch_worker(s, wid, utcnow() - timedelta(hours=1))
+            s.execute(
+                update(WorkerHeartbeat).values(last_seen=utcnow() - timedelta(hours=1))
+            )
+            s.commit()
             queue.enqueue(s, "test.slow")
             worker.run_one(s, factory, queue.claim(s, "w1", STALE), fast)
     finally:
         del HANDLERS["test.slow"]
-    assert seen == [True]
+    assert seen == [True, True]
 
 
 def test_the_worker_loop_records_its_heartbeat_and_runs_jobs(factory, settings):

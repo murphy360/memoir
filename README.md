@@ -54,6 +54,12 @@ waiting; **Don't ask this again** dismisses one for good ([docs/INTERVIEWER.md](
 Set `MEMOIR_GEMINI_API_KEY` for the API and the worker to have recordings transcribed, read for dates, people and
 places, and followed by questions. Without it Memoir still records and keeps everything, and says "AI is off" ([docs/AI.md](docs/AI.md)).
 
+## Deploy
+
+Production runs in the dontpanic stack at https://dontpanic.ddns.net/memoir. [docs/RUNBOOK.md](docs/RUNBOOK.md)
+covers the first deploy, new builds, nightly backups, restores, secrets and people. `deploy/` holds the reference
+compose file, the Caddy block and the backup and restore scripts.
+
 ## Develop
 
 Everything runs in the project's images. Pass your own `TAG` so parallel sessions never share an image.

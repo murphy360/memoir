@@ -92,7 +92,9 @@ recording.
   anywhere else.
 - **Lint for the web** is node-lint pinned to murphy360/standards#2 until it is released. TypeScript stays on
   5.x (typescript-eslint and openapi-typescript); Dependabot ignores its major.
-- **Deployed** from the dontpanic stack (`~/Software/dontpanic`) at `https://dontpanic.ddns.net/memoir` once
-  ticket #10 lands. Data in `/docker/memoir`. Never touch it unless a ticket says so.
+- **Deployed** from the dontpanic stack (`~/Software/dontpanic`) at `https://dontpanic.ddns.net/memoir`;
+  `deploy/compose.yml` is the reference copy of its services (CI validates it) and `docs/RUNBOOK.md` is how
+  to deploy, back up, restore and rotate secrets. Data in `/docker/memoir`. Never touch it unless a ticket
+  says so.
 - **Privacy.** This holds a family's stories, photos and faces. Logs carry ids and durations, never
   transcripts, file contents or keys.
