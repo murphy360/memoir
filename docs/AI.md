@@ -37,12 +37,12 @@ Photo work (metadata, faces, descriptions) is not here: it belongs to the photo-
 
 | Variable | Default | What |
 |---|---|---|
-| `MEMOIR_GEMINI_API_KEY` | none | No key, no AI |
+| `MEMOIR_GEMINI_API_KEY` | none | Gemini, the only provider that transcribes. On dontpanic, from the stack's `GEMINI_API_KEY_MEMOIR` |
 | `MEMOIR_GEMINI_MODEL` | `gemini-2.5-flash` | The model for every task |
 | `MEMOIR_GEMINI_TRANSCRIBE_MODEL`, `MEMOIR_GEMINI_EXTRACT_MODEL` | empty | A different model for one task |
-| `MEMOIR_ANTHROPIC_API_KEY` | none | Claude for extraction and questions. On dontpanic, from the stack's `ANTHROPIC_API_KEY` |
+| `MEMOIR_ANTHROPIC_API_KEY` | none | Claude for extraction and questions. On dontpanic, from the stack's `ANTHROPIC_API_KEY_MEMOIR` |
 | `MEMOIR_ANTHROPIC_MODEL` | `claude-sonnet-5` | |
-| `MEMOIR_GROK_API_KEY` | none | Grok for extraction and questions. On dontpanic, from the stack's `GROK_API_KEY_MEMOIR` (Memoir's own key) |
+| `MEMOIR_GROK_API_KEY` | none | Grok for extraction and questions. On dontpanic, from the stack's `GROK_API_KEY_MEMOIR` |
 | `MEMOIR_GROK_MODEL` | `grok-4.7` | |
 | `MEMOIR_AI_PROVIDER` | empty | `gemini`, `anthropic` or `grok` for the text tasks; empty means the first with a key |
 | `MEMOIR_AI_EXTRACT_PROVIDER`, `MEMOIR_AI_QUESTIONS_PROVIDER` | empty | One task's own provider |
