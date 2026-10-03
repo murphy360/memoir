@@ -57,6 +57,12 @@
             ],
             "title": "Capture Text"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "kind": {
             "$ref": "#/components/schemas/Kind"
           },
@@ -316,6 +322,12 @@
             ],
             "title": "Capture Text"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "notes": {
             "anyOf": [
               {
@@ -515,6 +527,99 @@
         "title": "CreatedInvitation",
         "type": "object"
       },
+      "DateReading": {
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "examples": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Examples",
+            "type": "array"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision"
+          },
+          "reading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What Memoir understood: \"July 1968\"",
+            "title": "Reading"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "DateReading",
+        "type": "object"
+      },
+      "DateText": {
+        "properties": {
+          "text": {
+            "maxLength": 100,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "DateText",
+        "type": "object"
+      },
       "EpicIn": {
         "properties": {
           "description": {
@@ -539,6 +644,12 @@
               }
             ],
             "title": "End Text"
+          },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
           },
           "period_id": {
             "title": "Period Id",
@@ -715,6 +826,12 @@
             ],
             "title": "End Text"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "period_id": {
             "anyOf": [
               {
@@ -844,6 +961,12 @@
               }
             ],
             "title": "Description"
+          },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
           },
           "location_text": {
             "anyOf": [
@@ -1064,6 +1187,12 @@
               }
             ],
             "title": "Description"
+          },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
           },
           "location_text": {
             "anyOf": [
@@ -1370,6 +1499,12 @@
             ],
             "title": "Event Id"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "mentioned_ids": {
             "default": [],
             "items": {
@@ -1636,6 +1771,12 @@
               }
             ],
             "title": "Event Id"
+          },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
           },
           "mentioned_ids": {
             "anyOf": [
@@ -2104,6 +2245,12 @@
             ],
             "title": "End Text"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "person_id": {
             "title": "Person Id",
             "type": "integer"
@@ -2254,6 +2401,12 @@
             ],
             "title": "End Text"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "start_text": {
             "anyOf": [
               {
@@ -2343,6 +2496,12 @@
               }
             ],
             "title": "Email"
+          },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
           },
           "name": {
             "maxLength": 120,
@@ -2576,6 +2735,12 @@
               }
             ],
             "title": "Email"
+          },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
           },
           "name": {
             "anyOf": [
@@ -4203,6 +4368,48 @@
         "summary": "Sign Out Everywhere Else",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/dates/parse": {
+      "post": {
+        "description": "A read-only preview: it changes nothing, so a viewer may call it.",
+        "operationId": "preview_api_dates_parse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DateText"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DateReading"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "dates"
         ]
       }
     },

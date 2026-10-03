@@ -29,6 +29,7 @@ from app.accounts.deps import require_role
 from app.accounts.models import Role, User
 from app.core.db import Base, get_session, utcnow
 from app.core.errors import ApiError
+from app.dates.store import MANUAL, set_point
 from app.domain.common import LAST_DAY, ArchiveRow, clean, live, scoped, soft_delete
 from app.domain.events import Event
 from app.domain.pagination import Page, PageParams, paginate
@@ -65,6 +66,7 @@ class Memory(ArchiveRow, Base):
     date_start: Mapped[date | None] = mapped_column(Date)
     date_end: Mapped[date | None] = mapped_column(Date)
     date_precision: Mapped[str | None] = mapped_column(String(16))
+    date_source: Mapped[str | None] = mapped_column(String(16))
     tone: Mapped[str | None] = mapped_column(String(16))
     visibility: Mapped[str] = mapped_column(String(16), default=Visibility.ARCHIVE)
     response_to_question_id: Mapped[int | None] = mapped_column(
@@ -108,6 +110,9 @@ class MemoryIn(BaseModel):
     visibility: Visibility = Visibility.ARCHIVE
     mentioned_ids: list[int] = []
     place_ids: list[int] = []
+    keep_text_only: bool = Field(
+        False, description="Save a date Memoir cannot read, as text only"
+    )
 
 
 class MemoryPatch(BaseModel):
@@ -120,6 +125,9 @@ class MemoryPatch(BaseModel):
     visibility: Visibility | None = None
     mentioned_ids: list[int] | None = None
     place_ids: list[int] | None = None
+    keep_text_only: bool = Field(
+        False, description="Save a date Memoir cannot read, as text only"
+    )
 
 
 class MemoryOut(BaseModel):
@@ -239,9 +247,9 @@ def create(session: Session, user: User, body: MemoryIn) -> Memory:
         title=clean(body.title, 180),
         description=clean(body.description, 20_000),
         transcript=body.transcript,
-        date_text=clean(body.date_text, 100),
         visibility=body.visibility,
     )
+    set_point(memory, "date", body.date_text, MANUAL, body.keep_text_only)
     session.add(memory)
     session.flush()
     _set_links(session, user, memory, body.mentioned_ids, body.place_ids)
@@ -262,9 +270,11 @@ def apply_patch(
         if body.event_id:
             live(session, Event, body.event_id, user, "event")
         memory.event_id = body.event_id
-    for field, limit in (("title", 180), ("description", 20_000), ("date_text", 100)):
+    for field, limit in (("title", 180), ("description", 20_000)):
         if field in sent:
             setattr(memory, field, clean(getattr(body, field), limit))
+    if "date_text" in sent:
+        set_point(memory, "date", body.date_text, MANUAL, body.keep_text_only)
     if "transcript" in sent:
         memory.transcript = body.transcript
     if "visibility" in sent and body.visibility:

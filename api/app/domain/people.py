@@ -13,6 +13,7 @@ from app.accounts.deps import require_role
 from app.accounts.models import Role, User
 from app.core.db import Base, get_session
 from app.core.errors import ApiError
+from app.dates.store import MANUAL, set_point
 from app.domain.common import ArchiveRow, clean, live, scoped, soft_delete
 from app.domain.pagination import Page, PageParams, paginate
 
@@ -38,9 +39,11 @@ class Person(ArchiveRow, Base):
     birth_text: Mapped[str | None] = mapped_column(String(100))
     birth_start: Mapped[date | None] = mapped_column(Date)
     birth_end: Mapped[date | None] = mapped_column(Date)
+    birth_source: Mapped[str | None] = mapped_column(String(16))
     death_text: Mapped[str | None] = mapped_column(String(100))
     death_start: Mapped[date | None] = mapped_column(Date)
     death_end: Mapped[date | None] = mapped_column(Date)
+    death_source: Mapped[str | None] = mapped_column(String(16))
     # The person's own login, when they have one.
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), unique=True
@@ -81,6 +84,9 @@ class PersonIn(BaseModel):
     birth_text: str | None = Field(None, max_length=100)
     death_text: str | None = Field(None, max_length=100)
     user_id: int | None = None
+    keep_text_only: bool = Field(
+        False, description="Save a date Memoir cannot read, as text only"
+    )
 
 
 class PersonPatch(BaseModel):
@@ -92,6 +98,9 @@ class PersonPatch(BaseModel):
     birth_text: str | None = Field(None, max_length=100)
     death_text: str | None = Field(None, max_length=100)
     user_id: int | None = None
+    keep_text_only: bool = Field(
+        False, description="Save a date Memoir cannot read, as text only"
+    )
 
 
 class PersonOut(BaseModel):
@@ -175,11 +184,13 @@ def create(session: Session, user: User, body: PersonIn) -> Person:
     person = Person(
         archive_id=user.archive_id,
         name=_check_name(session, user, body.name, None),
-        birth_text=clean(body.birth_text, 100),
-        death_text=clean(body.death_text, 100),
         user_id=body.user_id,
         **{f: clean(getattr(body, f), n) for f, n in TEXT_FIELDS.items()},
     )
+    for life in ("birth", "death"):
+        set_point(
+            person, life, getattr(body, f"{life}_text"), MANUAL, body.keep_text_only
+        )
     session.add(person)
     session.commit()
     return person
@@ -192,9 +203,13 @@ def update(session: Session, user: User, person: Person, body: PersonPatch) -> P
     if "user_id" in sent:
         _check_user_link(session, user, body.user_id, person.id)
         person.user_id = body.user_id
-    for field, limit in {**TEXT_FIELDS, "birth_text": 100, "death_text": 100}.items():
+    for field, limit in TEXT_FIELDS.items():
         if field in sent:
             setattr(person, field, clean(getattr(body, field), limit))
+    for life in ("birth", "death"):
+        if f"{life}_text" in sent:
+            text = getattr(body, f"{life}_text")
+            set_point(person, life, text, MANUAL, body.keep_text_only)
     session.commit()
     return person
 

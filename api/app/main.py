@@ -7,6 +7,7 @@ from app.accounts.csrf import OriginCheckMiddleware
 from app.core import errors
 from app.core.logging import RequestIdMiddleware
 from app.core.settings import get_settings
+from app.dates import router as dates
 from app.domain import (
     assets,
     epics,
@@ -26,6 +27,7 @@ from app.routers import auth, health, invitations, profile, users
 
 ROUTERS = (health, auth, profile, users, invitations)
 DOMAIN = (
+    dates,
     people,
     places,
     threads,

@@ -22,6 +22,7 @@ from app.accounts.deps import require_role
 from app.accounts.models import Role, User
 from app.core.db import Base, get_session
 from app.core.errors import ApiError
+from app.dates.store import MANUAL, set_range
 from app.domain.common import LAST_DAY, ArchiveRow, clean, live, scoped, soft_delete
 from app.domain.pagination import Page, PageParams, paginate
 from app.domain.periods import Period
@@ -50,6 +51,7 @@ class Epic(ArchiveRow, Base):
     start_on: Mapped[date | None] = mapped_column(Date)
     end_text: Mapped[str | None] = mapped_column(String(100))
     end_on: Mapped[date | None] = mapped_column(Date)
+    dates_source: Mapped[str | None] = mapped_column(String(16))
 
 
 class EpicIn(BaseModel):
@@ -60,6 +62,9 @@ class EpicIn(BaseModel):
     thread_id: int | None = None
     start_text: str | None = Field(None, max_length=100)
     end_text: str | None = Field(None, max_length=100)
+    keep_text_only: bool = Field(
+        False, description="Save a date Memoir cannot read, as text only"
+    )
 
 
 class EpicPatch(BaseModel):
@@ -70,6 +75,9 @@ class EpicPatch(BaseModel):
     thread_id: int | None = None
     start_text: str | None = Field(None, max_length=100)
     end_text: str | None = Field(None, max_length=100)
+    keep_text_only: bool = Field(
+        False, description="Save a date Memoir cannot read, as text only"
+    )
 
 
 class EpicOut(BaseModel):
@@ -124,9 +132,10 @@ def apply_patch(session: Session, user: User, epic: Epic, body: EpicPatch) -> Ep
         epic.description = clean(body.description, 20_000)
     if "weight" in sent and body.weight:
         epic.weight = body.weight
-    for field in ("start_text", "end_text"):
-        if field in sent:
-            setattr(epic, field, clean(getattr(body, field), 100))
+    if sent & {"start_text", "end_text"}:
+        start = body.start_text if "start_text" in sent else epic.start_text
+        end = body.end_text if "end_text" in sent else epic.end_text
+        set_range(epic, start, end, MANUAL, body.keep_text_only)
     session.commit()
     return epic
 
@@ -162,9 +171,8 @@ def create_epic(
         title=clean(body.title, 180),
         description=clean(body.description, 20_000),
         weight=body.weight,
-        start_text=clean(body.start_text, 100),
-        end_text=clean(body.end_text, 100),
     )
+    set_range(epic, body.start_text, body.end_text, MANUAL, body.keep_text_only)
     db.add(epic)
     db.commit()
     return epic

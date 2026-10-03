@@ -27,6 +27,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from app.accounts.deps import require_role
 from app.accounts.models import Role, User
 from app.core.db import Base, get_session
+from app.dates.store import MANUAL, set_point
 from app.domain.common import LAST_DAY, ArchiveRow, clean, live, scoped, soft_delete
 from app.domain.pagination import Page, PageParams, paginate
 from app.domain.places import Place
@@ -45,6 +46,7 @@ class Event(ArchiveRow, Base):
     date_start: Mapped[date | None] = mapped_column(Date, index=True)
     date_end: Mapped[date | None] = mapped_column(Date)
     date_precision: Mapped[str | None] = mapped_column(String(16))
+    date_source: Mapped[str | None] = mapped_column(String(16))
     location_text: Mapped[str | None] = mapped_column(String(255))
     place_id: Mapped[int | None] = mapped_column(
         ForeignKey("places.id", ondelete="SET NULL"), index=True
@@ -65,6 +67,9 @@ class EventIn(BaseModel):
     location_text: str | None = Field(None, max_length=255)
     place_id: int | None = None
     thread_id: int | None = None
+    keep_text_only: bool = Field(
+        False, description="Save a date Memoir cannot read, as text only"
+    )
 
 
 class EventPatch(BaseModel):
@@ -76,6 +81,9 @@ class EventPatch(BaseModel):
     place_id: int | None = None
     thread_id: int | None = None
     summary: str | None = None
+    keep_text_only: bool = Field(
+        False, description="Save a date Memoir cannot read, as text only"
+    )
 
 
 class ParticipantOut(BaseModel):
@@ -132,11 +140,11 @@ def create(session: Session, user: User, body: EventIn) -> Event:
         title=clean(body.title, 180),
         description=clean(body.description, 20_000),
         weight=body.weight,
-        date_text=clean(body.date_text, 100),
         location_text=clean(body.location_text, 255),
         place_id=body.place_id,
         thread_id=body.thread_id,
     )
+    set_point(event, "date", body.date_text, MANUAL, body.keep_text_only)
     session.add(event)
     session.commit()
     return event
@@ -145,7 +153,6 @@ def create(session: Session, user: User, body: EventIn) -> Event:
 TEXT_LIMITS = {
     "title": 180,
     "description": 20_000,
-    "date_text": 100,
     "location_text": 255,
     "summary": 20_000,
 }
@@ -167,6 +174,8 @@ def apply_patch(session: Session, user: User, event: Event, body: EventPatch) ->
             setattr(event, field, getattr(body, field))
     if "weight" in sent and body.weight:
         event.weight = body.weight
+    if "date_text" in sent:
+        set_point(event, "date", body.date_text, MANUAL, body.keep_text_only)
     session.commit()
     return event
 

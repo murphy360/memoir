@@ -66,6 +66,8 @@ recording.
 - **The data model** is `docs/DATA_MODEL.md`: change it in the same PR as any migration. Domain entities
   live in `api/app/domain/`, one module each; lists use `pagination.paginate`, memories go through
   `memories.visible_to`, deletes are soft.
+- **Dates** are read by `api/app/dates/` (`docs/DATES.md`): save them with `set_point` or `set_range`, and
+  from a job only with `set_by_job`, which never overwrites a date a person typed.
 - **Errors** are always `{"error": {"code", "message", "field"}}` (`api/app/core/errors.py`). Raise
   `ApiError` from routes and services.
 - **Background work is a job** (`api/app/jobs/`): register a handler with `@handler("area.kind")`, enqueue

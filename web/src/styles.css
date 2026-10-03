@@ -43,3 +43,8 @@ button.primary {
 .error {
   color: #9b1c1c;
 }
+.warning {
+  border-left: 4px solid #b45309;
+  padding: 0.25rem 0.75rem;
+  background: #fff7ed;
+}
