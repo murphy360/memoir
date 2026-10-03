@@ -183,3 +183,39 @@ def test_the_status_says_who_does_what(session, settings):
         False,
         True,
     )
+
+
+QUESTIONS = {
+    "type": "object",
+    "properties": {
+        "questions": {"type": "array", "items": {"type": "object"}},
+        "note": {"type": "string"},
+    },
+}
+
+
+@pytest.mark.parametrize(
+    "sent",
+    [
+        # What Claude was seen sending: the whole answer, as a string, in its field.
+        '{"questions": [{"text": "Which brother?"}]}',
+        '[{"text": "Which brother?"}]',
+        [{"text": "Which brother?"}],
+    ],
+)
+def test_claude_lists_sent_as_strings_are_unpacked(sent):
+    reply = {
+        "content": [
+            {"type": "tool_use", "input": {"questions": sent, "note": "[kept]"}}
+        ],
+        "usage": {},
+    }
+    a = Anthropic("k", 10, client=client(lambda r: httpx.Response(200, json=reply)))
+    read = a.structured("Ask", QUESTIONS, "claude-sonnet-5")
+    assert read.data == {"questions": [{"text": "Which brother?"}], "note": "[kept]"}
+
+
+def test_an_unreadable_string_is_left_as_it_came():
+    from app.ai.anthropic import unpack
+
+    assert unpack({"questions": "not json"}, QUESTIONS) == {"questions": "not json"}

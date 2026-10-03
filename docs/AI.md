@@ -11,7 +11,7 @@ token counts.
 | Provider | Where | Notes |
 |---|---|---|
 | Gemini | `api/app/ai/gemini.py` | The REST API, with the key in the `x-goog-api-key` header, never in a URL. Structured answers use Gemini's `responseSchema`. Audio up to 12 MB goes inline in one request |
-| Anthropic | `api/app/ai/anthropic.py` | Claude over the Messages API, with the key in the `x-api-key` header. Structured answers are one forced tool call whose input schema is the schema asked for. Text only: it cannot transcribe |
+| Anthropic | `api/app/ai/anthropic.py` | Claude over the Messages API, with the key in the `x-api-key` header. Structured answers are one forced tool call whose input schema is the schema asked for. Claude often sends a list field as a JSON string, sometimes the whole answer inside its own field; `unpack` decodes those against the schema. Text only: it cannot transcribe |
 | Grok | `api/app/ai/grok.py` | xAI's OpenAI-compatible chat completions, with the key in the `Authorization` header. Structured answers use `response_format` with the schema. Text only: it cannot transcribe |
 | Fake | `api/app/ai/fake.py` | Scripted answers for the tests; records every request; no network |
 
@@ -40,9 +40,9 @@ Photo work (metadata, faces, descriptions) is not here: it belongs to the photo-
 | `MEMOIR_GEMINI_API_KEY` | none | No key, no AI |
 | `MEMOIR_GEMINI_MODEL` | `gemini-2.5-flash` | The model for every task |
 | `MEMOIR_GEMINI_TRANSCRIBE_MODEL`, `MEMOIR_GEMINI_EXTRACT_MODEL` | empty | A different model for one task |
-| `MEMOIR_ANTHROPIC_API_KEY` | none | Claude for extraction and questions |
+| `MEMOIR_ANTHROPIC_API_KEY` | none | Claude for extraction and questions. On dontpanic, from the stack's `ANTHROPIC_API_KEY` |
 | `MEMOIR_ANTHROPIC_MODEL` | `claude-sonnet-5` | |
-| `MEMOIR_GROK_API_KEY` | none | Grok for extraction and questions |
+| `MEMOIR_GROK_API_KEY` | none | Grok for extraction and questions. On dontpanic, from the stack's `GROK_API_KEY_PHOTO_ANALYZER` |
 | `MEMOIR_GROK_MODEL` | `grok-4.7` | |
 | `MEMOIR_AI_PROVIDER` | empty | `gemini`, `anthropic` or `grok` for the text tasks; empty means the first with a key |
 | `MEMOIR_AI_EXTRACT_PROVIDER`, `MEMOIR_AI_QUESTIONS_PROVIDER` | empty | One task's own provider |

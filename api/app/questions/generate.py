@@ -169,7 +169,8 @@ def write(session: Session, memory: Memory, data: dict) -> list[int]:
     user = acting_user(session, memory)
     teller_id = storyteller_of(session, memory)
     made: list[int] = []
-    for item in (data.get("questions") or [])[:MOST]:
+    items = data.get("questions")
+    for item in (items if isinstance(items, list) else [])[:MOST]:
         text = tidy(item.get("text") if isinstance(item, dict) else None)
         if text is None:
             continue

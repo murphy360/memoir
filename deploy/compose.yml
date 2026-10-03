@@ -44,6 +44,9 @@ services:
       # Only Caddy and the web image reach the API (no port on the host): believe their
       # X-Forwarded-For, so login rate limits count the real client.
       MEMOIR_FORWARDED_ALLOW_IPS: "*"
+      # Claude and Grok for reading and questions, from the stack's .env (docs/AI.md).
+      MEMOIR_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      MEMOIR_GROK_API_KEY: ${GROK_API_KEY_PHOTO_ANALYZER:-}
     volumes: &blobs
       - /docker/memoir/blobs:/data/blobs
     networks: [memoir, media_network]

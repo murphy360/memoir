@@ -6,6 +6,8 @@ and questions. A structured answer is asked for as one forced tool call whose in
 schema is the schema wanted, so the answer arrives already parsed.
 """
 
+import json
+
 import httpx
 
 from app.ai import http
@@ -14,6 +16,28 @@ from app.ai.provider import Answer, Audio, ProviderError
 BASE_URL = "https://api.anthropic.com"
 VERSION = "2023-06-01"
 MAX_TOKENS = 4096
+
+
+def unpack(data: dict, schema: dict) -> dict:
+    """Undo a habit of Claude's tool calls: a list or object field sent as a JSON
+    string, sometimes the whole answer inside its own field. Each such field is decoded
+    against the schema; anything else is kept as it came."""
+    wanted = {"array": list, "object": dict}
+    out = dict(data)
+    for key, spec in (schema.get("properties") or {}).items():
+        kind = wanted.get(spec.get("type"))
+        value = out.get(key)
+        if kind is None or not isinstance(value, str):
+            continue
+        try:
+            decoded = json.loads(value)
+        except ValueError:
+            continue
+        if isinstance(decoded, dict) and kind is list and key in decoded:
+            decoded = decoded[key]
+        if isinstance(decoded, kind):
+            out[key] = decoded
+    return out
 
 
 class Anthropic:
@@ -74,7 +98,8 @@ class Anthropic:
         )
         for block in body.get("content") or []:
             if block.get("type") == "tool_use" and isinstance(block.get("input"), dict):
-                return self._answer(body, model, "", block["input"])
+                data = unpack(block["input"], schema)
+                return self._answer(body, model, "", data)
         reason = body.get("stop_reason") or "no answer"
         raise ProviderError(f"Anthropic gave no answer ({reason})")
 
