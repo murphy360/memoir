@@ -23,6 +23,6 @@ export function useResumeUploads() {
   useEffect(() => {
     if (resumed) return;
     resumed = true;
-    void uploads.resume();
+    uploads.resume().catch(() => undefined);
   }, []);
 }

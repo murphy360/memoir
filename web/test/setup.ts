@@ -1,4 +1,6 @@
 import "@testing-library/jest-dom/vitest";
+// Every file gets an IndexedDB: the shell resumes uploads from it on mount.
+import "fake-indexeddb/auto";
 
 /** jsdom has no matchMedia: answer width queries from a width the test can set. */
 let width = 390;

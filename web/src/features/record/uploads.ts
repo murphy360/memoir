@@ -101,6 +101,8 @@ export class UploadQueue {
 
   /** Load whatever an earlier visit left, and carry on with it. */
   async resume(): Promise<void> {
+    // No IndexedDB (some private modes): nothing can have been left, so nothing to resume.
+    if (typeof indexedDB === "undefined") return;
     const keys = (await store.keys())
       .map(String)
       .filter((k) => k.startsWith("upload:"));
