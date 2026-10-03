@@ -77,6 +77,9 @@ recording.
 - **AI** goes through `api/app/ai/` (`docs/AI.md`): prompts are versioned constants beside the task, every call
   is wrapped in `costs.recorded` (one `ai_calls` row each), tests use `FakeAI` via `registry.use`. No key means
   AI is off and nothing fails.
+- **Placement** (`api/app/placement/`, `docs/TIMELINE.md`): the suggestion is a pure function of the dates
+  and the storyteller's timeline; auto-filing runs once per quick memory; what it makes is labelled and never
+  remade by a job.
 - **Errors** are always `{"error": {"code", "message", "field"}}` (`api/app/core/errors.py`). Raise
   `ApiError` from routes and services.
 - **Background work is a job** (`api/app/jobs/`): register a handler with `@handler("area.kind")`, enqueue

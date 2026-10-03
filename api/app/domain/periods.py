@@ -68,6 +68,10 @@ class Period(ArchiveRow, Base):
     end_on: Mapped[date | None] = mapped_column(Date)
     dates_source: Mapped[str | None] = mapped_column(String(16))
     summary: Mapped[str | None] = mapped_column(Text)
+    # Made by auto-filing for this memory; shown as "created for this memory".
+    auto_created_for_memory_id: Mapped[int | None] = mapped_column(
+        ForeignKey("memories.id", ondelete="SET NULL", use_alter=True)
+    )
     # True when the summary was written by the machine; a typed one is never replaced.
     summary_generated: Mapped[bool] = mapped_column(Boolean, default=False)
 

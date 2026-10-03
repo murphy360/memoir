@@ -37,6 +37,12 @@ Memoir records in the browser: Chrome, Edge and Firefox on desktop and Android, 
 later). The first recording asks for the microphone. Recordings are kept on the device until the server has them,
 so a dropped connection or a closed tab loses nothing ([docs/CAPTURE.md](docs/CAPTURE.md)).
 
+## What "Saved to" means
+
+After a recording, Memoir says where it put the memory: **Saved to The 1960s, Fishing at Presque Isle** is the
+chapter of your life and the moment in it. If that is wrong, tap **Change** and pick the right one. A memory Memoir
+cannot date waits under **Waiting to be placed** until someone places it ([docs/TIMELINE.md](docs/TIMELINE.md)).
+
 ## AI
 
 Set `MEMOIR_GEMINI_API_KEY` for the API and the worker to have recordings transcribed and read for dates, people and

@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 
 import { Button } from "../../components/Button";
+import { SavedToLine } from "../place/SavedToLine";
 import { clock, size } from "./format";
 import type { Upload } from "./uploads";
 import { uploads } from "./uploads";
@@ -57,7 +58,10 @@ export function UploadStatus({ upload }: { upload: Upload }) {
       ) : null}
       {(upload.state === "saved" || upload.state === "processing") &&
       upload.memoryId ? (
-        <Link to={`/memories/${upload.memoryId}`}>Open the memory</Link>
+        <>
+          <SavedToLine memoryId={upload.memoryId} waiting />
+          <Link to={`/memories/${upload.memoryId}`}>Open the memory</Link>
+        </>
       ) : null}
     </div>
   );
