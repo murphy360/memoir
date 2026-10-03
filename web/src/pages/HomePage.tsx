@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { usePosture } from "../app/usePosture";
 import { EmptyState } from "../components/EmptyState";
 import { useMe } from "../auth/useMe";
+import { NextQuestionCard } from "../features/questions/NextQuestionCard";
 import { PendingUploads } from "../features/record/UploadStatus";
 import { useUploads } from "../features/record/useUploads";
 
@@ -24,7 +25,8 @@ export function HomePage() {
         <p className="hint">
           Tap, talk, tap again. Memoir writes it down and files it.
         </p>
-        <Link to="/questions">Questions for you</Link>
+        <NextQuestionCard />
+        <Link to="/questions">All questions for you</Link>
         <PendingUploads all={all} />
       </section>
     );
@@ -32,36 +34,15 @@ export function HomePage() {
   return (
     <section aria-labelledby="home-title">
       <h1 id="home-title">Your family&apos;s memoir</h1>
+      <NextQuestionCard />
+      <p>
+        <Link to="/questions">All questions for you</Link>
+      </p>
       <EmptyState title="Nothing to review yet">
         Record a memory or add photos. The timeline, what is waiting to be
         placed and the people to name will gather here.
       </EmptyState>
     </section>
-  );
-}
-
-function Soon({
-  title,
-  ticket,
-  children,
-}: {
-  title: string;
-  ticket: string;
-  children: string;
-}) {
-  return (
-    <section aria-labelledby="page-title">
-      <h1 id="page-title">{title}</h1>
-      <EmptyState title="Coming soon">{`${children} (${ticket}).`}</EmptyState>
-    </section>
-  );
-}
-
-export function QuestionsPage() {
-  return (
-    <Soon title="Questions for you" ticket="ticket #9">
-      Follow-up questions about your stories will wait here
-    </Soon>
   );
 }
 

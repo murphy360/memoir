@@ -26,6 +26,7 @@ from app.domain import (
     threads,
 )
 from app.placement import router as placement
+from app.questions import router as interviewer
 from app.routers import auth, health, invitations, profile, users
 
 ROUTERS = (health, auth, profile, users, invitations)
@@ -43,6 +44,7 @@ DOMAIN = (
     placement,
     memories,
     assets,
+    interviewer,
     questions,
     settings,
     merge,

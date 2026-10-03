@@ -7,9 +7,8 @@ import httpx
 
 from app.ai.provider import Answer, Audio, ProviderError
 
-ENDPOINT = (
-    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-)
+BASE_URL = "https://generativelanguage.googleapis.com"
+ENDPOINT = "{base}/v1beta/models/{model}:generateContent"
 # Answers that waiting will not change: a bad request, a refused key, no credit, no
 # model.
 REFUSALS = {400, 401, 402, 403, 404}
@@ -32,15 +31,20 @@ class Gemini:
     inline_limit = 12 * 1024 * 1024
 
     def __init__(
-        self, api_key: str, timeout: float, client: httpx.Client | None = None
+        self,
+        api_key: str,
+        timeout: float,
+        client: httpx.Client | None = None,
+        base_url: str = BASE_URL,
     ):
         self._key = api_key
+        self._base = base_url.rstrip("/")
         self._client = client or httpx.Client(timeout=timeout)
 
     def _call(self, model: str, parts: list[dict], config: dict) -> tuple[str, dict]:
         try:
             response = self._client.post(
-                ENDPOINT.format(model=model),
+                ENDPOINT.format(base=self._base, model=model),
                 headers={"x-goog-api-key": self._key},
                 json={"contents": [{"parts": parts}], "generationConfig": config},
             )

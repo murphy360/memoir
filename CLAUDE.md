@@ -78,8 +78,11 @@ recording.
   is wrapped in `costs.recorded` (one `ai_calls` row each), tests use `FakeAI` via `registry.use`. No key means
   AI is off and nothing fails.
 - **Placement** (`api/app/placement/`, `docs/TIMELINE.md`): the suggestion is a pure function of the dates
-  and the storyteller's timeline; auto-filing runs once per quick memory; what it makes is labelled and never
-  remade by a job.
+  and the storyteller's timeline; auto-filing runs once per quick memory or answer; what it makes is labelled
+  and never remade by a job.
+- **Questions** (`api/app/questions/`, `docs/INTERVIEWER.md`): de-duplicated as they are written, never when
+  read; a question Memoir writes is skipped if the text was ever asked, so dismissing is permanent. An answer
+  inherits its question's scope at upload (`capture/service.py`).
 - **Errors** are always `{"error": {"code", "message", "field"}}` (`api/app/core/errors.py`). Raise
   `ApiError` from routes and services.
 - **Background work is a job** (`api/app/jobs/`): register a handler with `@handler("area.kind")`, enqueue

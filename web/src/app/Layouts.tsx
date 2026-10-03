@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet } from "react-router";
 import { Can } from "../auth/RequireAuth";
 import { useMe } from "../auth/useMe";
 import { useResumeUploads } from "../features/record/useUploads";
-import { QUICK_RECORD } from "../pages/Placeholders";
+import { QUICK_RECORD } from "../pages/HomePage";
 import { NAV, type NavItem } from "./nav";
 import { usePosture } from "./usePosture";
 

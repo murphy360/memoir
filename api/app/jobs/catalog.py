@@ -7,6 +7,7 @@ MODULES = (
     "app.capture.jobs",
     "app.analysis.transcribe",
     "app.analysis.extract",
+    "app.questions.generate",
 )
 
 

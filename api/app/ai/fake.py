@@ -12,7 +12,8 @@ class FakeAI:
         self.inline_limit = inline_limit
         self.calls: list[dict] = []
         self.transcript: Callable[[Audio], str] | str = "A transcript."
-        self.data: dict = {}
+        # A dict for every structured request, or a function of (prompt, schema).
+        self.data: dict | Callable[[str, dict], dict] = {}
         self.reply = "A reply."
         self.fail_next = 0
 
@@ -42,7 +43,7 @@ class FakeAI:
             model=model,
             input_tokens=len(prompt),
             output_tokens=10,
-            data=self.data,
+            data=self.data(prompt, schema) if callable(self.data) else self.data,
         )
 
     def text(self, prompt: str, model: str) -> Answer:

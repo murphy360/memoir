@@ -27,6 +27,7 @@ web image's nginx forwards `/memoir/api/...` to the API itself, so `make up` nee
 | `capture/` | Upload sessions, finalizing into a memory, and the ffmpeg normalisation job. See `CAPTURE.md`. |
 | `ai/`, `analysis/` | The AI provider interface, Gemini, the fake and the cost rows; the transcription and extraction jobs. See `AI.md`. |
 | `placement/` | The placement suggestion, auto-filing, the inbox and a person's timeline. See `TIMELINE.md`. |
+| `questions/` | The interviewer: follow-up questions from a transcript, the seeds, which question comes next. The question table itself is `domain/questions.py`. See `INTERVIEWER.md`. |
 | `jobs/catalog.py` | Every module that registers job handlers; the worker loads them all at start. |
 | `accounts/deps.py` | Who is signed in and what they may do: every router depends on `require_role(...)` or `require_executor`. See `ACCOUNTS.md`. |
 | `core/audited.py` | The `Audited` mixin: `created_by`, `updated_by`, `updated_at`, `deleted_at`, filled from the request's user. |

@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     # Text and audio AI (requirements 6.1). No key: AI is off, and nothing fails.
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-2.5-flash"
+    # Where Gemini is reached; a stand-in for end-to-end runs may take its place.
+    gemini_base_url: str = "https://generativelanguage.googleapis.com"
     # Per task, when one task deserves another model; empty means gemini_model.
     gemini_transcribe_model: str = ""
     gemini_extract_model: str = ""

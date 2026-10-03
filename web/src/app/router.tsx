@@ -10,12 +10,13 @@ import { HealthPage } from "../pages/HealthPage";
 import { EventPage, PeoplePage, PersonPage } from "../pages/PeoplePages";
 import { InboxPage } from "../features/inbox/InboxPage";
 import { MemoryPage } from "../features/memories/MemoryPage";
-import { RecordScreen } from "../features/record/RecordScreen";
+import { QuestionsPage } from "../features/questions/QuestionsPage";
+import { RecordRoute } from "../features/record/RecordScreen";
 import {
   MyTimelinePage,
   PersonTimelinePage,
 } from "../features/timeline/TimelinePage";
-import { HomePage, NotFoundPage, QuestionsPage } from "../pages/Placeholders";
+import { HomePage, NotFoundPage } from "../pages/HomePage";
 import { UsersPage } from "../settings/UsersPage";
 import { AppShell } from "./Layouts";
 
@@ -23,7 +24,7 @@ import { AppShell } from "./Layouts";
 export const shellRoutes = [
   // The phone greets; the wide screen opens the review workspace.
   { path: "/", element: <HomePage />, title: "Hello|Your family's memoir" },
-  { path: "/record", element: <RecordScreen />, title: "Record a memory" },
+  { path: "/record", element: <RecordRoute />, title: "Record a memory" },
   { path: "/timeline", element: <MyTimelinePage />, title: "timeline" },
   { path: "/people", element: <PeoplePage />, title: "People" },
   { path: "/people/:id", element: <PersonPage /> },

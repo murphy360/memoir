@@ -159,6 +159,11 @@ def merge_people(
         .where(Question.person_id == source.id)
         .values(person_id=target.id)
     )
+    session.execute(
+        update(Question)
+        .where(Question.asked_of_id == source.id)
+        .values(asked_of_id=target.id)
+    )
     _merge_aliases(session, source, target)
     _fill(target, source, PERSON_FIELDS)
     if source.user_id and not target.user_id:

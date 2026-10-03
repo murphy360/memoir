@@ -29,7 +29,9 @@ def provider(settings: Settings) -> Provider | None:
     ):
         return None
     return Gemini(
-        settings.gemini_api_key.get_secret_value(), settings.ai_timeout_seconds
+        settings.gemini_api_key.get_secret_value(),
+        settings.ai_timeout_seconds,
+        base_url=settings.gemini_base_url,
     )
 
 

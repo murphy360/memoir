@@ -2184,6 +2184,31 @@
         "title": "NewPeriod",
         "type": "object"
       },
+      "NextQuestion": {
+        "properties": {
+          "question": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuestionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "waiting": {
+            "default": false,
+            "description": "Questions about the memory just recorded are still on their way: ask again in a moment",
+            "title": "Waiting",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "NextQuestion",
+        "type": "object"
+      },
       "OpenUpload": {
         "properties": {
           "content_type": {
@@ -3489,6 +3514,18 @@
       },
       "QuestionOut": {
         "properties": {
+          "about": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What it asks about: the event, period, person or story",
+            "title": "About"
+          },
           "answered_by_memory_id": {
             "anyOf": [
               {
@@ -3499,6 +3536,17 @@
               }
             ],
             "title": "Answered By Memory Id"
+          },
+          "asked_of_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asked Of Id"
           },
           "event_id": {
             "anyOf": [
@@ -3587,13 +3635,35 @@
             "title": "Answered By Memory Id"
           },
           "status": {
-            "$ref": "#/components/schemas/Status"
+            "description": "A pending question is answered or dismissed, for good",
+            "enum": [
+              "answered",
+              "dismissed"
+            ],
+            "title": "Status",
+            "type": "string"
           }
         },
         "required": [
           "status"
         ],
         "title": "QuestionPatch",
+        "type": "object"
+      },
+      "QuestionsForYou": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "QuestionsForYou",
         "type": "object"
       },
       "Relation": {
@@ -8841,6 +8911,42 @@
             }
           },
           {
+            "description": "Raised by this memory",
+            "in": "query",
+            "name": "source_memory_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Raised by this memory",
+              "title": "Source Memory Id"
+            }
+          },
+          {
+            "description": "Answered by it",
+            "in": "query",
+            "name": "answered_by_memory_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Answered by it",
+              "title": "Answered By Memory Id"
+            }
+          },
+          {
             "description": "From the previous page",
             "in": "query",
             "name": "cursor",
@@ -8938,6 +9044,80 @@
         ]
       }
     },
+    "/api/questions/for-you": {
+      "get": {
+        "description": "Every pending question for this user, next first (at most 50).",
+        "operationId": "questions_for_you_api_questions_for_you_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionsForYou"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Questions For You",
+        "tags": [
+          "questions"
+        ]
+      }
+    },
+    "/api/questions/next": {
+      "get": {
+        "description": "The one question to ask now, for the home screen and after each recording.",
+        "operationId": "next_question_api_questions_next_get",
+        "parameters": [
+          {
+            "description": "The memory just recorded, whose questions should come first",
+            "in": "query",
+            "name": "after_memory_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The memory just recorded, whose questions should come first",
+              "title": "After Memory Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NextQuestion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Next Question",
+        "tags": [
+          "questions"
+        ]
+      }
+    },
     "/api/questions/{question_id}": {
       "delete": {
         "operationId": "remove_question_api_questions__question_id__delete",
@@ -8968,6 +9148,46 @@
           }
         },
         "summary": "Remove Question",
+        "tags": [
+          "questions"
+        ]
+      },
+      "get": {
+        "operationId": "one_question_api_questions__question_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "One Question",
         "tags": [
           "questions"
         ]

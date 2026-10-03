@@ -9,7 +9,7 @@ One application, two layouts, chosen by the screen's width (`src/app/usePosture.
 
 | Posture | For | Chrome |
 |---|---|---|
-| **Phone** (below 768 px) | Capturing | The page, then a tab bar fixed to the bottom: Home, Timeline, People, Questions, Account. Home is a big Record button and the questions waiting |
+| **Phone** (below 768 px) | Capturing | The page, then a tab bar fixed to the bottom: Home, Timeline, People, Questions, Account. Home is a big Record button and the next question, with its own Record button (`docs/INTERVIEWER.md`) |
 | **Wide** (768 px and up) | Reviewing | A header with Record and your name, the whole navigation on the left, a workspace. Home is the review workspace |
 
 The breakpoint is a layout choice, not a feature switch. Every route exists in both postures; `src/app/router.tsx`
