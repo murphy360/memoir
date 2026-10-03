@@ -55,8 +55,9 @@ export function UploadStatus({ upload }: { upload: Upload }) {
           </Button>
         </div>
       ) : null}
-      {upload.state === "saved" || upload.state === "processing" ? (
-        <Link to="/inbox">See it waiting to be placed</Link>
+      {(upload.state === "saved" || upload.state === "processing") &&
+      upload.memoryId ? (
+        <Link to={`/memories/${upload.memoryId}`}>Open the memory</Link>
       ) : null}
     </div>
   );

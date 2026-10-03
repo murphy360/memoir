@@ -74,6 +74,9 @@ recording.
 - **Recordings** go through `api/app/capture/` and the browser's upload queue
   (`web/src/features/record/uploads.ts`); `docs/CAPTURE.md` is the whole path. A job that needs a new handler
   module adds it to `api/app/jobs/catalog.py` so the worker loads it.
+- **AI** goes through `api/app/ai/` (`docs/AI.md`): prompts are versioned constants beside the task, every call
+  is wrapped in `costs.recorded` (one `ai_calls` row each), tests use `FakeAI` via `registry.use`. No key means
+  AI is off and nothing fails.
 - **Errors** are always `{"error": {"code", "message", "field"}}` (`api/app/core/errors.py`). Raise
   `ApiError` from routes and services.
 - **Background work is a job** (`api/app/jobs/`): register a handler with `@handler("area.kind")`, enqueue

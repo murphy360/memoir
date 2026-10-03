@@ -14,6 +14,13 @@ class JobContext:
 
     session: Session
     job_id: int
+    attempt: int = 1
+    max_attempts: int = 1
+
+    @property
+    def last_attempt(self) -> bool:
+        """True when a failure now will not be retried: time to tell the user."""
+        return self.attempt >= self.max_attempts
 
     def progress(self, **values) -> None:
         queue.beat(self.session, self.job_id, progress=values)

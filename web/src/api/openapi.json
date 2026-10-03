@@ -1,6 +1,53 @@
 {
   "components": {
     "schemas": {
+      "AIStatus": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "extraction": {
+            "title": "Extraction",
+            "type": "boolean"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "transcription": {
+            "title": "Transcription",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "provider",
+          "model",
+          "transcription",
+          "extraction"
+        ],
+        "title": "AIStatus",
+        "type": "object"
+      },
       "AcceptInvitation": {
         "properties": {
           "display_name": {
@@ -1622,6 +1669,18 @@
       },
       "MemoryOut": {
         "properties": {
+          "analysis_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the last analysis failed, in the provider's words",
+            "title": "Analysis Error"
+          },
           "audio_seconds": {
             "anyOf": [
               {
@@ -1712,6 +1771,17 @@
             ],
             "title": "Event Id"
           },
+          "extraction_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction State"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -1791,6 +1861,17 @@
               }
             ],
             "title": "Transcript"
+          },
+          "transcript_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript State"
           },
           "uploaded_by": {
             "anyOf": [
@@ -2749,6 +2830,11 @@
             "title": "Name",
             "type": "string"
           },
+          "needs_review": {
+            "default": false,
+            "title": "Needs Review",
+            "type": "boolean"
+          },
           "notes": {
             "anyOf": [
               {
@@ -2978,6 +3064,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "needs_review": {
+            "default": false,
+            "title": "Needs Review",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3886,6 +3977,49 @@
         "title": "UploadOut",
         "type": "object"
       },
+      "Usage": {
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "number"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "model",
+          "calls",
+          "failed",
+          "input_tokens",
+          "output_tokens",
+          "seconds"
+        ],
+        "title": "Usage",
+        "type": "object"
+      },
       "UserOut": {
         "properties": {
           "created_at": {
@@ -4026,6 +4160,78 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/ai/status": {
+      "get": {
+        "description": "Whether AI is on, so the app can say \"AI is off\" where it would appear.",
+        "operationId": "ai_status_api_ai_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ai Status",
+        "tags": [
+          "analysis"
+        ]
+      }
+    },
+    "/api/ai/usage": {
+      "get": {
+        "description": "What AI has done for this archive lately: calls, failures and tokens, by task.",
+        "operationId": "ai_usage_api_ai_usage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 366,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Usage"
+                  },
+                  "title": "Response Ai Usage Api Ai Usage Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Usage",
+        "tags": [
+          "analysis"
+        ]
+      }
+    },
     "/api/assets": {
       "get": {
         "operationId": "list_assets_api_assets_get",
@@ -6574,6 +6780,91 @@
         "summary": "Memory Audio",
         "tags": [
           "capture"
+        ]
+      }
+    },
+    "/api/memories/{memory_id}/extract": {
+      "post": {
+        "operationId": "extract_again_api_memories__memory_id__extract_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extract Again",
+        "tags": [
+          "analysis"
+        ]
+      }
+    },
+    "/api/memories/{memory_id}/transcribe": {
+      "post": {
+        "description": "Transcribe again: after a failure, or once AI is turned on.",
+        "operationId": "transcribe_again_api_memories__memory_id__transcribe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transcribe Again",
+        "tags": [
+          "analysis"
         ]
       }
     },

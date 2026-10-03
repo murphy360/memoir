@@ -87,6 +87,15 @@ class Memory(ArchiveRow, Base):
     audio_seconds: Mapped[float | None] = mapped_column(Float)
     # Where the recording was started from (event, period, person, question, quick).
     capture_context: Mapped[dict | None] = mapped_column(JSONB)
+    # transcribing, done, failed, ai_off; and manual once a person edits the transcript.
+    transcript_state: Mapped[str | None] = mapped_column(String(16))
+    transcript_source: Mapped[str | None] = mapped_column(String(16))
+    # done, needs_details (extraction could not run or failed), ai_off.
+    extraction_state: Mapped[str | None] = mapped_column(String(16))
+    analysis_error: Mapped[str | None] = mapped_column(Text)
+    # What extraction proposed beyond the fields it filled: new names, relationship
+    # effects for the braid, the model and prompt version.
+    extracted: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class MemoryMention(Base):
@@ -164,6 +173,11 @@ class MemoryOut(BaseModel):
     visibility: Visibility
     audio_state: str | None = None
     audio_seconds: float | None = None
+    transcript_state: str | None = None
+    extraction_state: str | None = None
+    analysis_error: str | None = Field(
+        None, description="Why the last analysis failed, in the provider's words"
+    )
     response_to_question_id: int | None = None
     mentioned_ids: list[int] = []
     place_ids: list[int] = []
@@ -294,7 +308,10 @@ def apply_patch(
     if "date_text" in sent:
         set_point(memory, "date", body.date_text, MANUAL, body.keep_text_only)
     if "transcript" in sent:
+        # A person's words: no job will replace them.
         memory.transcript = body.transcript
+        memory.transcript_source = "manual"
+        memory.transcript_state = "done" if body.transcript else memory.transcript_state
     if "visibility" in sent and body.visibility:
         memory.visibility = body.visibility
     _set_links(session, user, memory, body.mentioned_ids, body.place_ids)

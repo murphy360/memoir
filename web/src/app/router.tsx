@@ -8,6 +8,7 @@ import { RequireAuth, RequireRole } from "../auth/RequireAuth";
 import { GalleryPage } from "../pages/GalleryPage";
 import { HealthPage } from "../pages/HealthPage";
 import { EventPage, PeoplePage, PersonPage } from "../pages/PeoplePages";
+import { MemoryPage } from "../features/memories/MemoryPage";
 import { RecordScreen } from "../features/record/RecordScreen";
 import {
   HomePage,
@@ -28,6 +29,7 @@ export const shellRoutes = [
   { path: "/people", element: <PeoplePage />, title: "People" },
   { path: "/people/:id", element: <PersonPage /> },
   { path: "/events/:id", element: <EventPage /> },
+  { path: "/memories/:id", element: <MemoryPage /> },
   {
     path: "/questions",
     element: <QuestionsPage />,

@@ -364,3 +364,17 @@ dialog.confirm::backdrop {
   display: flex;
   align-items: center;
 }
+
+/* A memory */
+.memory audio {
+  width: 100%;
+  max-width: 40rem;
+}
+.transcript {
+  white-space: pre-wrap;
+  max-width: 40rem;
+}
+textarea {
+  width: 100%;
+  max-width: 40rem;
+}

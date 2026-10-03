@@ -3,6 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +40,14 @@ class Settings(BaseSettings):
     login_account_window_seconds: int = 900
     # The proxies whose X-Forwarded-For uvicorn believes ("*" behind Caddy or nginx).
     forwarded_allow_ips: str = "127.0.0.1"
+
+    # Text and audio AI (requirements 6.1). No key: AI is off, and nothing fails.
+    gemini_api_key: SecretStr | None = None
+    gemini_model: str = "gemini-2.5-flash"
+    # Per task, when one task deserves another model; empty means gemini_model.
+    gemini_transcribe_model: str = ""
+    gemini_extract_model: str = ""
+    ai_timeout_seconds: float = 180.0
 
     @property
     def origins(self) -> set[str]:

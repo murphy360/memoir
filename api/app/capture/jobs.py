@@ -7,6 +7,7 @@ from app.blobs.store import BlobStore
 from app.capture import audio
 from app.core.settings import get_settings
 from app.domain.memories import Memory
+from app.jobs import queue
 from app.jobs.registry import JobContext, PermanentError, handler
 
 
@@ -34,6 +35,13 @@ def normalize_audio(ctx: JobContext, payload: dict) -> dict:
             memory.audio_state = "not_normalised"
             memory.audio_seconds = audio.duration(source)
     ctx.session.commit()
+    # Next: words. Transcription runs on the MP3, or on the original when there is none.
+    queue.enqueue(
+        ctx.session,
+        "analysis.transcribe",
+        {"memory_id": memory.id},
+        idempotency_key=f"transcribe:{memory.id}",
+    )
     return {
         "state": memory.audio_state,
         "problem": result.problem,

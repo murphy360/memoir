@@ -37,6 +37,11 @@ Memoir records in the browser: Chrome, Edge and Firefox on desktop and Android, 
 later). The first recording asks for the microphone. Recordings are kept on the device until the server has them,
 so a dropped connection or a closed tab loses nothing ([docs/CAPTURE.md](docs/CAPTURE.md)).
 
+## AI
+
+Set `MEMOIR_GEMINI_API_KEY` for the API and the worker to have recordings transcribed and read for dates, people and
+places. Without it Memoir still records and keeps everything, and says "AI is off" ([docs/AI.md](docs/AI.md)).
+
 ## Develop
 
 Everything runs in the project's images. Pass your own `TAG` so parallel sessions never share an image.
