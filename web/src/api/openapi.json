@@ -22,6 +22,338 @@
         "title": "AcceptInvitation",
         "type": "object"
       },
+      "AliasIn": {
+        "properties": {
+          "alias": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Alias",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alias"
+        ],
+        "title": "AliasIn",
+        "type": "object"
+      },
+      "AssetIn": {
+        "properties": {
+          "blob_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Blob Sha256",
+            "type": "string"
+          },
+          "capture_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Text"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Kind"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "original_filename": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Filename"
+          },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 180,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "blob_sha256",
+          "kind"
+        ],
+        "title": "AssetIn",
+        "type": "object"
+      },
+      "AssetOut": {
+        "properties": {
+          "analyzed_place_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analyzed Place Name"
+          },
+          "blob_sha256": {
+            "title": "Blob Sha256",
+            "type": "string"
+          },
+          "capture_end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture End"
+          },
+          "capture_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Start"
+          },
+          "capture_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Text"
+          },
+          "event_ids": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Event Ids",
+            "type": "array"
+          },
+          "excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excerpt"
+          },
+          "exif_place_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exif Place Name"
+          },
+          "geocoded_place_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geocoded Place Name"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Kind"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "original_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Filename"
+          },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "notes",
+          "blob_sha256",
+          "original_filename",
+          "excerpt",
+          "capture_text",
+          "capture_start",
+          "capture_end",
+          "latitude",
+          "longitude",
+          "exif_place_name",
+          "geocoded_place_name",
+          "analyzed_place_name",
+          "place_id"
+        ],
+        "title": "AssetOut",
+        "type": "object"
+      },
+      "AssetPatch": {
+        "properties": {
+          "capture_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Text"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 180,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "AssetPatch",
+        "type": "object"
+      },
       "AuditEntry": {
         "properties": {
           "actor_id": {
@@ -108,6 +440,14 @@
         "title": "ChangePassword",
         "type": "object"
       },
+      "Children": {
+        "enum": [
+          "move",
+          "unassign"
+        ],
+        "title": "Children",
+        "type": "string"
+      },
       "CreateInvitation": {
         "properties": {
           "email": {
@@ -175,6 +515,270 @@
         "title": "CreatedInvitation",
         "type": "object"
       },
+      "EpicIn": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "end_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Text"
+          },
+          "period_id": {
+            "title": "Period Id",
+            "type": "integer"
+          },
+          "start_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Text"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "title": {
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "weight": {
+            "default": 5,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Weight",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "period_id",
+          "title"
+        ],
+        "title": "EpicIn",
+        "type": "object"
+      },
+      "EpicOut": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "end_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End On"
+          },
+          "end_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Text"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "period_id": {
+            "title": "Period Id",
+            "type": "integer"
+          },
+          "start_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start On"
+          },
+          "start_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Text"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "period_id",
+          "thread_id",
+          "title",
+          "description",
+          "weight",
+          "start_text",
+          "start_on",
+          "end_text",
+          "end_on"
+        ],
+        "title": "EpicOut",
+        "type": "object"
+      },
+      "EpicPatch": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "end_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Text"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "start_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Text"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 180,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          }
+        },
+        "title": "EpicPatch",
+        "type": "object"
+      },
       "ErrorBody": {
         "properties": {
           "code": {
@@ -214,6 +818,326 @@
           "error"
         ],
         "title": "ErrorResponse",
+        "type": "object"
+      },
+      "EventIn": {
+        "properties": {
+          "date_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Text"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "location_text": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Text"
+          },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Id"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "title": {
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "weight": {
+            "default": 5,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Weight",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "EventIn",
+        "type": "object"
+      },
+      "EventOut": {
+        "properties": {
+          "date_end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date End"
+          },
+          "date_precision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Precision"
+          },
+          "date_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Start"
+          },
+          "date_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Text"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "location_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Text"
+          },
+          "participants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ParticipantOut"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Id"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "weight",
+          "date_text",
+          "date_start",
+          "date_end",
+          "date_precision",
+          "location_text",
+          "place_id",
+          "thread_id",
+          "summary"
+        ],
+        "title": "EventOut",
+        "type": "object"
+      },
+      "EventPatch": {
+        "properties": {
+          "date_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Text"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "location_text": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Text"
+          },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Id"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 180,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          }
+        },
+        "title": "EventPatch",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -334,6 +1258,25 @@
         "title": "InvitationPreview",
         "type": "object"
       },
+      "Kind": {
+        "enum": [
+          "photo",
+          "document",
+          "audio"
+        ],
+        "title": "Kind",
+        "type": "string"
+      },
+      "LinkIn": {
+        "properties": {
+          "relation": {
+            "$ref": "#/components/schemas/Relation",
+            "default": "evidence"
+          }
+        },
+        "title": "LinkIn",
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -391,6 +1334,1646 @@
         "title": "Me",
         "type": "object"
       },
+      "MemoryIn": {
+        "properties": {
+          "date_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Text"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "mentioned_ids": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Mentioned Ids",
+            "type": "array"
+          },
+          "place_ids": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Place Ids",
+            "type": "array"
+          },
+          "storyteller_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storyteller Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 180,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility",
+            "default": "archive"
+          }
+        },
+        "title": "MemoryIn",
+        "type": "object"
+      },
+      "MemoryOut": {
+        "properties": {
+          "date_end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date End"
+          },
+          "date_precision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Precision"
+          },
+          "date_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Start"
+          },
+          "date_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Text"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "mentioned_ids": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Mentioned Ids",
+            "type": "array"
+          },
+          "place_ids": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Place Ids",
+            "type": "array"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "storyteller_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storyteller Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "tone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tone"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
+          },
+          "uploaded_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uploaded By"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/Visibility"
+          }
+        },
+        "required": [
+          "id",
+          "event_id",
+          "storyteller_id",
+          "uploaded_by",
+          "title",
+          "description",
+          "transcript",
+          "recorded_at",
+          "date_text",
+          "date_start",
+          "date_end",
+          "date_precision",
+          "tone",
+          "visibility"
+        ],
+        "title": "MemoryOut",
+        "type": "object"
+      },
+      "MemoryPatch": {
+        "properties": {
+          "date_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Text"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "mentioned_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mentioned Ids"
+          },
+          "place_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Ids"
+          },
+          "storyteller_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storyteller Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 180,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Visibility"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "MemoryPatch",
+        "type": "object"
+      },
+      "MergeInto": {
+        "properties": {
+          "into_id": {
+            "title": "Into Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "into_id"
+        ],
+        "title": "MergeInto",
+        "type": "object"
+      },
+      "Page_AssetOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AssetOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[AssetOut]",
+        "type": "object"
+      },
+      "Page_EpicOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EpicOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[EpicOut]",
+        "type": "object"
+      },
+      "Page_EventOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EventOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[EventOut]",
+        "type": "object"
+      },
+      "Page_MemoryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[MemoryOut]",
+        "type": "object"
+      },
+      "Page_PeriodOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PeriodOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[PeriodOut]",
+        "type": "object"
+      },
+      "Page_PersonOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PersonOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[PersonOut]",
+        "type": "object"
+      },
+      "Page_PlaceOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlaceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[PlaceOut]",
+        "type": "object"
+      },
+      "Page_QuestionOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[QuestionOut]",
+        "type": "object"
+      },
+      "Page_ThreadOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[ThreadOut]",
+        "type": "object"
+      },
+      "Page_TimelineEntry_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[TimelineEntry]",
+        "type": "object"
+      },
+      "ParticipantOut": {
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "epic_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epic Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "person_id": {
+            "title": "Person Id",
+            "type": "integer"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "person_id",
+          "name",
+          "role",
+          "source",
+          "confirmed",
+          "period_id",
+          "epic_id"
+        ],
+        "title": "ParticipantOut",
+        "type": "object"
+      },
+      "ParticipantRole": {
+        "enum": [
+          "participant",
+          "storyteller",
+          "mentioned",
+          "in_photo"
+        ],
+        "title": "ParticipantRole",
+        "type": "string"
+      },
+      "PeriodDeleted": {
+        "description": "What deleting a period did, so the app can say it in plain words.",
+        "properties": {
+          "epics_moved": {
+            "default": 0,
+            "title": "Epics Moved",
+            "type": "integer"
+          },
+          "epics_removed": {
+            "default": 0,
+            "title": "Epics Removed",
+            "type": "integer"
+          },
+          "placements_moved": {
+            "default": 0,
+            "title": "Placements Moved",
+            "type": "integer"
+          },
+          "placements_unassigned": {
+            "default": 0,
+            "title": "Placements Unassigned",
+            "type": "integer"
+          }
+        },
+        "title": "PeriodDeleted",
+        "type": "object"
+      },
+      "PeriodIn": {
+        "properties": {
+          "end_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Text"
+          },
+          "person_id": {
+            "title": "Person Id",
+            "type": "integer"
+          },
+          "start_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Text"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "person_id",
+          "title"
+        ],
+        "title": "PeriodIn",
+        "type": "object"
+      },
+      "PeriodOut": {
+        "properties": {
+          "end_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End On"
+          },
+          "end_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Text"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "person_id": {
+            "title": "Person Id",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "start_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start On"
+          },
+          "start_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Text"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "summary_generated": {
+            "title": "Summary Generated",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "person_id",
+          "title",
+          "slug",
+          "start_text",
+          "start_on",
+          "end_text",
+          "end_on",
+          "summary",
+          "summary_generated"
+        ],
+        "title": "PeriodOut",
+        "type": "object"
+      },
+      "PeriodPatch": {
+        "properties": {
+          "end_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Text"
+          },
+          "start_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Text"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "PeriodPatch",
+        "type": "object"
+      },
+      "PersonIn": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "birth_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Birth Text"
+          },
+          "death_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Death Text"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PersonIn",
+        "type": "object"
+      },
+      "PersonOut": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "aliases": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "birth_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Birth Start"
+          },
+          "birth_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Birth Text"
+          },
+          "death_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Death Start"
+          },
+          "death_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Death Text"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "email",
+          "address",
+          "notes",
+          "birth_text",
+          "birth_start",
+          "death_text",
+          "death_start",
+          "user_id"
+        ],
+        "title": "PersonOut",
+        "type": "object"
+      },
+      "PersonPatch": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "birth_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Birth Text"
+          },
+          "death_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Death Text"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "title": "PersonPatch",
+        "type": "object"
+      },
+      "PlaceIn": {
+        "properties": {
+          "latitude": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": -180.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PlaceIn",
+        "type": "object"
+      },
+      "PlaceOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "latitude",
+          "longitude"
+        ],
+        "title": "PlaceOut",
+        "type": "object"
+      },
+      "PlacePatch": {
+        "properties": {
+          "latitude": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": -180.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "PlacePatch",
+        "type": "object"
+      },
+      "Placement": {
+        "properties": {
+          "epic_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sets the period too",
+            "title": "Epic Id"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ParticipantRole",
+            "default": "participant"
+          }
+        },
+        "title": "Placement",
+        "type": "object"
+      },
+      "Purged": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          }
+        },
+        "required": [
+          "counts"
+        ],
+        "title": "Purged",
+        "type": "object"
+      },
+      "QuestionIn": {
+        "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope",
+            "default": "general"
+          },
+          "text": {
+            "maxLength": 1000,
+            "minLength": 3,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "QuestionIn",
+        "type": "object"
+      },
+      "QuestionOut": {
+        "properties": {
+          "answered_by_memory_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answered By Memory Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "source_memory_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Memory Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "status",
+          "scope",
+          "source_memory_id",
+          "event_id",
+          "period_id",
+          "person_id",
+          "answered_by_memory_id"
+        ],
+        "title": "QuestionOut",
+        "type": "object"
+      },
+      "QuestionPatch": {
+        "properties": {
+          "answered_by_memory_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answered By Memory Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "QuestionPatch",
+        "type": "object"
+      },
+      "Relation": {
+        "enum": [
+          "evidence",
+          "recording"
+        ],
+        "title": "Relation",
+        "type": "string"
+      },
       "Role": {
         "description": "What a user may do, each including the ones below it.\n\nExecutor is not a role but a separate grant (`User.is_executor`).",
         "enum": [
@@ -399,6 +2982,16 @@
           "viewer"
         ],
         "title": "Role",
+        "type": "string"
+      },
+      "Scope": {
+        "enum": [
+          "general",
+          "period",
+          "event",
+          "person"
+        ],
+        "title": "Scope",
         "type": "string"
       },
       "SessionInfo": {
@@ -455,6 +3048,218 @@
         "title": "SessionInfo",
         "type": "object"
       },
+      "SettingsOut": {
+        "properties": {
+          "ai_extraction": {
+            "title": "Ai Extraction",
+            "type": "boolean"
+          },
+          "ai_photos": {
+            "title": "Ai Photos",
+            "type": "boolean"
+          },
+          "ai_questions": {
+            "title": "Ai Questions",
+            "type": "boolean"
+          },
+          "ai_research": {
+            "title": "Ai Research",
+            "type": "boolean"
+          },
+          "ai_transcription": {
+            "title": "Ai Transcription",
+            "type": "boolean"
+          },
+          "archive_name": {
+            "default": "",
+            "title": "Archive Name",
+            "type": "string"
+          },
+          "auto_file_quick_memories": {
+            "title": "Auto File Quick Memories",
+            "type": "boolean"
+          },
+          "face_auto_assign_threshold": {
+            "title": "Face Auto Assign Threshold",
+            "type": "number"
+          },
+          "face_detection_on_upload": {
+            "title": "Face Detection On Upload",
+            "type": "boolean"
+          },
+          "storyteller_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storyteller Name"
+          },
+          "time_zone": {
+            "default": "UTC",
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "storyteller_name",
+          "ai_transcription",
+          "ai_extraction",
+          "ai_questions",
+          "ai_research",
+          "ai_photos",
+          "face_detection_on_upload",
+          "face_auto_assign_threshold",
+          "auto_file_quick_memories"
+        ],
+        "title": "SettingsOut",
+        "type": "object"
+      },
+      "SettingsPatch": {
+        "properties": {
+          "ai_extraction": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Extraction"
+          },
+          "ai_photos": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Photos"
+          },
+          "ai_questions": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Questions"
+          },
+          "ai_research": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Research"
+          },
+          "ai_transcription": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Transcription"
+          },
+          "archive_name": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Name"
+          },
+          "auto_file_quick_memories": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto File Quick Memories"
+          },
+          "face_auto_assign_threshold": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.5,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face Auto Assign Threshold"
+          },
+          "face_detection_on_upload": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face Detection On Upload"
+          },
+          "storyteller_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storyteller Name"
+          },
+          "time_zone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Zone"
+          }
+        },
+        "title": "SettingsPatch",
+        "type": "object"
+      },
+      "Status": {
+        "enum": [
+          "pending",
+          "answered",
+          "dismissed"
+        ],
+        "title": "Status",
+        "type": "string"
+      },
       "TemporaryPassword": {
         "properties": {
           "password": {
@@ -467,6 +3272,263 @@
           "password"
         ],
         "title": "TemporaryPassword",
+        "type": "object"
+      },
+      "ThreadIn": {
+        "properties": {
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "ThreadIn",
+        "type": "object"
+      },
+      "ThreadOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "slug",
+          "summary"
+        ],
+        "title": "ThreadOut",
+        "type": "object"
+      },
+      "ThreadPatch": {
+        "properties": {
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ThreadPatch",
+        "type": "object"
+      },
+      "TimelineEntry": {
+        "description": "An event as it sits in one person's life: their own period and epic for it.",
+        "properties": {
+          "date_end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date End"
+          },
+          "date_precision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Precision"
+          },
+          "date_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Start"
+          },
+          "date_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Text"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "epic_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epic Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "location_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Text"
+          },
+          "participants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ParticipantOut"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Id"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "weight",
+          "date_text",
+          "date_start",
+          "date_end",
+          "date_precision",
+          "location_text",
+          "place_id",
+          "thread_id",
+          "summary",
+          "period_id",
+          "epic_id"
+        ],
+        "title": "TimelineEntry",
         "type": "object"
       },
       "UpdateMe": {
@@ -594,6 +3656,14 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "Visibility": {
+        "enum": [
+          "archive",
+          "only_me"
+        ],
+        "title": "Visibility",
+        "type": "string"
+      },
       "WorkerHealth": {
         "properties": {
           "age_seconds": {
@@ -643,6 +3713,280 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/assets": {
+      "get": {
+        "operationId": "list_assets_api_assets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "event_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Id"
+            }
+          },
+          {
+            "description": "Only assets linked to no live event",
+            "in": "query",
+            "name": "inbox",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only assets linked to no live event",
+              "title": "Inbox",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Find a file already kept",
+            "in": "query",
+            "name": "sha256",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Find a file already kept",
+              "title": "Sha256"
+            }
+          },
+          {
+            "description": "From the previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From the previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_AssetOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Assets",
+        "tags": [
+          "assets"
+        ]
+      },
+      "post": {
+        "operationId": "create_asset_api_assets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/assets/{asset_id}": {
+      "delete": {
+        "description": "Soft delete. The file stays until the asset is purged and nothing\nelse uses it.",
+        "operationId": "remove_asset_api_assets__asset_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Asset",
+        "tags": [
+          "assets"
+        ]
+      },
+      "get": {
+        "operationId": "get_asset_api_assets__asset_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Asset",
+        "tags": [
+          "assets"
+        ]
+      },
+      "patch": {
+        "operationId": "update_asset_api_assets__asset_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
     "/api/audit": {
       "get": {
         "operationId": "audit_log_api_audit_get",
@@ -859,6 +4203,838 @@
         "summary": "Sign Out Everywhere Else",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/epics": {
+      "get": {
+        "operationId": "list_epics_api_epics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "period_id",
+            "required": true,
+            "schema": {
+              "title": "Period Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "From the previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From the previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_EpicOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Epics",
+        "tags": [
+          "epics"
+        ]
+      },
+      "post": {
+        "operationId": "create_epic_api_epics_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EpicIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpicOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Epic",
+        "tags": [
+          "epics"
+        ]
+      }
+    },
+    "/api/epics/{epic_id}": {
+      "delete": {
+        "description": "Its events stay in the period, no longer grouped.",
+        "operationId": "remove_epic_api_epics__epic_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "epic_id",
+            "required": true,
+            "schema": {
+              "title": "Epic Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Epic",
+        "tags": [
+          "epics"
+        ]
+      },
+      "get": {
+        "operationId": "get_epic_api_epics__epic_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "epic_id",
+            "required": true,
+            "schema": {
+              "title": "Epic Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpicOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Epic",
+        "tags": [
+          "epics"
+        ]
+      },
+      "patch": {
+        "operationId": "update_epic_api_epics__epic_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "epic_id",
+            "required": true,
+            "schema": {
+              "title": "Epic Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EpicPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpicOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Epic",
+        "tags": [
+          "epics"
+        ]
+      }
+    },
+    "/api/events": {
+      "get": {
+        "operationId": "list_events_api_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "place_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Place Id"
+            }
+          },
+          {
+            "description": "Only events no participant has placed",
+            "in": "query",
+            "name": "unplaced",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only events no participant has placed",
+              "title": "Unplaced",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "From the previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From the previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_EventOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Events",
+        "tags": [
+          "events"
+        ]
+      },
+      "post": {
+        "operationId": "create_event_api_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Event",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/api/events/{event_id}": {
+      "delete": {
+        "description": "Soft delete. Its memories and photos are kept and show in the inbox.",
+        "operationId": "remove_event_api_events__event_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Event",
+        "tags": [
+          "events"
+        ]
+      },
+      "get": {
+        "operationId": "get_event_api_events__event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Event",
+        "tags": [
+          "events"
+        ]
+      },
+      "patch": {
+        "operationId": "update_event_api_events__event_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Event",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/api/events/{event_id}/assets/{asset_id}": {
+      "delete": {
+        "operationId": "unlink_asset_api_events__event_id__assets__asset_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unlink Asset",
+        "tags": [
+          "assets"
+        ]
+      },
+      "put": {
+        "operationId": "link_asset_api_events__event_id__assets__asset_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Link Asset",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/events/{event_id}/merge": {
+      "post": {
+        "operationId": "merge_event_api_events__event_id__merge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeInto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Merge Event",
+        "tags": [
+          "merge"
+        ]
+      }
+    },
+    "/api/events/{event_id}/participants/{person_id}": {
+      "delete": {
+        "operationId": "remove_participant_api_events__event_id__participants__person_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Participant",
+        "tags": [
+          "participants"
+        ]
+      },
+      "put": {
+        "operationId": "place_participant_api_events__event_id__participants__person_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Placement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Place Participant",
+        "tags": [
+          "participants"
+        ]
+      }
+    },
+    "/api/events/{event_id}/participants/{person_id}/confirm": {
+      "post": {
+        "operationId": "confirm_participant_api_events__event_id__participants__person_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Participant",
+        "tags": [
+          "participants"
         ]
       }
     },
@@ -1510,6 +5686,1909 @@
         "summary": "My Sessions",
         "tags": [
           "profile"
+        ]
+      }
+    },
+    "/api/memories": {
+      "get": {
+        "operationId": "list_memories_api_memories_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "event_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Id"
+            }
+          },
+          {
+            "description": "Told by or mentioning",
+            "in": "query",
+            "name": "person_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Told by or mentioning",
+              "title": "Person Id"
+            }
+          },
+          {
+            "description": "Only memories waiting to be placed",
+            "in": "query",
+            "name": "inbox",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only memories waiting to be placed",
+              "title": "Inbox",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "From the previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From the previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_MemoryOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Memories",
+        "tags": [
+          "memories"
+        ]
+      },
+      "post": {
+        "operationId": "create_memory_api_memories_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Memory",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/api/memories/{memory_id}": {
+      "delete": {
+        "operationId": "remove_memory_api_memories__memory_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Memory",
+        "tags": [
+          "memories"
+        ]
+      },
+      "get": {
+        "operationId": "get_memory_api_memories__memory_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Memory",
+        "tags": [
+          "memories"
+        ]
+      },
+      "patch": {
+        "operationId": "update_memory_api_memories__memory_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Memory",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/api/people": {
+      "get": {
+        "operationId": "list_people_api_people_get",
+        "parameters": [
+          {
+            "description": "Name or alias contains",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Name or alias contains",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "From the previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From the previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_PersonOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List People",
+        "tags": [
+          "people"
+        ]
+      },
+      "post": {
+        "operationId": "create_person_api_people_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Person",
+        "tags": [
+          "people"
+        ]
+      }
+    },
+    "/api/people/{person_id}": {
+      "delete": {
+        "operationId": "remove_person_api_people__person_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Person",
+        "tags": [
+          "people"
+        ]
+      },
+      "get": {
+        "operationId": "get_person_api_people__person_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Person",
+        "tags": [
+          "people"
+        ]
+      },
+      "patch": {
+        "operationId": "update_person_api_people__person_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Person",
+        "tags": [
+          "people"
+        ]
+      }
+    },
+    "/api/people/{person_id}/aliases": {
+      "post": {
+        "operationId": "add_person_alias_api_people__person_id__aliases_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AliasIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Person Alias",
+        "tags": [
+          "people"
+        ]
+      }
+    },
+    "/api/people/{person_id}/aliases/{alias}": {
+      "delete": {
+        "operationId": "remove_person_alias_api_people__person_id__aliases__alias__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "alias",
+            "required": true,
+            "schema": {
+              "title": "Alias",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Person Alias",
+        "tags": [
+          "people"
+        ]
+      }
+    },
+    "/api/people/{person_id}/events": {
+      "get": {
+        "description": "Every event a person took part in, with the period and epic they place it in.",
+        "operationId": "person_timeline_api_people__person_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "From the previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From the previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_TimelineEntry_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Person Timeline",
+        "tags": [
+          "participants"
+        ]
+      }
+    },
+    "/api/people/{person_id}/merge": {
+      "post": {
+        "operationId": "merge_person_api_people__person_id__merge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeInto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Merge Person",
+        "tags": [
+          "merge"
+        ]
+      }
+    },
+    "/api/periods": {
+      "get": {
+        "operationId": "list_periods_api_periods_get",
+        "parameters": [
+          {
+            "description": "Whose chapters",
+            "in": "query",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "description": "Whose chapters",
+              "title": "Person Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "From the previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From the previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_PeriodOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Periods",
+        "tags": [
+          "periods"
+        ]
+      },
+      "post": {
+        "operationId": "create_period_api_periods_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PeriodIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeriodOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Period",
+        "tags": [
+          "periods"
+        ]
+      }
+    },
+    "/api/periods/{period_id}": {
+      "delete": {
+        "operationId": "remove_period_api_periods__period_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "period_id",
+            "required": true,
+            "schema": {
+              "title": "Period Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "What to do with its contents",
+            "in": "query",
+            "name": "children",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Children"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What to do with its contents",
+              "title": "Children"
+            }
+          },
+          {
+            "description": "With children=move: the period",
+            "in": "query",
+            "name": "move_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "With children=move: the period",
+              "title": "Move To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeriodDeleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Period",
+        "tags": [
+          "periods"
+        ]
+      },
+      "get": {
+        "operationId": "get_period_api_periods__period_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "period_id",
+            "required": true,
+            "schema": {
+              "title": "Period Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeriodOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Period",
+        "tags": [
+          "periods"
+        ]
+      },
+      "patch": {
+        "operationId": "update_period_api_periods__period_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "period_id",
+            "required": true,
+            "schema": {
+              "title": "Period Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PeriodPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeriodOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Period",
+        "tags": [
+          "periods"
+        ]
+      }
+    },
+    "/api/periods/{period_id}/merge": {
+      "post": {
+        "operationId": "merge_period_api_periods__period_id__merge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "period_id",
+            "required": true,
+            "schema": {
+              "title": "Period Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeInto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeriodOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Merge Period",
+        "tags": [
+          "merge"
+        ]
+      }
+    },
+    "/api/places": {
+      "get": {
+        "operationId": "list_places_api_places_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "description": "From the previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From the previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_PlaceOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Places",
+        "tags": [
+          "places"
+        ]
+      },
+      "post": {
+        "operationId": "create_place_api_places_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Place",
+        "tags": [
+          "places"
+        ]
+      }
+    },
+    "/api/places/{place_id}": {
+      "delete": {
+        "description": "Soft delete. Events, memories and photos that named it keep their own text.",
+        "operationId": "remove_place_api_places__place_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "place_id",
+            "required": true,
+            "schema": {
+              "title": "Place Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Place",
+        "tags": [
+          "places"
+        ]
+      },
+      "get": {
+        "operationId": "get_place_api_places__place_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "place_id",
+            "required": true,
+            "schema": {
+              "title": "Place Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Place",
+        "tags": [
+          "places"
+        ]
+      },
+      "patch": {
+        "operationId": "update_place_api_places__place_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "place_id",
+            "required": true,
+            "schema": {
+              "title": "Place Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlacePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Place",
+        "tags": [
+          "places"
+        ]
+      }
+    },
+    "/api/questions": {
+      "get": {
+        "operationId": "list_questions_api_questions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Status",
+              "default": "pending"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Scope"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "person_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Person Id"
+            }
+          },
+          {
+            "description": "From the previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From the previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_QuestionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Questions",
+        "tags": [
+          "questions"
+        ]
+      },
+      "post": {
+        "operationId": "ask_api_questions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ask",
+        "tags": [
+          "questions"
+        ]
+      }
+    },
+    "/api/questions/{question_id}": {
+      "delete": {
+        "operationId": "remove_question_api_questions__question_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Question",
+        "tags": [
+          "questions"
+        ]
+      },
+      "patch": {
+        "operationId": "answer_or_dismiss_api_questions__question_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Answer Or Dismiss",
+        "tags": [
+          "questions"
+        ]
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "operationId": "read_settings_api_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Settings",
+        "tags": [
+          "settings"
+        ]
+      },
+      "patch": {
+        "operationId": "change_settings_api_settings_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/threads": {
+      "get": {
+        "operationId": "list_threads_api_threads_get",
+        "parameters": [
+          {
+            "description": "From the previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From the previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ThreadOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Threads",
+        "tags": [
+          "threads"
+        ]
+      },
+      "post": {
+        "operationId": "create_thread_api_threads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Thread",
+        "tags": [
+          "threads"
+        ]
+      }
+    },
+    "/api/threads/{thread_id}": {
+      "delete": {
+        "description": "Untag every epic and event, then soft-delete the thread. Nothing else\nis deleted.",
+        "operationId": "remove_thread_api_threads__thread_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Thread",
+        "tags": [
+          "threads"
+        ]
+      },
+      "get": {
+        "operationId": "get_thread_api_threads__thread_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Thread",
+        "tags": [
+          "threads"
+        ]
+      },
+      "patch": {
+        "operationId": "update_thread_api_threads__thread_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Thread",
+        "tags": [
+          "threads"
+        ]
+      }
+    },
+    "/api/trash/purge": {
+      "post": {
+        "description": "Remove for good what was deleted more than `older_than_days` ago (0:\neverything).",
+        "operationId": "purge_now_api_trash_purge_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "older_than_days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 3650,
+              "minimum": 0,
+              "title": "Older Than Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purged"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Purge Now",
+        "tags": [
+          "trash"
         ]
       }
     },
