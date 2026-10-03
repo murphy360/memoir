@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -50,12 +50,20 @@ def extract_again(
     return memories.out(db, [memory])[0]
 
 
+class TaskAI(BaseModel):
+    task: str = Field(description="transcribe, extract or questions")
+    provider: str | None = Field(description="None: no provider can do it")
+    model: str | None
+
+
 class AIStatus(BaseModel):
     enabled: bool
-    provider: str | None
+    provider: str | None = Field(description="The provider for extraction")
     model: str | None
     transcription: bool
     extraction: bool
+    questions: bool
+    tasks: list[TaskAI]
 
 
 @router.get("/api/ai/status", response_model=AIStatus)
@@ -64,15 +72,24 @@ def ai_status(
     db: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ):
-    """Whether AI is on, so the app can say "AI is off" where it would appear."""
-    provider = registry.provider(settings)
+    """Whether AI is on and who does what, so the app can say "AI is off" where it
+    would appear."""
+    tasks = []
+    for task in registry.TASKS:
+        name = registry.choose(settings, task)
+        model = registry.model_for(settings, task, name) if name else None
+        tasks.append(TaskAI(task=task, provider=name, model=model))
+    by_task = {t.task: t for t in tasks}
     switches = settings_for(db, user.archive_id)
     return AIStatus(
-        enabled=provider is not None,
-        provider=provider.name if provider else None,
-        model=settings.gemini_model if provider else None,
-        transcription=provider is not None and switches.ai_transcription,
-        extraction=provider is not None and switches.ai_extraction,
+        enabled=any(t.provider for t in tasks),
+        provider=by_task["extract"].provider,
+        model=by_task["extract"].model,
+        transcription=bool(by_task["transcribe"].provider)
+        and switches.ai_transcription,
+        extraction=bool(by_task["extract"].provider) and switches.ai_extraction,
+        questions=bool(by_task["questions"].provider) and switches.ai_questions,
+        tasks=tasks,
     )
 
 

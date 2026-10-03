@@ -52,7 +52,9 @@ waiting; **Don't ask this again** dismisses one for good ([docs/INTERVIEWER.md](
 ## AI
 
 Set `MEMOIR_GEMINI_API_KEY` for the API and the worker to have recordings transcribed, read for dates, people and
-places, and followed by questions. Without it Memoir still records and keeps everything, and says "AI is off" ([docs/AI.md](docs/AI.md)).
+places, and followed by questions. `MEMOIR_ANTHROPIC_API_KEY` (Claude) and `MEMOIR_GROK_API_KEY` (Grok) can do the
+reading and the questions too; only Gemini transcribes. `MEMOIR_AI_PROVIDER` picks among them. Without a key Memoir
+still records and keeps everything, and says "AI is off" ([docs/AI.md](docs/AI.md)).
 
 ## Deploy
 

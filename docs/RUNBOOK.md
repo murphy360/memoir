@@ -16,7 +16,7 @@ validated in CI, and `deploy/Caddyfile` is the Caddy block. Commands below run o
 
 | On the host | What | Owner, mode |
 |---|---|---|
-| `/docker/memoir/memoir.env` | The app's secrets: `MEMOIR_DATABASE_URL`, `MEMOIR_GEMINI_API_KEY` | root, 600 |
+| `/docker/memoir/memoir.env` | The app's secrets: `MEMOIR_DATABASE_URL`, `MEMOIR_GEMINI_API_KEY`, and optionally `MEMOIR_ANTHROPIC_API_KEY`, `MEMOIR_GROK_API_KEY` and `MEMOIR_AI_PROVIDER` | root, 600 |
 | `/docker/memoir/postgres.env` | `POSTGRES_PASSWORD`, used only when the database is first created | root, 600 |
 | `/docker/memoir/postgres` | The database files | the image's postgres user |
 | `/docker/memoir/blobs` | Recordings and files, content-addressed | uid 1000 |
@@ -59,6 +59,10 @@ rewrite at `/memoir-v0` until the owner retires it (the dontpanic pull request m
    echo "POSTGRES_PASSWORD=$pw" | sudo tee /docker/memoir/postgres.env >/dev/null
    printf 'MEMOIR_DATABASE_URL=postgresql+psycopg://memoir:%s@memoir-db:5432/memoir\nMEMOIR_GEMINI_API_KEY=%s\n' \
        "$pw" "<the Gemini key>" | sudo tee /docker/memoir/memoir.env >/dev/null
+   # Optional: Claude or Grok for reading and questions (docs/AI.md). Only Gemini transcribes.
+   #   echo 'MEMOIR_ANTHROPIC_API_KEY=<key>' | sudo tee -a /docker/memoir/memoir.env >/dev/null
+   #   echo 'MEMOIR_GROK_API_KEY=<key>' | sudo tee -a /docker/memoir/memoir.env >/dev/null
+   #   echo 'MEMOIR_AI_PROVIDER=anthropic' | sudo tee -a /docker/memoir/memoir.env >/dev/null
    sudo chmod 600 /docker/memoir/memoir.env /docker/memoir/postgres.env
    unset pw
    ```
@@ -150,7 +154,8 @@ docker rm -f memoir-drill-db && sudo rm -r /tmp/memoir-drill-blobs
 
 ## Rotate a secret
 
-- **The Gemini key.** Edit `MEMOIR_GEMINI_API_KEY` in `/docker/memoir/memoir.env`, then
+- **An AI key** (Gemini, Anthropic or Grok). Edit `MEMOIR_GEMINI_API_KEY`, `MEMOIR_ANTHROPIC_API_KEY` or
+  `MEMOIR_GROK_API_KEY` in `/docker/memoir/memoir.env`, then
   `docker compose up -d --force-recreate memoir-api memoir-worker`. The key is only ever in that file and in a
   request header; it is never logged.
 - **The database password.** Change it in the database, then in both files, then recreate the API and the worker:
@@ -185,7 +190,7 @@ docker rm -f memoir-drill-db && sudo rm -r /tmp/memoir-drill-blobs
 | Symptom | Look at |
 |---|---|
 | `/api/health` says the worker is `stale` | `docker compose logs --tail 100 memoir-worker`. A long transcription keeps it fresh, so stale means stopped or stuck. `docker compose restart memoir-worker` is safe: a job it held is picked up again |
-| Recordings say "AI is off" | `MEMOIR_GEMINI_API_KEY` in `memoir.env`, and the owner's AI settings |
+| Recordings say "AI is off" | `MEMOIR_GEMINI_API_KEY` in `memoir.env` (only Gemini transcribes), and the owner's AI settings. `/api/ai/status` says which provider does each task |
 | Recordings say transcription failed with "402" | The Gemini project is out of prepaid credit. Top it up, then **Try again** on each memory |
 | 502 from Caddy | `docker compose ps`: which `memoir-*` service is not healthy, then its logs |
 | Disk filling | `du -sh /docker/memoir/*`. Recordings are kept forever by design. Soft-deleted rows purge after 30 days |

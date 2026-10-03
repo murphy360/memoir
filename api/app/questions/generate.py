@@ -195,14 +195,14 @@ def generate(ctx: JobContext, payload: dict) -> dict:
         memory.questions_state = "done"
         ctx.session.commit()
         return {"state": "done", "made": 0, "reason": "no transcript"}
-    provider, settings = ai_for(ctx.session, memory, "ai_questions")
+    provider, settings = ai_for(ctx.session, memory, "ai_questions", "questions")
     if provider is None:
         memory.questions_state = "ai_off"
         ctx.session.commit()
         return {"state": "ai_off"}
     teller_id = storyteller_of(ctx.session, memory)
     teller = ctx.session.get(Person, teller_id) if teller_id else None
-    model = registry.model_for(settings, "questions")
+    model = registry.model_for(settings, "questions", provider.name)
     text = prompt(ctx.session, memory, teller)
     try:
         answer = recorded(
