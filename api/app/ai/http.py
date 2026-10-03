@@ -22,10 +22,22 @@ def reason(response: httpx.Response) -> str:
     return " ".join(message.split())[:200] or response.reason_phrase
 
 
-def post(client: httpx.Client, who: str, url: str, headers: dict, body: dict) -> dict:
-    """POST JSON and return the JSON answer, or raise ProviderError saying why."""
+def post(
+    client: httpx.Client,
+    who: str,
+    url: str,
+    headers: dict,
+    body: dict | None = None,
+    *,
+    files: dict | None = None,
+) -> dict:
+    """POST JSON (or, with `files`, a multipart form whose fields are `body`) and
+    return the JSON answer, or raise ProviderError saying why."""
     try:
-        response = client.post(url, headers=headers, json=body)
+        if files is None:
+            response = client.post(url, headers=headers, json=body)
+        else:
+            response = client.post(url, headers=headers, data=body, files=files)
     except httpx.HTTPError as exc:
         raise ProviderError(f"{who} unreachable: {type(exc).__name__}") from exc
     if response.status_code != 200:

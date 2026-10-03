@@ -1,7 +1,9 @@
-"""Which provider does which task. Gemini, Anthropic and Grok each run when their key is
-set; with no key at all, AI is off and nothing fails. Transcription needs a provider
-that hears audio (Gemini). Extraction and questions use `MEMOIR_AI_PROVIDER` (or the
-task's own setting), else the first provider with a key: Gemini, Anthropic, Grok.
+"""Which provider does which task. Gemini, Anthropic, Grok and OpenAI each run when
+their key is set; with no key at all, AI is off and nothing fails. Transcription needs
+a provider that hears audio (Gemini or OpenAI): `MEMOIR_AI_TRANSCRIBE_PROVIDER`, else
+the first of them with a key. Extraction and questions use the task's own setting or
+`MEMOIR_AI_PROVIDER`, else the first provider with a key: Gemini, Anthropic, Grok,
+OpenAI.
 
 Tests put a fake in place of every provider with `use`.
 """
@@ -9,10 +11,13 @@ Tests put a fake in place of every provider with `use`.
 from app.ai.anthropic import Anthropic
 from app.ai.gemini import Gemini
 from app.ai.grok import Grok
+from app.ai.openai import OpenAI
 from app.ai.provider import Provider
 from app.core.settings import Settings
 
-ORDER = ("gemini", "anthropic", "grok")
+MAKERS = {"gemini": Gemini, "anthropic": Anthropic, "grok": Grok, "openai": OpenAI}
+ORDER = tuple(MAKERS)
+HEARS = tuple(name for name, maker in MAKERS.items() if maker.audio)
 TASKS = ("transcribe", "extract", "questions")
 _override: Provider | None = None
 _override_set = False
@@ -42,8 +47,7 @@ def configured(settings: Settings) -> list[str]:
 
 def build(settings: Settings, name: str) -> Provider:
     timeout = settings.ai_timeout_seconds
-    makers = {"gemini": Gemini, "anthropic": Anthropic, "grok": Grok}
-    return makers[name](
+    return MAKERS[name](
         _key(settings, name), timeout, base_url=getattr(settings, f"{name}_base_url")
     )
 
@@ -54,8 +58,10 @@ def choose(settings: Settings, task: str) -> str | None:
         return _override.name if _override is not None else None
     have = configured(settings)
     if task == "transcribe":
-        return "gemini" if "gemini" in have else None
-    wanted = getattr(settings, f"ai_{task}_provider", "") or settings.ai_provider
+        have = [name for name in have if name in HEARS]
+        wanted = settings.ai_transcribe_provider
+    else:
+        wanted = getattr(settings, f"ai_{task}_provider", "") or settings.ai_provider
     wanted = wanted.strip().lower()
     if wanted in have:
         return wanted
@@ -70,7 +76,9 @@ def provider(settings: Settings, task: str = "extract") -> Provider | None:
 
 
 def model_for(settings: Settings, task: str, provider_name: str = "gemini") -> str:
-    if provider_name in ("anthropic", "grok"):
+    if provider_name == "openai" and task == "transcribe":
+        return settings.openai_transcribe_model
+    if provider_name in ("anthropic", "grok", "openai"):
         return getattr(settings, f"{provider_name}_model")
     specific = {
         "transcribe": settings.gemini_transcribe_model,

@@ -13,14 +13,15 @@ token counts.
 | Gemini | `api/app/ai/gemini.py` | The REST API, with the key in the `x-goog-api-key` header, never in a URL. Structured answers use Gemini's `responseSchema`. Audio up to 12 MB goes inline in one request |
 | Anthropic | `api/app/ai/anthropic.py` | Claude over the Messages API, with the key in the `x-api-key` header. Structured answers are one forced tool call whose input schema is the schema asked for. Claude often sends a list field as a JSON string, sometimes the whole answer inside its own field; `unpack` decodes those against the schema. Text only: it cannot transcribe |
 | Grok | `api/app/ai/grok.py` | xAI's OpenAI-compatible chat completions, with the key in the `Authorization` header. Structured answers use `response_format` with the schema. Text only: it cannot transcribe |
+| OpenAI | `api/app/ai/openai.py` | Chat completions for the text tasks (`response_format` with the schema, no temperature: GPT-5 models take only their default) and `/audio/transcriptions` for recordings, as a named file with the transcription prompt. It hears audio, so it can **transcribe** |
 | Fake | `api/app/ai/fake.py` | Scripted answers for the tests; records every request; no network |
 
 `registry.provider(settings, task)` picks the provider for each task (`api/app/ai/registry.py`):
 
 | Task | Provider |
 |---|---|
-| Transcription | Gemini, the only one that hears audio. No Gemini key: transcription is off |
-| Extraction | `MEMOIR_AI_EXTRACT_PROVIDER`, else `MEMOIR_AI_PROVIDER`, else the first with a key: Gemini, Anthropic, Grok |
+| Transcription | `MEMOIR_AI_TRANSCRIBE_PROVIDER`, else the first with a key of those that hear audio: Gemini, OpenAI. Neither: transcription is off |
+| Extraction | `MEMOIR_AI_EXTRACT_PROVIDER`, else `MEMOIR_AI_PROVIDER`, else the first with a key: Gemini, Anthropic, Grok, OpenAI |
 | Questions | `MEMOIR_AI_QUESTIONS_PROVIDER`, else the same as extraction |
 
 A choice whose key is missing falls back to the first provider with a key. With no key at all, AI is off. The owner
@@ -37,16 +38,20 @@ Photo work (metadata, faces, descriptions) is not here: it belongs to the photo-
 
 | Variable | Default | What |
 |---|---|---|
-| `MEMOIR_GEMINI_API_KEY` | none | Gemini, the only provider that transcribes. On dontpanic, from the stack's `GEMINI_API_KEY_MEMOIR` |
+| `MEMOIR_GEMINI_API_KEY` | none | Gemini, for every task. On dontpanic, from the stack's `GEMINI_API_KEY_MEMOIR` |
 | `MEMOIR_GEMINI_MODEL` | `gemini-2.5-flash` | The model for every task |
 | `MEMOIR_GEMINI_TRANSCRIBE_MODEL`, `MEMOIR_GEMINI_EXTRACT_MODEL` | empty | A different model for one task |
 | `MEMOIR_ANTHROPIC_API_KEY` | none | Claude for extraction and questions. On dontpanic, from the stack's `ANTHROPIC_API_KEY_MEMOIR` |
 | `MEMOIR_ANTHROPIC_MODEL` | `claude-sonnet-5` | |
 | `MEMOIR_GROK_API_KEY` | none | Grok for extraction and questions. On dontpanic, from the stack's `GROK_API_KEY_MEMOIR` |
 | `MEMOIR_GROK_MODEL` | `grok-4.7` | |
-| `MEMOIR_AI_PROVIDER` | empty | `gemini`, `anthropic` or `grok` for the text tasks; empty means the first with a key |
+| `MEMOIR_OPENAI_API_KEY` | none | OpenAI for every task, transcription included. On dontpanic, from the stack's `OPENAI_API_KEY_MEMOIR` |
+| `MEMOIR_OPENAI_MODEL` | `gpt-5.5` | Extraction and questions |
+| `MEMOIR_OPENAI_TRANSCRIBE_MODEL` | `gpt-transcribe` | Transcription. It reports usage in seconds of audio, so its cost rows show no tokens; `gpt-4o-transcribe` reports tokens |
+| `MEMOIR_AI_TRANSCRIBE_PROVIDER` | empty | `gemini` or `openai` for transcription; empty means the first with a key |
+| `MEMOIR_AI_PROVIDER` | empty | `gemini`, `anthropic`, `grok` or `openai` for the text tasks; empty means the first with a key |
 | `MEMOIR_AI_EXTRACT_PROVIDER`, `MEMOIR_AI_QUESTIONS_PROVIDER` | empty | One task's own provider |
-| `MEMOIR_ANTHROPIC_BASE_URL`, `MEMOIR_GROK_BASE_URL` | the providers' own | Change only for a stand-in, like `MEMOIR_GEMINI_BASE_URL` |
+| `MEMOIR_ANTHROPIC_BASE_URL`, `MEMOIR_GROK_BASE_URL`, `MEMOIR_OPENAI_BASE_URL` | the providers' own | Change only for a stand-in, like `MEMOIR_GEMINI_BASE_URL` |
 | `MEMOIR_AI_TIMEOUT_SECONDS` | 180 | Per request |
 | `MEMOIR_GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com` | Where Gemini is reached. Change it only to point an end-to-end run at a stand-in |
 
