@@ -60,6 +60,9 @@ recording.
 - **Run it locally:** `make up`, then http://localhost:8080/memoir/ (the API answers on :8010 too).
 - **The API contract.** The web client is typed from `web/src/api/openapi.json`. After changing a route or a
   schema, run `make openapi` and commit the file; a test fails while it is stale.
+- **Every route has a role check** from `api/app/accounts/deps.py` (`require_role(...)`, `require_executor`);
+  only health, login and the invitation-accept routes are open. `tests/test_roles.py` fails when a route
+  forgets. Tables people edit use the `Audited` mixin. `docs/ACCOUNTS.md` has the rules.
 - **Errors** are always `{"error": {"code", "message", "field"}}` (`api/app/core/errors.py`). Raise
   `ApiError` from routes and services.
 - **Background work is a job** (`api/app/jobs/`): register a handler with `@handler("area.kind")`, enqueue

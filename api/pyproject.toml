@@ -7,6 +7,8 @@ description = "Memoir's API and job worker: one package, two processes."
 requires-python = ">=3.12"
 dependencies = [
   "alembic==1.20.0",
+  "argon2-cffi==25.1.0",
+  "email-validator==2.3.0",
   "fastapi==0.142.2",
   "psycopg[binary]==3.3.6",
   "pydantic==2.13.5",

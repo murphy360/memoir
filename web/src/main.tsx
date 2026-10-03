@@ -5,6 +5,7 @@ import { RouterProvider } from "react-router";
 
 import { makeQueryClient } from "./app/queryClient";
 import { makeRouter } from "./app/router";
+import "./styles.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("index.html has no #root");

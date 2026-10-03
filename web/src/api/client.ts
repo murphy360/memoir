@@ -1,4 +1,4 @@
-import createClient from "openapi-fetch";
+import createClient, { type Middleware } from "openapi-fetch";
 
 import type { components, paths } from "./schema";
 
@@ -29,6 +29,27 @@ export const api = createClient<paths>({
   // Looked up on each call rather than captured once, so tests can stand in for the network.
   fetch: (request) => globalThis.fetch(request),
 });
+
+const UNSAFE = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** The session's CSRF token, which the API sets in a cookie the app can read. */
+export function csrfToken(cookies: string = document.cookie): string | null {
+  const match = cookies.match(/(?:^|;\s*)memoir_csrf=([^;]+)/);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
+/** Every change carries the CSRF token in a header, as the API requires. */
+export const csrfMiddleware: Middleware = {
+  onRequest({ request }) {
+    const token = csrfToken();
+    if (UNSAFE.has(request.method) && token) {
+      request.headers.set("X-CSRF-Token", token);
+    }
+    return request;
+  },
+};
+
+api.use(csrfMiddleware);
 
 /** Unwraps an openapi-fetch result: the data, or an ApiError carrying the structured body. */
 export function unwrap<T>(result: {
