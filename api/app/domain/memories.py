@@ -11,9 +11,11 @@ from enum import StrEnum
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import (
+    CHAR,
     BigInteger,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     String,
     Text,
@@ -23,6 +25,7 @@ from sqlalchemy import (
     or_,
     select,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.accounts.deps import require_role
@@ -72,6 +75,18 @@ class Memory(ArchiveRow, Base):
     response_to_question_id: Mapped[int | None] = mapped_column(
         ForeignKey("questions.id", ondelete="SET NULL", use_alter=True)
     )
+    # The recording: kept as made, and as MP3 once normalised (requirements 4.1).
+    original_audio_sha256: Mapped[str | None] = mapped_column(
+        CHAR(64), ForeignKey("blobs.sha256", ondelete="RESTRICT")
+    )
+    audio_sha256: Mapped[str | None] = mapped_column(
+        CHAR(64), ForeignKey("blobs.sha256", ondelete="RESTRICT")
+    )
+    # normalising, normalised, or not_normalised (ffmpeg failed: the original is used).
+    audio_state: Mapped[str | None] = mapped_column(String(16))
+    audio_seconds: Mapped[float | None] = mapped_column(Float)
+    # Where the recording was started from (event, period, person, question, quick).
+    capture_context: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class MemoryMention(Base):
@@ -147,6 +162,9 @@ class MemoryOut(BaseModel):
     date_precision: str | None
     tone: str | None
     visibility: Visibility
+    audio_state: str | None = None
+    audio_seconds: float | None = None
+    response_to_question_id: int | None = None
     mentioned_ids: list[int] = []
     place_ids: list[int] = []
 

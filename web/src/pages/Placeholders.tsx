@@ -3,22 +3,29 @@ import { Link } from "react-router";
 import { usePosture } from "../app/usePosture";
 import { EmptyState } from "../components/EmptyState";
 import { useMe } from "../auth/useMe";
+import { PendingUploads } from "../features/record/UploadStatus";
+import { useUploads } from "../features/record/useUploads";
+
+/** One tap from home: the record screen starts at once, filed as a quick memory. */
+export const QUICK_RECORD = "/record?start=1&quick=1";
 
 /** Home. The phone's is capture first; the wide screen's is the review workspace. */
 export function HomePage() {
   const me = useMe();
   const posture = usePosture();
+  const all = useUploads();
   if (posture === "phone") {
     return (
       <section aria-labelledby="home-title" className="capture-home">
         <h1 id="home-title">Hello, {me.data?.display_name}</h1>
-        <Link to="/record" className="button primary big">
+        <Link to={QUICK_RECORD} className="button primary big">
           Record a memory
         </Link>
         <p className="hint">
           Tap, talk, tap again. Memoir writes it down and files it.
         </p>
         <Link to="/questions">Questions for you</Link>
+        <PendingUploads all={all} />
       </section>
     );
   }
@@ -47,14 +54,6 @@ function Soon({
       <h1 id="page-title">{title}</h1>
       <EmptyState title="Coming soon">{`${children} (${ticket}).`}</EmptyState>
     </section>
-  );
-}
-
-export function RecordPage() {
-  return (
-    <Soon title="Record a memory" ticket="ticket #6">
-      Recording arrives next
-    </Soon>
   );
 }
 

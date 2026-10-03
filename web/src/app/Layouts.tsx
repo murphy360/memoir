@@ -2,6 +2,8 @@ import { Link, NavLink, Outlet } from "react-router";
 
 import { Can } from "../auth/RequireAuth";
 import { useMe } from "../auth/useMe";
+import { useResumeUploads } from "../features/record/useUploads";
+import { QUICK_RECORD } from "../pages/Placeholders";
 import { NAV, type NavItem } from "./nav";
 import { usePosture } from "./usePosture";
 
@@ -57,7 +59,7 @@ function WideLayout() {
         <Link to="/" className="brand">
           Memoir
         </Link>
-        <Link to="/record" className="button primary record">
+        <Link to={QUICK_RECORD} className="button primary record">
           Record
         </Link>
         <Link to="/profile" className="who">
@@ -80,5 +82,6 @@ function WideLayout() {
 
 /** Every signed-in page hangs in one of the two postures, chosen by the screen's width. */
 export function AppShell() {
+  useResumeUploads();
   return usePosture() === "wide" ? <WideLayout /> : <PhoneLayout />;
 }

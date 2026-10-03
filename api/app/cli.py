@@ -45,8 +45,10 @@ def _worker() -> None:
     from app.core.db import session_factory
     from app.jobs import worker
 
-    # Every model is registered before the first query, so foreign keys resolve.
+    # Every model is registered before the first query, so foreign keys resolve, and
+    # every job handler before the first job is claimed.
     importlib.import_module("app.models")
+    importlib.import_module("app.jobs.catalog").load()
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())

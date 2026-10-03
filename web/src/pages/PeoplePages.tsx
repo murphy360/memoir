@@ -65,6 +65,11 @@ export function PersonPage() {
     <section aria-labelledby="person-title">
       <h1 id="person-title">{person.data?.name ?? "…"}</h1>
       <p>
+        <Link to={`/record?person=${id}&start=1`} className="button primary">
+          Record a memory about {person.data?.name ?? "them"}
+        </Link>
+      </p>
+      <p>
         <Link to="/people">All people</Link>
       </p>
     </section>
@@ -88,6 +93,11 @@ export function EventPage() {
     <section aria-labelledby="event-title">
       <h1 id="event-title">{event.data?.title ?? "…"}</h1>
       {event.data?.date_text ? <p>{event.data.date_text}</p> : null}
+      <p>
+        <Link to={`/record?event=${id}&start=1`} className="button primary">
+          Add a memory to this event
+        </Link>
+      </p>
       <ul className="list">
         {event.data?.participants.map((p) => (
           <li key={p.person_id}>
