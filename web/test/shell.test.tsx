@@ -32,13 +32,7 @@ test("the phone posture has five tabs and no sidebar", async () => {
   const tabs = within(nav)
     .getAllByRole("link")
     .map((a) => a.textContent);
-  expect(tabs).toEqual([
-    "Home",
-    "Timeline",
-    "People",
-    "Questions",
-    "Account",
-  ]);
+  expect(tabs).toEqual(["Home", "Timeline", "People", "Questions", "Account"]);
   expect(
     screen.getByRole("link", { name: "Record a memory" }),
   ).toBeInTheDocument();
