@@ -359,3 +359,55 @@ def test_fixture_dates_read_as_expected():
 
     assert parse("summer of 1968").start == date(1968, 6, 1)
     assert subprocess.run(["ffmpeg", "-version"], capture_output=True).returncode == 0
+
+
+@pytest.mark.parametrize("heard", ["", "  ", "[unclear]", "[unclear] [unclear]."])
+def test_a_recording_with_nothing_said_is_empty_and_read_no_further(
+    session, tmp_path, ai, heard
+):
+    c = family(session)
+    ai.transcript = heard
+    m = recorded_memory(c, session, tmp_path, seconds=1)
+    assert transcribe(ctx(session), {"memory_id": m["id"]})["state"] == "empty"
+    shown = c.get(f"/api/memories/{m['id']}").json()
+    assert shown["transcript_state"] == "empty"
+    assert session.query(Job).filter(Job.kind == "analysis.extract").count() == 0
+    from app.questions.interviewer import still_coming
+
+    assert not still_coming(session.get(Memory, m["id"]))
+    assert c.delete(f"/api/memories/{m['id']}").status_code == 204
+    assert c.get(f"/api/memories/{m['id']}").status_code == 404
+
+
+def test_words_among_the_unclear_still_count():
+    from app.analysis.transcribe import heard_words
+
+    assert heard_words("[unclear] my brother Jim [unclear]")
+    assert not heard_words("[unclear] ... [unclear]")
+
+
+def test_recordings_saved_empty_before_are_marked_empty(session):
+    import importlib
+
+    from sqlalchemy import text
+
+    migration = importlib.import_module("app.migrations.versions.0009_empty_recordings")
+    c = family(session)
+    silent = memory(c, title="Silent")
+    spoken = memory(c, title="Spoken", transcript="We drove to Erie.")
+    typed = memory(c, title="Typed")
+    for mid, source in ((silent["id"], "machine"), (spoken["id"], "machine")):
+        row = session.get(Memory, mid)
+        row.transcript_state, row.transcript_source = "done", source
+    session.get(Memory, typed["id"]).transcript_state = "manual"
+    session.commit()
+    session.execute(text(migration.MARK_EMPTY))
+    session.commit()
+    session.expire_all()
+    ids = (silent["id"], spoken["id"], typed["id"])
+    states = {m: session.get(Memory, m).transcript_state for m in ids}
+    assert states == {
+        silent["id"]: "empty",
+        spoken["id"]: "done",
+        typed["id"]: "manual",
+    }

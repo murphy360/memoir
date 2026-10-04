@@ -7,6 +7,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { ErrorText } from "../../components/Form";
 import { useToast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
+import { DeleteMemory } from "../memories/DeleteMemory";
 import { SavedToLine } from "../place/SavedToLine";
 import { describe } from "../place/api";
 
@@ -55,7 +56,12 @@ export function InboxPage() {
             {memory.date_text ? (
               <span className="hint"> {memory.date_text}</span>
             ) : null}
-            {suggestion ? (
+            {memory.transcript_state === "empty" ? (
+              <div className="row">
+                <span className="hint">Nothing was heard.</span>
+                <DeleteMemory memoryId={memory.id} label="Delete it" />
+              </div>
+            ) : suggestion ? (
               <div className="row">
                 <Button
                   variant="primary"

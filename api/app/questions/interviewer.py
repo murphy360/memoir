@@ -30,7 +30,7 @@ SCOPE_ORDER = {Scope.EVENT: 0, Scope.PERIOD: 1, Scope.PERSON: 2}
 # How long after a recording its own questions are worth waiting for.
 PATIENCE = timedelta(minutes=3)
 # States after which a memory's questions will not come.
-NO_QUESTIONS = {"failed", "ai_off", "needs_details"}
+NO_QUESTIONS = {"failed", "ai_off", "needs_details", "empty"}
 
 
 def own_person_id(session: Session, user: User) -> int | None:

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 
 import { api, apiBaseUrl, unwrap } from "../../api/client";
 import { Button } from "../../components/Button";
@@ -8,6 +8,7 @@ import { ErrorText } from "../../components/Form";
 import { useToast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { SavedToLine } from "../place/SavedToLine";
+import { DeleteMemory } from "./DeleteMemory";
 import {
   AnsweredQuestion,
   RaisedQuestions,
@@ -37,6 +38,15 @@ function TranscriptState({
     case "transcribing":
       return (
         <p role="status">Writing down the words. This takes a minute or two.</p>
+      );
+    case "empty":
+      return (
+        <div className="warning" role="status">
+          <p>
+            Memoir heard nothing in this recording. If Record was tapped by
+            mistake, delete it.
+          </p>
+        </div>
       );
     case "ai_off":
       return (
@@ -165,6 +175,7 @@ function useMemory(id: number) {
 /** One memory: its recording, its words, and what Memoir worked out from them. */
 export function MemoryPage() {
   const id = Number(useParams().id);
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const memory = useMemory(id);
   const retry = useMutation({
@@ -190,8 +201,9 @@ export function MemoryPage() {
       <TranscriptState memory={m} onRetry={() => retry.mutate()} />
       <Transcript key={m.transcript ?? ""} memory={m} />
       <Details memory={m} />
-      <SavedToLine memoryId={id} />
+      {m.transcript_state === "empty" ? null : <SavedToLine memoryId={id} />}
       <RaisedQuestions memoryId={id} />
+      <DeleteMemory memoryId={id} onDeleted={() => void navigate("/")} />
     </section>
   );
 }
