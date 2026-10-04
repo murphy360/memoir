@@ -87,7 +87,8 @@ class Memory(ArchiveRow, Base):
     audio_seconds: Mapped[float | None] = mapped_column(Float)
     # Where the recording was started from (event, period, person, question, quick).
     capture_context: Mapped[dict | None] = mapped_column(JSONB)
-    # transcribing, done, failed, ai_off; and manual once a person edits the transcript.
+    # transcribing, done, empty (nothing was said), failed, ai_off; and manual once a
+    # person edits the transcript.
     transcript_state: Mapped[str | None] = mapped_column(String(16))
     transcript_source: Mapped[str | None] = mapped_column(String(16))
     # done, needs_details (extraction could not run or failed), ai_off.

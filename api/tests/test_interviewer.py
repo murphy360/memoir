@@ -411,3 +411,11 @@ def test_a_recording_started_from_an_event_keeps_it_when_answering(
         upload(c, recording(tmp_path), question_id=q["id"], event_id=other["id"])["id"],
     )
     assert m["event_id"] == other["id"]
+
+
+def test_a_deleted_memory_is_nothing_to_wait_for(session, told):
+    c = told["c"]
+    m = memory(c, title="Silent")
+    assert c.delete(f"/api/memories/{m['id']}").status_code == 204
+    nxt = made(c.get(f"/api/questions/next?after_memory_id={m['id']}"), 200)
+    assert nxt["waiting"] is False

@@ -1,9 +1,12 @@
 """Transcription: the recording's words, written on the memory (requirements 6.2).
 
 Audio larger than the provider takes in one request is cut into segments with ffmpeg and
-transcribed piece by piece. A transcript a person edited is never replaced by a job.
+transcribed piece by piece. A transcript a person edited is never replaced by a job. A
+recording in which nothing was said is marked "empty", is not read further, and the app
+offers to delete it.
 """
 
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -27,6 +30,12 @@ PROMPT = (
     "speaker on a new line with 'Speaker 1:', 'Speaker 2:' and so on. Write [unclear] "
     "for words you cannot make out."
 )
+
+
+def heard_words(text: str) -> bool:
+    """Whether a transcript holds any words: not empty, not only [unclear] and
+    punctuation."""
+    return bool(re.search(r"\w", re.sub(r"\[unclear\]", "", text or "")))
 
 
 def _cut(path: Path, length: int, workdir: Path) -> list[Path]:
@@ -127,8 +136,15 @@ def transcribe(ctx: JobContext, payload: dict) -> dict:
             raise PermanentError(str(exc)) from exc
         raise
     memory.transcript = "\n\n".join(t for t in texts if t)
-    memory.transcript_state, memory.transcript_source = "done", "machine"
+    memory.transcript_source = "machine"
     memory.analysis_error = None
+    if not heard_words(memory.transcript):
+        # Record tapped and stopped with nothing said: nothing to read or ask about,
+        # and the app offers to delete it.
+        memory.transcript_state = "empty"
+        ctx.session.commit()
+        return {"state": "empty", "parts": len(texts)}
+    memory.transcript_state = "done"
     ctx.session.commit()
     queue.enqueue(ctx.session, "analysis.extract", {"memory_id": memory.id})
     return {"state": "done", "parts": len(texts), "characters": len(memory.transcript)}

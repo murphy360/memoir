@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.accounts.deps import require_role
 from app.accounts.models import Role, User
 from app.core.db import get_session
+from app.core.errors import ApiError
 from app.domain.common import live
 from app.domain.memories import visible
 from app.domain.questions import Question, QuestionOut
@@ -39,9 +40,12 @@ def next_question(
 ):
     """The one question to ask now, for the home screen and after each recording."""
     interviewer.seed(db, user)
-    waiting = bool(
-        after_memory_id and interviewer.still_coming(visible(db, after_memory_id, user))
-    )
+    waiting = False
+    if after_memory_id:
+        try:
+            waiting = interviewer.still_coming(visible(db, after_memory_id, user))
+        except ApiError:
+            pass  # deleted (a silent take, say): nothing to wait for
     found = interviewer.pending_for(db, user, limit=1)
     question = interviewer.out(db, found[0]) if found else None
     return NextQuestion(question=question, waiting=waiting)
