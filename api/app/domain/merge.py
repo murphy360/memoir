@@ -33,6 +33,7 @@ EVENT_FIELDS = (
     "date_start",
     "date_end",
     "date_precision",
+    "date_source",
     "location_text",
     "place_id",
     "thread_id",
@@ -46,9 +47,11 @@ PERSON_FIELDS = (
     "birth_text",
     "birth_start",
     "birth_end",
+    "birth_source",
     "death_text",
     "death_start",
     "death_end",
+    "death_source",
 )
 
 
@@ -233,7 +236,8 @@ def merge_periods(session: Session, source: Period, target: Period) -> Period:
             422, "bad_target", "Periods merge only within one person's life.", "into_id"
         )
     move_contents(session, source, target)
-    _fill(target, source, ("start_text", "start_on", "end_text", "end_on", "summary"))
+    dates = ("start_text", "start_on", "end_text", "end_on", "dates_source")
+    _fill(target, source, (*dates, "summary"))
     soft_delete(source)
     session.commit()
     return target

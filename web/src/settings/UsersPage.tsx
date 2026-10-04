@@ -113,7 +113,7 @@ export function UsersPage() {
     queryFn: async () => unwrap(await api.GET("/api/users")),
   });
   return (
-    <main>
+    <section>
       <h1>People with access</h1>
       <ul className="users">
         {users.data?.map((u) => (
@@ -121,6 +121,6 @@ export function UsersPage() {
         ))}
       </ul>
       <InvitationsPanel />
-    </main>
+    </section>
   );
 }

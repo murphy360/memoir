@@ -26,6 +26,7 @@ from app.accounts.deps import require_role
 from app.accounts.models import Role, User
 from app.core.db import Base, get_session, utcnow
 from app.core.errors import ApiError
+from app.dates.store import MANUAL, set_range
 from app.domain.common import (
     LAST_DAY,
     ArchiveRow,
@@ -65,6 +66,7 @@ class Period(ArchiveRow, Base):
     start_on: Mapped[date | None] = mapped_column(Date)
     end_text: Mapped[str | None] = mapped_column(String(100))
     end_on: Mapped[date | None] = mapped_column(Date)
+    dates_source: Mapped[str | None] = mapped_column(String(16))
     summary: Mapped[str | None] = mapped_column(Text)
     # True when the summary was written by the machine; a typed one is never replaced.
     summary_generated: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -76,6 +78,9 @@ class PeriodIn(BaseModel):
     start_text: str | None = Field(None, max_length=100)
     end_text: str | None = Field(None, max_length=100)
     summary: str | None = None
+    keep_text_only: bool = Field(
+        False, description="Save a date Memoir cannot read, as text only"
+    )
 
 
 class PeriodPatch(BaseModel):
@@ -83,6 +88,9 @@ class PeriodPatch(BaseModel):
     start_text: str | None = Field(None, max_length=100)
     end_text: str | None = Field(None, max_length=100)
     summary: str | None = None
+    keep_text_only: bool = Field(
+        False, description="Save a date Memoir cannot read, as text only"
+    )
 
 
 class PeriodOut(BaseModel):
@@ -136,10 +144,9 @@ def create(session: Session, user: User, body: PeriodIn) -> Period:
         person_id=person.id,
         title=title,
         slug=_slug(session, person.id, title),
-        start_text=clean(body.start_text, 100),
-        end_text=clean(body.end_text, 100),
         summary=clean(body.summary, 20_000),
     )
+    set_range(period, body.start_text, body.end_text, MANUAL, body.keep_text_only)
     session.add(period)
     session.commit()
     return period
@@ -305,9 +312,10 @@ def update_period(
     if "title" in sent and body.title:
         period.title = clean(body.title, 160)
         period.slug = _slug(db, period.person_id, period.title, period.id)
-    for field in ("start_text", "end_text"):
-        if field in sent:
-            setattr(period, field, clean(getattr(body, field), 100))
+    if sent & {"start_text", "end_text"}:
+        start = body.start_text if "start_text" in sent else period.start_text
+        end = body.end_text if "end_text" in sent else period.end_text
+        set_range(period, start, end, MANUAL, body.keep_text_only)
     if "summary" in sent:
         period.summary = clean(body.summary, 20_000)
         period.summary_generated = False

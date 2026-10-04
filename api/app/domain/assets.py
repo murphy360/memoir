@@ -29,6 +29,7 @@ from app.accounts.models import Role, User
 from app.blobs.models import Blob
 from app.core.db import Base, get_session
 from app.core.errors import ApiError
+from app.dates.store import MANUAL, set_point
 from app.domain.common import LAST_DAY, ArchiveRow, clean, live, scoped, soft_delete
 from app.domain.events import Event
 from app.domain.pagination import Page, PageParams, paginate
@@ -64,6 +65,7 @@ class Asset(ArchiveRow, Base):
     capture_start: Mapped[date | None] = mapped_column(Date)
     capture_end: Mapped[date | None] = mapped_column(Date)
     capture_precision: Mapped[str | None] = mapped_column(String(16))
+    capture_source: Mapped[str | None] = mapped_column(String(16))
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
     exif_place_name: Mapped[str | None] = mapped_column(String(200))
@@ -96,6 +98,9 @@ class AssetIn(BaseModel):
     original_filename: str | None = Field(None, max_length=255)
     capture_text: str | None = Field(None, max_length=100)
     place_id: int | None = None
+    keep_text_only: bool = Field(
+        False, description="Save a date Memoir cannot read, as text only"
+    )
 
 
 class AssetPatch(BaseModel):
@@ -103,6 +108,9 @@ class AssetPatch(BaseModel):
     notes: str | None = None
     capture_text: str | None = Field(None, max_length=100)
     place_id: int | None = None
+    keep_text_only: bool = Field(
+        False, description="Save a date Memoir cannot read, as text only"
+    )
 
 
 class AssetOut(BaseModel):
@@ -207,9 +215,9 @@ def create_asset(
         notes=clean(body.notes, 20_000),
         blob_sha256=body.blob_sha256,
         original_filename=clean(body.original_filename, 255),
-        capture_text=clean(body.capture_text, 100),
         place_id=body.place_id,
     )
+    set_point(asset, "capture", body.capture_text, MANUAL, body.keep_text_only)
     db.add(asset)
     db.commit()
     return out(db, [asset])[0]
@@ -231,9 +239,11 @@ def update_asset(
 ):
     asset = live(db, Asset, asset_id, user, "asset")
     sent = body.model_fields_set
-    for field, limit in (("title", 180), ("notes", 20_000), ("capture_text", 100)):
+    for field, limit in (("title", 180), ("notes", 20_000)):
         if field in sent:
             setattr(asset, field, clean(getattr(body, field), limit))
+    if "capture_text" in sent:
+        set_point(asset, "capture", body.capture_text, MANUAL, body.keep_text_only)
     if "place_id" in sent:
         if body.place_id:
             live(db, Place, body.place_id, user, "place")

@@ -7,7 +7,7 @@ WEB_TEST := memoir-web-test:$(TAG)
 MOUNT := -v "$(CURDIR):/src"
 AS_ME := -u $$(id -u):$$(id -g) -e HOME=/tmp
 
-.PHONY: images test test-api test-web lint lint-api lint-web format openapi up down
+.PHONY: images test test-api test-web lint lint-api lint-web format openapi up down smoke
 
 images:
 	docker build --target test -t $(API_TEST) api
@@ -51,3 +51,11 @@ up:
 
 down:
 	docker compose down
+
+# A real browser through the running stack (`make up` first). See e2e/README.md.
+smoke:
+	mkdir -p e2e/out
+	docker run --rm --network host -e MEMOIR_PASSWORD -e MEMOIR_EMAIL -e MEMOIR_URL \
+		-v "$(CURDIR)/e2e:/e2e:ro" -v "$(CURDIR)/e2e/out:/out" \
+		mcr.microsoft.com/playwright/python:v1.63.0-noble \
+		sh -c "pip install -q playwright==1.63.0 && python /e2e/smoke.py"

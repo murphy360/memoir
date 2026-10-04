@@ -57,6 +57,12 @@
             ],
             "title": "Capture Text"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "kind": {
             "$ref": "#/components/schemas/Kind"
           },
@@ -316,6 +322,12 @@
             ],
             "title": "Capture Text"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "notes": {
             "anyOf": [
               {
@@ -448,6 +460,63 @@
         "title": "Children",
         "type": "string"
       },
+      "Context": {
+        "description": "Where the recording was started: it travels with the upload.",
+        "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Id"
+          },
+          "quick": {
+            "default": false,
+            "description": "One tap from the home screen",
+            "title": "Quick",
+            "type": "boolean"
+          }
+        },
+        "title": "Context",
+        "type": "object"
+      },
       "CreateInvitation": {
         "properties": {
           "email": {
@@ -515,6 +584,99 @@
         "title": "CreatedInvitation",
         "type": "object"
       },
+      "DateReading": {
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "examples": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Examples",
+            "type": "array"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision"
+          },
+          "reading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What Memoir understood: \"July 1968\"",
+            "title": "Reading"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "DateReading",
+        "type": "object"
+      },
+      "DateText": {
+        "properties": {
+          "text": {
+            "maxLength": 100,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "DateText",
+        "type": "object"
+      },
       "EpicIn": {
         "properties": {
           "description": {
@@ -539,6 +701,12 @@
               }
             ],
             "title": "End Text"
+          },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
           },
           "period_id": {
             "title": "Period Id",
@@ -715,6 +883,12 @@
             ],
             "title": "End Text"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "period_id": {
             "anyOf": [
               {
@@ -844,6 +1018,12 @@
               }
             ],
             "title": "Description"
+          },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
           },
           "location_text": {
             "anyOf": [
@@ -1064,6 +1244,12 @@
               }
             ],
             "title": "Description"
+          },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
           },
           "location_text": {
             "anyOf": [
@@ -1370,6 +1556,12 @@
             ],
             "title": "Event Id"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "mentioned_ids": {
             "default": [],
             "items": {
@@ -1430,6 +1622,28 @@
       },
       "MemoryOut": {
         "properties": {
+          "audio_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Seconds"
+          },
+          "audio_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio State"
+          },
           "date_end": {
             "anyOf": [
               {
@@ -1522,6 +1736,17 @@
             "format": "date-time",
             "title": "Recorded At",
             "type": "string"
+          },
+          "response_to_question_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response To Question Id"
           },
           "storyteller_id": {
             "anyOf": [
@@ -1637,6 +1862,12 @@
             ],
             "title": "Event Id"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "mentioned_ids": {
             "anyOf": [
               {
@@ -1724,6 +1955,29 @@
           "into_id"
         ],
         "title": "MergeInto",
+        "type": "object"
+      },
+      "OpenUpload": {
+        "properties": {
+          "content_type": {
+            "examples": [
+              "audio/webm;codecs=opus"
+            ],
+            "maxLength": 120,
+            "title": "Content Type",
+            "type": "string"
+          },
+          "context": {
+            "$ref": "#/components/schemas/Context",
+            "default": {
+              "quick": false
+            }
+          }
+        },
+        "required": [
+          "content_type"
+        ],
+        "title": "OpenUpload",
         "type": "object"
       },
       "Page_AssetOut_": {
@@ -2104,6 +2358,12 @@
             ],
             "title": "End Text"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "person_id": {
             "title": "Person Id",
             "type": "integer"
@@ -2254,6 +2514,12 @@
             ],
             "title": "End Text"
           },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
+          },
           "start_text": {
             "anyOf": [
               {
@@ -2343,6 +2609,12 @@
               }
             ],
             "title": "Email"
+          },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
           },
           "name": {
             "maxLength": 120,
@@ -2576,6 +2848,12 @@
               }
             ],
             "title": "Email"
+          },
+          "keep_text_only": {
+            "default": false,
+            "description": "Save a date Memoir cannot read, as text only",
+            "title": "Keep Text Only",
+            "type": "boolean"
           },
           "name": {
             "anyOf": [
@@ -3573,6 +3851,41 @@
         "title": "UpdateUser",
         "type": "object"
       },
+      "UploadOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "memory_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Id"
+          },
+          "received_bytes": {
+            "title": "Received Bytes",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "received_bytes",
+          "status",
+          "memory_id"
+        ],
+        "title": "UploadOut",
+        "type": "object"
+      },
       "UserOut": {
         "properties": {
           "created_at": {
@@ -4203,6 +4516,260 @@
         "summary": "Sign Out Everywhere Else",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/capture/uploads": {
+      "post": {
+        "operationId": "open_upload_api_capture_uploads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Upload",
+        "tags": [
+          "capture"
+        ]
+      }
+    },
+    "/api/capture/uploads/{upload_id}": {
+      "delete": {
+        "operationId": "abort_upload_api_capture_uploads__upload_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Abort Upload",
+        "tags": [
+          "capture"
+        ]
+      },
+      "get": {
+        "description": "How far an upload got: a client resumes from `received_bytes`.",
+        "operationId": "upload_state_api_capture_uploads__upload_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload State",
+        "tags": [
+          "capture"
+        ]
+      },
+      "put": {
+        "description": "The request body is the chunk's raw bytes (application/octet-stream).",
+        "operationId": "upload_chunk_api_capture_uploads__upload_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Where this chunk starts",
+            "in": "query",
+            "name": "offset",
+            "required": true,
+            "schema": {
+              "description": "Where this chunk starts",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Chunk",
+        "tags": [
+          "capture"
+        ]
+      }
+    },
+    "/api/capture/uploads/{upload_id}/finalize": {
+      "post": {
+        "operationId": "finalize_upload_api_capture_uploads__upload_id__finalize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Finalize Upload",
+        "tags": [
+          "capture"
+        ]
+      }
+    },
+    "/api/dates/parse": {
+      "post": {
+        "description": "A read-only preview: it changes nothing, so a viewer may call it.",
+        "operationId": "preview_api_dates_parse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DateText"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DateReading"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "dates"
         ]
       }
     },
@@ -5959,6 +6526,54 @@
         "summary": "Update Memory",
         "tags": [
           "memories"
+        ]
+      }
+    },
+    "/api/memories/{memory_id}/audio": {
+      "get": {
+        "description": "The recording, MP3 when normalised. Supports Range requests, so\nplayers can seek.",
+        "operationId": "memory_audio_api_memories__memory_id__audio_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The recording as it was made",
+            "in": "query",
+            "name": "original",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "The recording as it was made",
+              "title": "Original",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Memory Audio",
+        "tags": [
+          "capture"
         ]
       }
     },

@@ -19,8 +19,9 @@ PUBLIC = {
     ("GET", "/api/invitations/accept/{token}"),
     ("POST", "/api/invitations/accept/{token}"),
 }
-# A viewer may still manage their own account.
+# A viewer may still manage their own account, and use read-only previews.
 SELF_SERVICE = {
+    ("POST", "/api/dates/parse"),
     ("POST", "/api/auth/logout"),
     ("POST", "/api/auth/logout-all"),
     ("PATCH", "/api/me"),

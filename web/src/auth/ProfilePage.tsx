@@ -5,20 +5,23 @@ import { useNavigate } from "react-router";
 import { api, unwrap } from "../api/client";
 import type { Me } from "../api/types";
 import { ErrorText, Field } from "../components/Form";
+import { useOptimisticMutation } from "../lib/optimistic";
 import { ChangePasswordForm } from "./ChangePasswordPage";
 import { ME, useMe } from "./useMe";
 
 function NameForm({ me }: { me: Me }) {
   const [name, setName] = useState(me.display_name);
-  const queryClient = useQueryClient();
-  const save = useMutation({
-    mutationFn: async () =>
-      unwrap(await api.PATCH("/api/me", { body: { display_name: name } })),
-    onSuccess: (user) => queryClient.setQueryData(ME, user),
+  const save = useOptimisticMutation<Me | null, string>({
+    queryKey: ME,
+    mutationFn: async (display_name) =>
+      unwrap(await api.PATCH("/api/me", { body: { display_name } })),
+    apply: (current, display_name) =>
+      current ? { ...current, display_name } : current,
+    success: "Name saved.",
   });
   function submit(event: FormEvent) {
     event.preventDefault();
-    save.mutate();
+    save.mutate(name);
   }
   return (
     <form onSubmit={submit}>
@@ -84,8 +87,11 @@ export function ProfilePage() {
   const me = useMe();
   if (!me.data) return null;
   return (
-    <main className="narrow">
+    <section className="narrow" aria-label="Your account">
       <h1>Your account</h1>
+      <p>
+        Signed in as <strong>{me.data.display_name}</strong>.
+      </p>
       <p>
         {me.data.email}, {me.data.role}
         {me.data.is_executor ? ", executor" : ""}
@@ -96,6 +102,6 @@ export function ProfilePage() {
         <ChangePasswordForm onDone={() => undefined} />
       </section>
       <Sessions />
-    </main>
+    </section>
   );
 }
