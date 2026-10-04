@@ -49,6 +49,10 @@ services:
       MEMOIR_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY_MEMOIR:-}
       MEMOIR_GROK_API_KEY: ${GROK_API_KEY_MEMOIR:-}
       MEMOIR_OPENAI_API_KEY: ${OPENAI_API_KEY_MEMOIR:-}
+      # OpenAI transcribes and reads while the Gemini project has no credit. Set either in
+      # the stack's .env to change it (gemini, anthropic, grok or openai).
+      MEMOIR_AI_TRANSCRIBE_PROVIDER: ${MEMOIR_AI_TRANSCRIBE_PROVIDER:-openai}
+      MEMOIR_AI_PROVIDER: ${MEMOIR_AI_PROVIDER:-openai}
     volumes: &blobs
       - /docker/memoir/blobs:/data/blobs
     networks: [memoir, media_network]

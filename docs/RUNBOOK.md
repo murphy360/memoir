@@ -16,7 +16,7 @@ validated in CI, and `deploy/Caddyfile` is the Caddy block. Commands below run o
 
 | On the host | What | Owner, mode |
 |---|---|---|
-| `/docker/memoir/memoir.env` | The app's secrets: `MEMOIR_DATABASE_URL`, and optionally `MEMOIR_AI_PROVIDER` | root, 600 |
+| `/docker/memoir/memoir.env` | The app's secrets: `MEMOIR_DATABASE_URL` | root, 600 |
 | `~/Software/dontpanic/.env` | Memoir's own AI keys, `GEMINI_API_KEY_MEMOIR`, `ANTHROPIC_API_KEY_MEMOIR`, `GROK_API_KEY_MEMOIR` and `OPENAI_API_KEY_MEMOIR`. Compose passes them to the API and the worker as `MEMOIR_GEMINI_API_KEY` and so on | the owner |
 | `/docker/memoir/postgres.env` | `POSTGRES_PASSWORD`, used only when the database is first created | root, 600 |
 | `/docker/memoir/postgres` | The database files | the image's postgres user |
@@ -60,10 +60,7 @@ rewrite at `/memoir-v0` until the owner retires it (the dontpanic pull request m
    echo "POSTGRES_PASSWORD=$pw" | sudo tee /docker/memoir/postgres.env >/dev/null
    printf 'MEMOIR_DATABASE_URL=postgresql+psycopg://memoir:%s@memoir-db:5432/memoir\n' "$pw" \
        | sudo tee /docker/memoir/memoir.env >/dev/null
-   # The AI keys come from the stack's .env (the table above). Gemini comes first for every task;
-   # to have OpenAI transcribe, or Claude, Grok or OpenAI read and ask, instead (docs/AI.md):
-   #   echo 'MEMOIR_AI_TRANSCRIBE_PROVIDER=openai' | sudo tee -a /docker/memoir/memoir.env >/dev/null
-   #   echo 'MEMOIR_AI_PROVIDER=anthropic' | sudo tee -a /docker/memoir/memoir.env >/dev/null
+   # The AI keys and the choice of provider come from the stack's compose file and .env (below).
    sudo chmod 600 /docker/memoir/memoir.env /docker/memoir/postgres.env
    unset pw
    ```
@@ -153,6 +150,13 @@ docker exec memoir-drill-db psql -U memoir -d memoir -c "SELECT count(*) FROM me
 docker rm -f memoir-drill-db && sudo rm -r /tmp/memoir-drill-blobs
 ```
 
+## Which AI does what
+
+The stack's compose file sets OpenAI for every task while the Gemini project has no credit:
+`MEMOIR_AI_TRANSCRIBE_PROVIDER` and `MEMOIR_AI_PROVIDER` default to `openai`. To change either, set it in the
+stack's `.env` (for example `MEMOIR_AI_PROVIDER=anthropic`, or `gemini` for both once Gemini has credit), then
+`docker compose up -d --force-recreate memoir-api memoir-worker`. `/api/ai/status` shows the result.
+
 ## Rotate a secret
 
 - **An AI key.** Edit `GEMINI_API_KEY_MEMOIR`, `ANTHROPIC_API_KEY_MEMOIR`, `GROK_API_KEY_MEMOIR` or
@@ -191,6 +195,6 @@ docker rm -f memoir-drill-db && sudo rm -r /tmp/memoir-drill-blobs
 |---|---|
 | `/api/health` says the worker is `stale` | `docker compose logs --tail 100 memoir-worker`. A long transcription keeps it fresh, so stale means stopped or stuck. `docker compose restart memoir-worker` is safe: a job it held is picked up again |
 | Recordings say "AI is off" | A key for a provider that transcribes (`GEMINI_API_KEY_MEMOIR` or `OPENAI_API_KEY_MEMOIR` in the stack's `.env`), and the owner's AI settings. `/api/ai/status` says which provider does each task |
-| Recordings say transcription failed with "402" | The Gemini project is out of prepaid credit. Top it up, or set `MEMOIR_AI_TRANSCRIBE_PROVIDER=openai`, then **Try again** on each memory |
+| Recordings say transcription failed with "402" | The Gemini project is out of prepaid credit. Top it up, or keep `MEMOIR_AI_TRANSCRIBE_PROVIDER=openai` ("Which AI does what"), then **Try again** on each memory |
 | 502 from Caddy | `docker compose ps`: which `memoir-*` service is not healthy, then its logs |
 | Disk filling | `du -sh /docker/memoir/*`. Recordings are kept forever by design. Soft-deleted rows purge after 30 days |
