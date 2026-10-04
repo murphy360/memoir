@@ -96,6 +96,8 @@ class Memory(ArchiveRow, Base):
     # What extraction proposed beyond the fields it filled: new names, relationship
     # effects for the braid, the model and prompt version.
     extracted: Mapped[dict | None] = mapped_column(JSONB)
+    # When auto-filing ran for this memory: it runs once, so what it made is not remade.
+    autofiled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class MemoryMention(Base):

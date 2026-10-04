@@ -19,6 +19,14 @@ function api(extra = {}) {
     "GET /api/me/sessions": ok([]),
     "GET /api/users": ok([]),
     "GET /api/invitations": ok([]),
+    "GET /api/me/person": ok({ id: 1, name: "Corey", aliases: [] }),
+    "GET /api/people/1/timeline": ok({
+      person: { id: 1, name: "Corey", aliases: [] },
+      periods: [],
+      next_cursor: null,
+      unplaced_events: 0,
+    }),
+    "GET /api/inbox": ok({ items: [], next_cursor: null }),
     ...extra,
   });
 }

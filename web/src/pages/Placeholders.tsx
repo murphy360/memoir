@@ -57,26 +57,10 @@ function Soon({
   );
 }
 
-export function TimelinePage() {
-  return (
-    <Soon title="Timeline" ticket="ticket #8">
-      Your periods, epics and events will show here
-    </Soon>
-  );
-}
-
 export function QuestionsPage() {
   return (
     <Soon title="Questions for you" ticket="ticket #9">
       Follow-up questions about your stories will wait here
-    </Soon>
-  );
-}
-
-export function InboxPage() {
-  return (
-    <Soon title="Waiting to be placed" ticket="ticket #8">
-      Memories and photos that are not on the timeline yet will wait here
     </Soon>
   );
 }

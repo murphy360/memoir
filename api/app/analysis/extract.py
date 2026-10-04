@@ -23,6 +23,7 @@ from app.domain.memories import Memory, MemoryMention, MemoryPlace, join_event
 from app.domain.people import Person
 from app.domain.places import Place
 from app.jobs.registry import JobContext, PermanentError, handler
+from app.placement.service import autofile
 
 PROMPT_VERSION = "extract-1"
 TONES = ("positive", "negative", "reflective", "neutral", "mixed")
@@ -257,4 +258,6 @@ def extract(ctx: JobContext, payload: dict) -> dict:
     report = apply(ctx.session, user, memory, answer.data, answer.model)
     memory.extraction_state = "done"
     ctx.session.commit()
+    # Now that the date is known, a quick memory is filed where it belongs (once).
+    autofile(ctx.session, memory)
     return {"state": "done", "created_people": report["created_people"]}

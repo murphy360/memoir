@@ -25,6 +25,7 @@ from app.domain import (
     settings,
     threads,
 )
+from app.placement import router as placement
 from app.routers import auth, health, invitations, profile, users
 
 ROUTERS = (health, auth, profile, users, invitations)
@@ -39,6 +40,7 @@ DOMAIN = (
     epics,
     events,
     participants,
+    placement,
     memories,
     assets,
     questions,

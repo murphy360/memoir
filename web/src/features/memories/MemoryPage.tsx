@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { useParams } from "react-router";
 
 import { api, apiBaseUrl, unwrap } from "../../api/client";
 import { Button } from "../../components/Button";
 import { ErrorText } from "../../components/Form";
 import { useToast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
+import { SavedToLine } from "../place/SavedToLine";
 
 type Memory = Awaited<ReturnType<typeof load>>;
 
@@ -182,9 +183,7 @@ export function MemoryPage() {
       <TranscriptState memory={m} onRetry={() => retry.mutate()} />
       <Transcript key={m.transcript ?? ""} memory={m} />
       <Details memory={m} />
-      <p>
-        <Link to="/inbox">Waiting to be placed</Link>
-      </p>
+      <SavedToLine memoryId={id} />
     </section>
   );
 }
