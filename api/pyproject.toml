@@ -20,7 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Installed in the `test` image target, where CI runs the tests and the lint.
-test = ["httpx2==2.13.1", "pytest==9.1.1", "ruff==0.6.9"]
+test = ["httpx2==2.13.1", "pytest==9.1.1", "ruff==0.16.9"]
 
 [project.scripts]
 memoir-cli = "app.cli:main"
