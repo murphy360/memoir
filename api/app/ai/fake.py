@@ -7,6 +7,7 @@ from app.ai.provider import Answer, Audio, ProviderError
 
 class FakeAI:
     name = "fake"
+    audio = True
 
     def __init__(self, inline_limit: int = 50 * 1024 * 1024):
         self.inline_limit = inline_limit

@@ -27,10 +27,11 @@ def acting_user(session: Session, memory: Memory) -> User:
 
 
 def ai_for(
-    session: Session, memory: Memory, switch: str
+    session: Session, memory: Memory, switch: str, task: str
 ) -> tuple[Provider | None, Settings]:
-    """The provider, or None when there is no key or the owner turned this task off."""
+    """The task's provider, or None when no provider can do it or the owner turned
+    this task off."""
     settings = get_settings()
     if not getattr(settings_for(session, memory.archive_id), switch):
         return None, settings
-    return registry.provider(settings), settings
+    return registry.provider(settings, task), settings

@@ -34,6 +34,9 @@ USER memoir
 VOLUME /data
 
 FROM runtime AS worker
+# Healthy while this container's worker has been seen in the last minute.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s \
+    CMD memoir-cli worker-alive || exit 1
 CMD ["memoir-cli", "worker"]
 
 FROM runtime AS api

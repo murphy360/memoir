@@ -7,12 +7,13 @@ How Memoir is put together, and where new code goes. `REQUIREMENTS.md` says what
 | Process | What it is | Image |
 |---|---|---|
 | **API** | FastAPI, `memoir-cli serve`. Applies the migrations on start (under a lock), then serves `/api/...` | `memoir-api` |
-| **Worker** | The same Python package, `memoir-cli worker`. Runs background jobs from the job table | `memoir-worker` |
+| **Worker** | The same Python package, `memoir-cli worker`. Runs background jobs from the job table. Its health check is `memoir-cli worker-alive` | `memoir-worker` |
 | **Web** | A Vite plus React single-page app, built to static files and served by nginx under `/memoir/` | `memoir-web` |
 
 PostgreSQL 17 holds every record. Files live in the blob store on a volume (`/data/blobs`). In production, Caddy
 sends `/memoir/api/...` to the API (stripping `/memoir`) and the rest of `/memoir/...` to the web image. Locally the
-web image's nginx forwards `/memoir/api/...` to the API itself, so `make up` needs no other proxy.
+web image's nginx forwards `/memoir/api/...` to the API itself, so `make up` needs no other proxy. `deploy/` holds
+the production compose file, the Caddy block and the backup and restore scripts (`docs/RUNBOOK.md`).
 
 ## The API package (`api/app/`)
 

@@ -169,7 +169,8 @@ def write(session: Session, memory: Memory, data: dict) -> list[int]:
     user = acting_user(session, memory)
     teller_id = storyteller_of(session, memory)
     made: list[int] = []
-    for item in (data.get("questions") or [])[:MOST]:
+    items = data.get("questions")
+    for item in (items if isinstance(items, list) else [])[:MOST]:
         text = tidy(item.get("text") if isinstance(item, dict) else None)
         if text is None:
             continue
@@ -195,14 +196,14 @@ def generate(ctx: JobContext, payload: dict) -> dict:
         memory.questions_state = "done"
         ctx.session.commit()
         return {"state": "done", "made": 0, "reason": "no transcript"}
-    provider, settings = ai_for(ctx.session, memory, "ai_questions")
+    provider, settings = ai_for(ctx.session, memory, "ai_questions", "questions")
     if provider is None:
         memory.questions_state = "ai_off"
         ctx.session.commit()
         return {"state": "ai_off"}
     teller_id = storyteller_of(ctx.session, memory)
     teller = ctx.session.get(Person, teller_id) if teller_id else None
-    model = registry.model_for(settings, "questions")
+    model = registry.model_for(settings, "questions", provider.name)
     text = prompt(ctx.session, memory, teller)
     try:
         answer = recorded(

@@ -31,7 +31,19 @@
                 "type": "null"
               }
             ],
+            "description": "The provider for extraction",
             "title": "Provider"
+          },
+          "questions": {
+            "title": "Questions",
+            "type": "boolean"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskAI"
+            },
+            "title": "Tasks",
+            "type": "array"
           },
           "transcription": {
             "title": "Transcription",
@@ -43,7 +55,9 @@
           "provider",
           "model",
           "transcription",
-          "extraction"
+          "extraction",
+          "questions",
+          "tasks"
         ],
         "title": "AIStatus",
         "type": "object"
@@ -4074,6 +4088,45 @@
         "title": "SuggestionOut",
         "type": "object"
       },
+      "TaskAI": {
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None: no provider can do it",
+            "title": "Provider"
+          },
+          "task": {
+            "description": "transcribe, extract or questions",
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "provider",
+          "model"
+        ],
+        "title": "TaskAI",
+        "type": "object"
+      },
       "TemporaryPassword": {
         "properties": {
           "password": {
@@ -4765,7 +4818,7 @@
   "paths": {
     "/api/ai/status": {
       "get": {
-        "description": "Whether AI is on, so the app can say \"AI is off\" where it would appear.",
+        "description": "Whether AI is on and who does what, so the app can say \"AI is off\" where it\nwould appear.",
         "operationId": "ai_status_api_ai_status_get",
         "responses": {
           "200": {

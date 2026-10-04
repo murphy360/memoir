@@ -74,9 +74,10 @@ recording.
 - **Recordings** go through `api/app/capture/` and the browser's upload queue
   (`web/src/features/record/uploads.ts`); `docs/CAPTURE.md` is the whole path. A job that needs a new handler
   module adds it to `api/app/jobs/catalog.py` so the worker loads it.
-- **AI** goes through `api/app/ai/` (`docs/AI.md`): prompts are versioned constants beside the task, every call
-  is wrapped in `costs.recorded` (one `ai_calls` row each), tests use `FakeAI` via `registry.use`. No key means
-  AI is off and nothing fails.
+- **AI** goes through `api/app/ai/` (`docs/AI.md`): Gemini, Anthropic, Grok and OpenAI behind one interface,
+  chosen per task by `registry.provider(settings, task)` (only Gemini and OpenAI hear audio). Prompts are
+  versioned constants beside the task, every call is wrapped in `costs.recorded` (one `ai_calls` row each),
+  tests use `FakeAI` via `registry.use`. No key means AI is off and nothing fails.
 - **Placement** (`api/app/placement/`, `docs/TIMELINE.md`): the suggestion is a pure function of the dates
   and the storyteller's timeline; auto-filing runs once per quick memory or answer; what it makes is labelled
   and never remade by a job.
@@ -92,7 +93,9 @@ recording.
   anywhere else.
 - **Lint for the web** is node-lint pinned to murphy360/standards#2 until it is released. TypeScript stays on
   5.x (typescript-eslint and openapi-typescript); Dependabot ignores its major.
-- **Deployed** from the dontpanic stack (`~/Software/dontpanic`) at `https://dontpanic.ddns.net/memoir` once
-  ticket #10 lands. Data in `/docker/memoir`. Never touch it unless a ticket says so.
+- **Deployed** from the dontpanic stack (`~/Software/dontpanic`) at `https://dontpanic.ddns.net/memoir`;
+  `deploy/compose.yml` is the reference copy of its services (CI validates it) and `docs/RUNBOOK.md` is how
+  to deploy, back up, restore and rotate secrets. Data in `/docker/memoir`. Never touch it unless a ticket
+  says so.
 - **Privacy.** This holds a family's stories, photos and faces. Logs carry ids and durations, never
   transcripts, file contents or keys.

@@ -91,14 +91,14 @@ def transcribe(ctx: JobContext, payload: dict) -> dict:
     memory = load(ctx.session, payload["memory_id"])
     if memory.transcript_source == "manual":
         return {"state": "kept", "reason": "a person edited the transcript"}
-    provider, settings = ai_for(ctx.session, memory, "ai_transcription")
+    provider, settings = ai_for(ctx.session, memory, "ai_transcription", "transcribe")
     if provider is None:
         memory.transcript_state = "ai_off"
         ctx.session.commit()
         return {"state": "ai_off"}
     memory.transcript_state = "transcribing"
     ctx.session.commit()
-    model = registry.model_for(settings, "transcribe")
+    model = registry.model_for(settings, "transcribe", provider.name)
     try:
         path, mime = _source(ctx, memory, settings)
         with tempfile.TemporaryDirectory() as tmp:

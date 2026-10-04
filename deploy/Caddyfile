@@ -1,0 +1,13 @@
+# The Caddy block for Memoir, inside the site block for dontpanic.ddns.net. The app has its own
+# login, so there is no basic auth here: an unauthenticated API call gets the app's 401.
+@memoir path /memoir /memoir/*
+handle @memoir {
+	@memoir_api path /memoir/api/*
+	handle @memoir_api {
+		uri strip_prefix /memoir
+		reverse_proxy memoir-api:8000
+	}
+	handle {
+		reverse_proxy memoir-web:8080
+	}
+}

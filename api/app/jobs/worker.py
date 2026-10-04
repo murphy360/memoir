@@ -11,6 +11,7 @@ import socket
 import threading
 from datetime import timedelta
 
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -44,9 +45,18 @@ def touch_worker(session: Session, wid: str, started_at) -> None:
 def _keep_alive(
     factory: sessionmaker, job_id: int, every: float, stop: threading.Event
 ):
+    """While a job runs, keep both the job and this worker seen as alive: a long
+    transcription must not look like a dead worker."""
+    wid = worker_id()
     with factory() as session:
         while not stop.wait(every):
             queue.beat(session, job_id)
+            session.execute(
+                update(WorkerHeartbeat)
+                .where(WorkerHeartbeat.worker_id == wid)
+                .values(last_seen=utcnow())
+            )
+            session.commit()
 
 
 def run_one(

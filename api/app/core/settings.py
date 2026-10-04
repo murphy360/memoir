@@ -49,6 +49,26 @@ class Settings(BaseSettings):
     # Per task, when one task deserves another model; empty means gemini_model.
     gemini_transcribe_model: str = ""
     gemini_extract_model: str = ""
+    # Anthropic's Claude and xAI's Grok read text only: extraction and questions, never
+    # transcription.
+    anthropic_api_key: SecretStr | None = None
+    anthropic_model: str = "claude-sonnet-5"
+    anthropic_base_url: str = "https://api.anthropic.com"
+    grok_api_key: SecretStr | None = None
+    grok_model: str = "grok-4.7"
+    grok_base_url: str = "https://api.x.ai/v1"
+    # OpenAI reads text and also transcribes.
+    openai_api_key: SecretStr | None = None
+    openai_model: str = "gpt-5.5"
+    openai_transcribe_model: str = "gpt-transcribe"
+    openai_base_url: str = "https://api.openai.com/v1"
+    # Which provider does the text tasks (gemini, anthropic, grok or openai); empty
+    # means the first with a key, in that order. A task may name its own.
+    ai_provider: str = ""
+    # Which provider transcribes (gemini or openai); empty means the first with a key.
+    ai_transcribe_provider: str = ""
+    ai_extract_provider: str = ""
+    ai_questions_provider: str = ""
     ai_timeout_seconds: float = 180.0
 
     @property
