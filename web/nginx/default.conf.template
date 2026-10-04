@@ -2,6 +2,10 @@
 server {
     listen 8080;
     root /usr/share/nginx/html;
+    # Redirects stay relative ("/memoir/"), so a browser keeps the address it came in on.
+    # An absolute one names this container's own port and plain http
+    # (http://host:8080/memoir/), which behind Caddy leads somewhere else entirely.
+    absolute_redirect off;
 
     # Docker's resolver, so the API's address is looked up per request and nginx starts
     # even when the API is not up yet.
