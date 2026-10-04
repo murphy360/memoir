@@ -295,3 +295,72 @@ dialog.confirm::backdrop {
     bottom: 1rem;
   }
 }
+
+/* Recording */
+.record {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 32rem;
+}
+.context {
+  font-weight: 600;
+  margin: 0;
+}
+.recording {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.elapsed {
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.dot {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    animation: none;
+  }
+}
+.level {
+  height: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--line);
+  overflow: hidden;
+}
+.level-bar {
+  height: 100%;
+  background: var(--ok);
+  transition: width 80ms linear;
+}
+.take audio {
+  width: 100%;
+}
+.upload p {
+  margin: 0.25rem 0;
+}
+.upload-failed {
+  border-left: 4px solid var(--danger);
+  padding-left: 0.75rem;
+}
+.advanced summary {
+  cursor: pointer;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+}

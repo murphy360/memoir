@@ -5,6 +5,10 @@
 
 FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+# ffmpeg normalises recordings to MP3 (app/capture/audio.py).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 RUN useradd --uid 1000 --create-home memoir
 WORKDIR /src/api
 

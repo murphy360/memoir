@@ -24,6 +24,8 @@ web image's nginx forwards `/memoir/api/...` to the API itself, so `make up` nee
 | `routers/` | One module per resource. A route validates, calls a service, returns. No queries in routes beyond the trivial. |
 | `<domain>/` | One package per area of the requirements (`archive/`, `accounts/`, `jobs/`, `blobs/`, and later `capture/`, `timeline/` and so on): its models, its services, its job handlers. |
 | `domain/` | One module per entity (model, schemas, service, router), plus `merge.py`, `purge.py`, `pagination.py` and `common.py`. `DATA_MODEL.md` describes them. |
+| `capture/` | Upload sessions, finalizing into a memory, and the ffmpeg normalisation job. See `CAPTURE.md`. |
+| `jobs/catalog.py` | Every module that registers job handlers; the worker loads them all at start. |
 | `accounts/deps.py` | Who is signed in and what they may do: every router depends on `require_role(...)` or `require_executor`. See `ACCOUNTS.md`. |
 | `core/audited.py` | The `Audited` mixin: `created_by`, `updated_by`, `updated_at`, `deleted_at`, filled from the request's user. |
 | `models.py` | Imports every model, so Alembic and the tests see the whole schema. Add each new model module here. |

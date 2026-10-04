@@ -8,12 +8,12 @@ import { RequireAuth, RequireRole } from "../auth/RequireAuth";
 import { GalleryPage } from "../pages/GalleryPage";
 import { HealthPage } from "../pages/HealthPage";
 import { EventPage, PeoplePage, PersonPage } from "../pages/PeoplePages";
+import { RecordScreen } from "../features/record/RecordScreen";
 import {
   HomePage,
   InboxPage,
   NotFoundPage,
   QuestionsPage,
-  RecordPage,
   TimelinePage,
 } from "../pages/Placeholders";
 import { UsersPage } from "../settings/UsersPage";
@@ -23,7 +23,7 @@ import { AppShell } from "./Layouts";
 export const shellRoutes = [
   // The phone greets; the wide screen opens the review workspace.
   { path: "/", element: <HomePage />, title: "Hello|Your family's memoir" },
-  { path: "/record", element: <RecordPage />, title: "Record a memory" },
+  { path: "/record", element: <RecordScreen />, title: "Record a memory" },
   { path: "/timeline", element: <TimelinePage />, title: "Timeline" },
   { path: "/people", element: <PeoplePage />, title: "People" },
   { path: "/people/:id", element: <PersonPage /> },

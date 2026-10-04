@@ -31,6 +31,12 @@ Open http://localhost:8080/memoir/ and sign in. *People with access* invites the
 ([docs/ACCOUNTS.md](docs/ACCOUNTS.md)). The API answers
 on http://localhost:8010/api/health too (set `MEMOIR_WEB_PORT` or `MEMOIR_API_PORT` if a port is taken). `make down` stops everything; the data stays in Docker volumes.
 
+## Recording
+
+Memoir records in the browser: Chrome, Edge and Firefox on desktop and Android, and Safari on macOS and iOS (14.5 or
+later). The first recording asks for the microphone. Recordings are kept on the device until the server has them,
+so a dropped connection or a closed tab loses nothing ([docs/CAPTURE.md](docs/CAPTURE.md)).
+
 ## Develop
 
 Everything runs in the project's images. Pass your own `TAG` so parallel sessions never share an image.
