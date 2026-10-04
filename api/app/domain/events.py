@@ -55,6 +55,10 @@ class Event(ArchiveRow, Base):
         ForeignKey("threads.id", ondelete="SET NULL"), index=True
     )
     summary: Mapped[str | None] = mapped_column(Text)
+    # Made by auto-filing for this memory; shown as "created for this memory".
+    auto_created_for_memory_id: Mapped[int | None] = mapped_column(
+        ForeignKey("memories.id", ondelete="SET NULL", use_alter=True)
+    )
     # Reserved for the braid (requirements 5.5): "brought together", "kept apart".
     relationship_effect: Mapped[dict | None] = mapped_column(JSONB)
 
@@ -111,6 +115,7 @@ class EventOut(BaseModel):
     place_id: int | None
     thread_id: int | None
     summary: str | None
+    auto_created_for_memory_id: int | None = None
     participants: list[ParticipantOut] = []
 
 

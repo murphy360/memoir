@@ -65,7 +65,8 @@ def run_one(
         if fn is None:
             raise PermanentError(f"no handler for job kind {job.kind!r}")
         beat.start()
-        result = fn(JobContext(session, job.id), dict(job.payload))
+        ctx = JobContext(session, job.id, job.attempts, job.max_attempts)
+        result = fn(ctx, dict(job.payload))
         queue.succeed(session, job, result)
         log.info("job %s %s succeeded", job.id, job.kind)
     except Exception as exc:  # a handler's failure is the job's, never the worker's

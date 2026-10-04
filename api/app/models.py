@@ -1,6 +1,7 @@
 """Imports every model, so `Base.metadata` is complete for Alembic and the tests."""
 
 from app.accounts.models import AuditEvent, Invitation, LoginAttempt, User, UserSession
+from app.ai.costs import AICall
 from app.archive.models import Archive
 from app.blobs.models import Blob
 from app.capture.models import UploadSession
@@ -18,6 +19,7 @@ from app.domain.threads import Thread
 from app.jobs.models import Job, WorkerHeartbeat
 
 __all__ = [
+    "AICall",
     "Archive",
     "ArchiveSettings",
     "Asset",

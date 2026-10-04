@@ -10,7 +10,7 @@ update both sides in one transaction.
 from datetime import datetime
 from enum import StrEnum
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import (
     BigInteger,
@@ -253,6 +253,12 @@ def remove_participant(
 @router.get("/api/people/{person_id}/events", response_model=Page[TimelineEntry])
 def person_timeline(
     person_id: int,
+    period_id: int | None = Query(
+        None, description="Only events placed in this period"
+    ),
+    unplaced: bool = Query(
+        False, description="Only events not in any of their periods"
+    ),
     page: PageParams = Depends(),
     user: User = Depends(reader),
     db: Session = Depends(get_session),
@@ -263,6 +269,10 @@ def person_timeline(
         Participant,
         (Participant.event_id == Event.id) & (Participant.person_id == person_id),
     )
+    if period_id is not None:
+        stmt = stmt.where(Participant.period_id == period_id)
+    if unplaced:
+        stmt = stmt.where(Participant.period_id.is_(None))
     rows, cursor = paginate(db, stmt, date_key(), page)
     placements = {
         p.event_id: p

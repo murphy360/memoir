@@ -2,7 +2,12 @@
 
 import importlib
 
-MODULES = ("app.domain.purge", "app.capture.jobs")
+MODULES = (
+    "app.domain.purge",
+    "app.capture.jobs",
+    "app.analysis.transcribe",
+    "app.analysis.extract",
+)
 
 
 def load() -> None:

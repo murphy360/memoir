@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import BigInteger, Float, Index, String, func
+from sqlalchemy import BigInteger, Boolean, Float, Index, String, func
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.accounts.deps import require_role
@@ -29,6 +29,8 @@ class Place(ArchiveRow, Base):
     name: Mapped[str] = mapped_column(String(200))
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
+    # Named in a story but not yet confirmed by a person (created by extraction).
+    needs_review: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class PlaceIn(BaseModel):
@@ -50,6 +52,7 @@ class PlaceOut(BaseModel):
     name: str
     latitude: float | None
     longitude: float | None
+    needs_review: bool = False
 
 
 def by_name(session: Session, user: User, name: str) -> Place | None:

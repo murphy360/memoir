@@ -1,6 +1,53 @@
 {
   "components": {
     "schemas": {
+      "AIStatus": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "extraction": {
+            "title": "Extraction",
+            "type": "boolean"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "transcription": {
+            "title": "Transcription",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "provider",
+          "model",
+          "transcription",
+          "extraction"
+        ],
+        "title": "AIStatus",
+        "type": "object"
+      },
       "AcceptInvitation": {
         "properties": {
           "display_name": {
@@ -994,6 +1041,36 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "EventChoice": {
+        "properties": {
+          "date_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Text"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "date_text"
+        ],
+        "title": "EventChoice",
+        "type": "object"
+      },
       "EventIn": {
         "properties": {
           "date_text": {
@@ -1081,6 +1158,17 @@
       },
       "EventOut": {
         "properties": {
+          "auto_created_for_memory_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Created For Memory Id"
+          },
           "date_end": {
             "anyOf": [
               {
@@ -1371,6 +1459,29 @@
         "title": "Health",
         "type": "object"
       },
+      "InboxItem": {
+        "properties": {
+          "memory": {
+            "$ref": "#/components/schemas/MemoryOut"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SuggestionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "memory",
+          "suggestion"
+        ],
+        "title": "InboxItem",
+        "type": "object"
+      },
       "InvitationOut": {
         "properties": {
           "created_at": {
@@ -1622,6 +1733,18 @@
       },
       "MemoryOut": {
         "properties": {
+          "analysis_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the last analysis failed, in the provider's words",
+            "title": "Analysis Error"
+          },
           "audio_seconds": {
             "anyOf": [
               {
@@ -1712,6 +1835,17 @@
             ],
             "title": "Event Id"
           },
+          "extraction_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction State"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -1791,6 +1925,17 @@
               }
             ],
             "title": "Transcript"
+          },
+          "transcript_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript State"
           },
           "uploaded_by": {
             "anyOf": [
@@ -1944,6 +2089,49 @@
         "title": "MemoryPatch",
         "type": "object"
       },
+      "MemoryPlacement": {
+        "properties": {
+          "nearby": {
+            "items": {
+              "$ref": "#/components/schemas/EventChoice"
+            },
+            "title": "Nearby",
+            "type": "array"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/EventChoice"
+            },
+            "title": "Recent",
+            "type": "array"
+          },
+          "saved_to": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedToOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestionOut"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "saved_to",
+          "suggestions",
+          "recent",
+          "nearby"
+        ],
+        "title": "MemoryPlacement",
+        "type": "object"
+      },
       "MergeInto": {
         "properties": {
           "into_id": {
@@ -1955,6 +2143,45 @@
           "into_id"
         ],
         "title": "MergeInto",
+        "type": "object"
+      },
+      "NewPeriod": {
+        "properties": {
+          "end_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Text"
+          },
+          "start_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Text"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "NewPeriod",
         "type": "object"
       },
       "OpenUpload": {
@@ -2059,6 +2286,33 @@
           "items"
         ],
         "title": "Page[EventOut]",
+        "type": "object"
+      },
+      "Page_InboxItem_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InboxItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[InboxItem]",
         "type": "object"
       },
       "Page_MemoryOut_": {
@@ -2749,6 +3003,11 @@
             "title": "Name",
             "type": "string"
           },
+          "needs_review": {
+            "default": false,
+            "title": "Needs Review",
+            "type": "boolean"
+          },
           "notes": {
             "anyOf": [
               {
@@ -2947,6 +3206,71 @@
         "title": "PlaceIn",
         "type": "object"
       },
+      "PlaceMemory": {
+        "description": "One of: an event; a period (a new event in it); or something new.",
+        "properties": {
+          "date_text": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a new event",
+            "title": "Date Text"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "new_period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NewPeriod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 180,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a new event",
+            "title": "Title"
+          }
+        },
+        "title": "PlaceMemory",
+        "type": "object"
+      },
       "PlaceOut": {
         "properties": {
           "id": {
@@ -2978,6 +3302,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "needs_review": {
+            "default": false,
+            "title": "Needs Review",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3032,6 +3361,29 @@
           }
         },
         "title": "PlacePatch",
+        "type": "object"
+      },
+      "Placed": {
+        "properties": {
+          "memory": {
+            "$ref": "#/components/schemas/MemoryOut"
+          },
+          "saved_to": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedToOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "memory",
+          "saved_to"
+        ],
+        "title": "Placed",
         "type": "object"
       },
       "Placement": {
@@ -3261,6 +3613,53 @@
         ],
         "title": "Role",
         "type": "string"
+      },
+      "SavedToOut": {
+        "properties": {
+          "created_for_this_memory": {
+            "title": "Created For This Memory",
+            "type": "boolean"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "integer"
+          },
+          "event_title": {
+            "title": "Event Title",
+            "type": "string"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "period_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Title"
+          }
+        },
+        "required": [
+          "event_id",
+          "event_title",
+          "period_id",
+          "period_title",
+          "created_for_this_memory"
+        ],
+        "title": "SavedToOut",
+        "type": "object"
       },
       "Scope": {
         "enum": [
@@ -3538,6 +3937,73 @@
         "title": "Status",
         "type": "string"
       },
+      "SuggestionOut": {
+        "properties": {
+          "decade": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decade"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "reason"
+        ],
+        "title": "SuggestionOut",
+        "type": "object"
+      },
       "TemporaryPassword": {
         "properties": {
           "password": {
@@ -3643,9 +4109,57 @@
         "title": "ThreadPatch",
         "type": "object"
       },
+      "Timeline": {
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "periods": {
+            "items": {
+              "$ref": "#/components/schemas/TimelinePeriod"
+            },
+            "title": "Periods",
+            "type": "array"
+          },
+          "person": {
+            "$ref": "#/components/schemas/PersonOut"
+          },
+          "unplaced_events": {
+            "title": "Unplaced Events",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "person",
+          "periods",
+          "next_cursor",
+          "unplaced_events"
+        ],
+        "title": "Timeline",
+        "type": "object"
+      },
       "TimelineEntry": {
         "description": "An event as it sits in one person's life: their own period and epic for it.",
         "properties": {
+          "auto_created_for_memory_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Created For Memory Id"
+          },
           "date_end": {
             "anyOf": [
               {
@@ -3809,6 +4323,116 @@
         "title": "TimelineEntry",
         "type": "object"
       },
+      "TimelinePeriod": {
+        "properties": {
+          "created_for_memory": {
+            "title": "Created For Memory",
+            "type": "boolean"
+          },
+          "end_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End On"
+          },
+          "end_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Text"
+          },
+          "epic_count": {
+            "title": "Epic Count",
+            "type": "integer"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "person_id": {
+            "title": "Person Id",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "start_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start On"
+          },
+          "start_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Text"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "summary_generated": {
+            "title": "Summary Generated",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "person_id",
+          "title",
+          "slug",
+          "start_text",
+          "start_on",
+          "end_text",
+          "end_on",
+          "summary",
+          "summary_generated",
+          "event_count",
+          "epic_count",
+          "created_for_memory"
+        ],
+        "title": "TimelinePeriod",
+        "type": "object"
+      },
       "UpdateMe": {
         "properties": {
           "display_name": {
@@ -3884,6 +4508,49 @@
           "memory_id"
         ],
         "title": "UploadOut",
+        "type": "object"
+      },
+      "Usage": {
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "number"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "model",
+          "calls",
+          "failed",
+          "input_tokens",
+          "output_tokens",
+          "seconds"
+        ],
+        "title": "Usage",
         "type": "object"
       },
       "UserOut": {
@@ -4026,6 +4693,78 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/ai/status": {
+      "get": {
+        "description": "Whether AI is on, so the app can say \"AI is off\" where it would appear.",
+        "operationId": "ai_status_api_ai_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ai Status",
+        "tags": [
+          "analysis"
+        ]
+      }
+    },
+    "/api/ai/usage": {
+      "get": {
+        "description": "What AI has done for this archive lately: calls, failures and tokens, by task.",
+        "operationId": "ai_usage_api_ai_usage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 366,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Usage"
+                  },
+                  "title": "Response Ai Usage Api Ai Usage Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Usage",
+        "tags": [
+          "analysis"
+        ]
+      }
+    },
     "/api/assets": {
       "get": {
         "operationId": "list_assets_api_assets_get",
@@ -5636,6 +6375,113 @@
         ]
       }
     },
+    "/api/inbox": {
+      "get": {
+        "description": "Memories waiting to be placed, each with where Memoir would put it.",
+        "operationId": "inbox_api_inbox_get",
+        "parameters": [
+          {
+            "description": "From the previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From the previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_InboxItem_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inbox",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/inbox/{memory_id}/accept": {
+      "post": {
+        "description": "One tap: place the memory where the suggestion says.",
+        "operationId": "accept_api_inbox__memory_id__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Placed"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
     "/api/invitations": {
       "get": {
         "operationId": "pending_invitations_api_invitations_get",
@@ -6211,6 +7057,28 @@
         ]
       }
     },
+    "/api/me/person": {
+      "get": {
+        "description": "The signed-in user's own person: their timeline starts here.",
+        "operationId": "my_person_api_me_person_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "My Person",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
     "/api/me/sessions": {
       "get": {
         "operationId": "my_sessions_api_me_sessions_get",
@@ -6574,6 +7442,185 @@
         "summary": "Memory Audio",
         "tags": [
           "capture"
+        ]
+      }
+    },
+    "/api/memories/{memory_id}/extract": {
+      "post": {
+        "operationId": "extract_again_api_memories__memory_id__extract_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extract Again",
+        "tags": [
+          "analysis"
+        ]
+      }
+    },
+    "/api/memories/{memory_id}/place": {
+      "post": {
+        "operationId": "place_api_memories__memory_id__place_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaceMemory"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Placed"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Place",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/memories/{memory_id}/placement": {
+      "get": {
+        "operationId": "placement_api_memories__memory_id__placement_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryPlacement"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Placement",
+        "tags": [
+          "placement"
+        ]
+      }
+    },
+    "/api/memories/{memory_id}/transcribe": {
+      "post": {
+        "description": "Transcribe again: after a failure, or once AI is turned on.",
+        "operationId": "transcribe_again_api_memories__memory_id__transcribe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transcribe Again",
+        "tags": [
+          "analysis"
         ]
       }
     },
@@ -6941,6 +7988,36 @@
             }
           },
           {
+            "description": "Only events placed in this period",
+            "in": "query",
+            "name": "period_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only events placed in this period",
+              "title": "Period Id"
+            }
+          },
+          {
+            "description": "Only events not in any of their periods",
+            "in": "query",
+            "name": "unplaced",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only events not in any of their periods",
+              "title": "Unplaced",
+              "type": "boolean"
+            }
+          },
+          {
             "description": "From the previous page",
             "in": "query",
             "name": "cursor",
@@ -7048,6 +8125,79 @@
         "summary": "Merge Person",
         "tags": [
           "merge"
+        ]
+      }
+    },
+    "/api/people/{person_id}/timeline": {
+      "get": {
+        "description": "A person's chapters in order, with how much each holds. Events load\nper period.",
+        "operationId": "timeline_api_people__person_id__timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "From the previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From the previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeline"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Timeline",
+        "tags": [
+          "placement"
         ]
       }
     },

@@ -70,6 +70,9 @@ export function PersonPage() {
         </Link>
       </p>
       <p>
+        <Link to={`/people/${id}/timeline`}>Their timeline</Link>
+      </p>
+      <p>
         <Link to="/people">All people</Link>
       </p>
     </section>

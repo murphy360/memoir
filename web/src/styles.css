@@ -364,3 +364,60 @@ dialog.confirm::backdrop {
   display: flex;
   align-items: center;
 }
+
+/* A memory */
+.memory audio {
+  width: 100%;
+  max-width: 40rem;
+}
+.transcript {
+  white-space: pre-wrap;
+  max-width: 40rem;
+}
+textarea {
+  width: 100%;
+  max-width: 40rem;
+}
+
+/* Placement, the inbox, the timeline */
+.saved-to {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.saved-to p {
+  margin: 0;
+}
+.sheet {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--card);
+  margin-top: 0.75rem;
+  width: 100%;
+}
+.choices,
+.inbox,
+.timeline,
+.events {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.inbox > li,
+.period-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 0.75rem 1rem;
+}
+.events {
+  padding-left: 1.5rem;
+  margin-top: 0.5rem;
+}
+.decades .button {
+  min-width: 4.5rem;
+}

@@ -6,7 +6,17 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import BigInteger, Date, ForeignKey, Index, String, Text, func, select
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    func,
+    select,
+)
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.accounts.deps import require_role
@@ -44,6 +54,8 @@ class Person(ArchiveRow, Base):
     death_start: Mapped[date | None] = mapped_column(Date)
     death_end: Mapped[date | None] = mapped_column(Date)
     death_source: Mapped[str | None] = mapped_column(String(16))
+    # Named in a story but not yet confirmed by a person (created by extraction).
+    needs_review: Mapped[bool] = mapped_column(Boolean, default=False)
     # The person's own login, when they have one.
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), unique=True
@@ -118,6 +130,7 @@ class PersonOut(BaseModel):
     death_text: str | None
     death_start: date | None
     user_id: int | None
+    needs_review: bool = False
 
 
 class AliasIn(BaseModel):
