@@ -229,13 +229,13 @@ def extract(ctx: JobContext, payload: dict) -> dict:
         memory.extraction_state = "needs_details"
         ctx.session.commit()
         return {"state": "needs_details", "reason": "no transcript"}
-    provider, settings = ai_for(ctx.session, memory, "ai_extraction")
+    provider, settings = ai_for(ctx.session, memory, "ai_extraction", "extract")
     if provider is None:
         memory.extraction_state = "ai_off"
         ctx.session.commit()
         return {"state": "ai_off"}
     user = acting_user(ctx.session, memory)
-    model = registry.model_for(settings, "extract")
+    model = registry.model_for(settings, "extract", provider.name)
     text = prompt(memory.transcript, known_names(ctx.session, user))
     try:
         answer = recorded(

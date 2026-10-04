@@ -3,7 +3,7 @@
 # docker-compose.yml carries the same four services. docs/RUNBOOK.md is how to run it.
 #
 # On the host:
-#   /docker/memoir/memoir.env    the app's secrets: MEMOIR_DATABASE_URL, MEMOIR_GEMINI_API_KEY
+#   /docker/memoir/memoir.env    the app's secrets: MEMOIR_DATABASE_URL (AI keys: the stack's .env)
 #   /docker/memoir/postgres.env  POSTGRES_PASSWORD (the same password as in MEMOIR_DATABASE_URL)
 #   /docker/memoir/postgres      the database
 #   /docker/memoir/blobs         recordings and files, owned by uid 1000
@@ -44,6 +44,15 @@ services:
       # Only Caddy and the web image reach the API (no port on the host): believe their
       # X-Forwarded-For, so login rate limits count the real client.
       MEMOIR_FORWARDED_ALLOW_IPS: "*"
+      # Memoir's own AI keys, from the stack's .env (docs/AI.md).
+      MEMOIR_GEMINI_API_KEY: ${GEMINI_API_KEY_MEMOIR:-}
+      MEMOIR_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY_MEMOIR:-}
+      MEMOIR_GROK_API_KEY: ${GROK_API_KEY_MEMOIR:-}
+      MEMOIR_OPENAI_API_KEY: ${OPENAI_API_KEY_MEMOIR:-}
+      # OpenAI transcribes and reads while the Gemini project has no credit. Set either in
+      # the stack's .env to change it (gemini, anthropic, grok or openai).
+      MEMOIR_AI_TRANSCRIBE_PROVIDER: ${MEMOIR_AI_TRANSCRIBE_PROVIDER:-openai}
+      MEMOIR_AI_PROVIDER: ${MEMOIR_AI_PROVIDER:-openai}
     volumes: &blobs
       - /docker/memoir/blobs:/data/blobs
     networks: [memoir, media_network]

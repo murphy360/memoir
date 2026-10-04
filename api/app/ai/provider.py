@@ -34,6 +34,8 @@ class Answer:
 
 class Provider(Protocol):
     name: str
+    # Whether it hears audio: only a provider that does can transcribe.
+    audio: bool
     # The largest audio one request may carry, in bytes, before it must be split.
     inline_limit: int
 
