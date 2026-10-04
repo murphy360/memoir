@@ -21,6 +21,12 @@ services:
     environment: &api-env
       MEMOIR_DATABASE_URL: postgresql+psycopg://memoir:memoir@memoir-db:5432/memoir
       MEMOIR_BLOB_ROOT: /data/blobs
+      # Local development is plain http on localhost: no Secure cookies, this origin only.
+      MEMOIR_COOKIE_SECURE: "false"
+      MEMOIR_PUBLIC_URL: http://localhost:${MEMOIR_WEB_PORT:-8080}/memoir/
+      MEMOIR_ALLOWED_ORIGINS: http://localhost:${MEMOIR_WEB_PORT:-8080},http://localhost:5173
+      # The web image's nginx is the proxy in front; believe its X-Forwarded-For.
+      MEMOIR_FORWARDED_ALLOW_IPS: "*"
     volumes:
       - memoir_data:/data
     ports:

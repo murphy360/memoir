@@ -21,7 +21,14 @@ Docker is the only requirement.
 make up        # builds and starts the database, API, worker and web app
 ```
 
-Then open http://localhost:8080/memoir/. The page shows whether the database and the worker are up. The API answers
+Then make the first account, the owner (it asks for a password; everyone else joins by invitation):
+
+```bash
+docker compose exec memoir-api memoir-cli create-owner --email you@example.org --name "Your name"
+```
+
+Open http://localhost:8080/memoir/ and sign in. *People with access* invites the rest of the family
+([docs/ACCOUNTS.md](docs/ACCOUNTS.md)). The API answers
 on http://localhost:8010/api/health too (set `MEMOIR_WEB_PORT` or `MEMOIR_API_PORT` if a port is taken). `make down` stops everything; the data stays in Docker volumes.
 
 ## Develop

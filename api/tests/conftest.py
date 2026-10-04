@@ -16,6 +16,10 @@ from tests.pg import database_url
 _URL, _PG = database_url()
 os.environ["MEMOIR_DATABASE_URL"] = _URL
 os.environ["MEMOIR_BLOB_ROOT"] = tempfile.mkdtemp(prefix="memoir-blobs-")
+# The test client talks https to "testserver", so Secure cookies flow as in production.
+ORIGIN = "https://testserver"
+os.environ["MEMOIR_ALLOWED_ORIGINS"] = ORIGIN
+os.environ["MEMOIR_PUBLIC_URL"] = f"{ORIGIN}/memoir/"
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -49,13 +53,17 @@ def settings():
     return get_settings()
 
 
-@pytest.fixture
-def client(engine):
+def make_client():
     from fastapi.testclient import TestClient
 
     from app.main import create_app
 
-    with TestClient(create_app()) as c:
+    return TestClient(create_app(), base_url=ORIGIN, headers={"Origin": ORIGIN})
+
+
+@pytest.fixture
+def client(engine):
+    with make_client() as c:
         yield c
 
 

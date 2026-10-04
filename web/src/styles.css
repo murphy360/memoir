@@ -1,0 +1,45 @@
+/* Minimal and readable until the shell ticket's design: 16 px text, real focus rings. */
+:root {
+  font-family: system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #2a1d17;
+  background: #fbf7f2;
+}
+body {
+  margin: 0;
+  padding: 1rem;
+}
+main.narrow {
+  max-width: 28rem;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+input,
+select,
+button {
+  font: inherit;
+  padding: 0.5rem 0.75rem;
+}
+button.primary {
+  background: #7a3e2b;
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+}
+:focus-visible {
+  outline: 3px solid #1f6feb;
+  outline-offset: 2px;
+}
+.hint {
+  color: #5c4a40;
+  font-size: 0.9rem;
+  margin: 0;
+}
+.error {
+  color: #9b1c1c;
+}
