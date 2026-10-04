@@ -21,11 +21,12 @@ from app.domain.events import Event
 from app.domain.memories import Memory, MemoryMention, join_event
 from app.domain.people import Person
 from app.domain.periods import Period
-from app.domain.questions import Question
+from app.domain.questions import Question, Scope, answer
 from app.jobs import queue
 
 MAX_CHUNK = 8 * 1024 * 1024
 AUDIO_TYPES = ("audio/", "video/webm", "video/mp4")
+TARGETS = ("event_id", "period_id", "person_id")
 
 
 def part_path(settings: Settings, session_id: str) -> Path:
@@ -39,9 +40,37 @@ def _check_context(session: Session, user: User, context: dict) -> dict:
     for key, model in refs.items():
         if context.get(key):
             clean[key] = live(session, model, int(context[key]), user, key[:-3]).id
+    if "question_id" in clean:
+        _inherit(session, session.get(Question, clean["question_id"]), clean)
     if context.get("quick"):
         clean["quick"] = True
     return clean
+
+
+def _inherit(session: Session, question: Question, context: dict) -> None:
+    """An answer goes where its question points: the event, the period, the person.
+    Otherwise it joins the story the question came from, when that story is placed.
+    A recording started from somewhere explicit keeps that instead.
+    """
+    if any(context.get(k) for k in TARGETS):
+        return
+    target = {
+        Scope.EVENT: ("event_id", question.event_id),
+        Scope.PERIOD: ("period_id", question.period_id),
+        Scope.PERSON: ("person_id", question.person_id),
+    }.get(question.scope)
+    if target and target[1]:
+        context[target[0]] = target[1]
+    if context.get("event_id") or context.get("period_id"):
+        return
+    source = (
+        session.get(Memory, question.source_memory_id)
+        if question.source_memory_id
+        else None
+    )
+    event = session.get(Event, source.event_id) if source and source.event_id else None
+    if source and source.deleted_at is None and event and event.deleted_at is None:
+        context["event_id"] = event.id
 
 
 def open_session(
@@ -154,6 +183,8 @@ def _memory(session: Session, user: User, row: UploadSession, original: str) -> 
         session.add(MemoryMention(memory_id=memory.id, person_id=context["person_id"]))
         session.flush()
     join_event(session, memory)
+    if memory.response_to_question_id:
+        answer(session, memory.response_to_question_id, memory.id)
     return memory
 
 

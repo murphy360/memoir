@@ -133,14 +133,12 @@ def apply(
 
 
 def autofile(session: Session, memory: Memory) -> bool:
-    """File a quick memory where the suggestion says. Once only, and never undone by a
-    job.
+    """File a quick memory, or an answer to a question, where the suggestion says. Once
+    only, and never undone by a job.
     """
-    if (
-        memory.event_id
-        or memory.autofiled_at
-        or not (memory.capture_context or {}).get("quick")
-    ):
+    context = memory.capture_context or {}
+    hands_free = context.get("quick") or memory.response_to_question_id
+    if memory.event_id or memory.autofiled_at or not hands_free:
         return False
     if not settings_for(session, memory.archive_id).auto_file_quick_memories:
         return False

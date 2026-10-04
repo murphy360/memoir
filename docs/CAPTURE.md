@@ -34,7 +34,8 @@ MP4. The page asks for the microphone the first time.
 | Open | `POST /api/capture/uploads` | An upload session with the content type and the context, checked against the archive. Only recordings are accepted (415 otherwise) |
 | Send | `PUT /api/capture/uploads/{id}?offset=N` | Appends a chunk (up to 8 MB). A chunk already received is accepted and ignored; a gap is refused with `409 wrong_offset` and the offset the server has |
 | Resume | `GET /api/capture/uploads/{id}` | How many bytes arrived |
-| Finish | `POST /api/capture/uploads/{id}/finalize` | The bytes become the **original** blob (kept forever) and a memory: the uploader's own person as storyteller, the context's event (its storyteller and anyone named become participants), person (mentioned) and question. Finishing twice returns the same memory |
+| Finish | `POST /api/capture/uploads/{id}/finalize` | The bytes become the **original** blob (kept forever) and a memory: the uploader's own person as storyteller, the context's event (its storyteller and anyone named become participants), person (mentioned) and question. A question's own event, period or person is used when the recording was
+started from nothing else, and the question becomes answered (`docs/INTERVIEWER.md`). Finishing twice returns the same memory |
 | Abort | `DELETE /api/capture/uploads/{id}` | The partial file is removed |
 | Normalise | job `capture.normalize_audio` | ffmpeg makes a mono MP3 at 44.1 kHz and 128 kbps, stored as a second blob, and measures the length. The memory's `audio_state` goes from `normalising` to `normalised`. If ffmpeg is missing or fails, it is `not_normalised` and the original remains the recording, still played and transcribed |
 | Play | `GET /api/memories/{id}/audio` | The MP3 (or the original when not normalised; `?original=true` for the original). Range requests work, so players can seek |

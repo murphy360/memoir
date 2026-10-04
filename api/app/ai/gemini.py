@@ -5,53 +5,39 @@ import json
 
 import httpx
 
+from app.ai import http
 from app.ai.provider import Answer, Audio, ProviderError
 
-ENDPOINT = (
-    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-)
-# Answers that waiting will not change: a bad request, a refused key, no credit, no
-# model.
-REFUSALS = {400, 401, 402, 403, 404}
-
-
-def _reason(response: httpx.Response) -> str:
-    """Gemini's own sentence for a refusal (never the key, which is only
-    in a header).
-    """
-    try:
-        message = response.json().get("error", {}).get("message", "")
-    except ValueError:
-        message = ""
-    return " ".join(message.split())[:200] or response.reason_phrase
+BASE_URL = "https://generativelanguage.googleapis.com"
+ENDPOINT = "{base}/v1beta/models/{model}:generateContent"
 
 
 class Gemini:
     name = "gemini"
+    # Gemini hears audio, so it can transcribe.
+    audio = True
     # Gemini takes 20 MB per request; base64 grows audio by a third, so stay well under.
     inline_limit = 12 * 1024 * 1024
 
     def __init__(
-        self, api_key: str, timeout: float, client: httpx.Client | None = None
+        self,
+        api_key: str,
+        timeout: float,
+        client: httpx.Client | None = None,
+        base_url: str = BASE_URL,
     ):
         self._key = api_key
+        self._base = base_url.rstrip("/")
         self._client = client or httpx.Client(timeout=timeout)
 
     def _call(self, model: str, parts: list[dict], config: dict) -> tuple[str, dict]:
-        try:
-            response = self._client.post(
-                ENDPOINT.format(model=model),
-                headers={"x-goog-api-key": self._key},
-                json={"contents": [{"parts": parts}], "generationConfig": config},
-            )
-        except httpx.HTTPError as exc:
-            raise ProviderError(f"Gemini unreachable: {type(exc).__name__}") from exc
-        if response.status_code != 200:
-            raise ProviderError(
-                f"Gemini answered {response.status_code}: {_reason(response)}",
-                retryable=response.status_code not in REFUSALS,
-            )
-        body = response.json()
+        body = http.post(
+            self._client,
+            "Gemini",
+            ENDPOINT.format(base=self._base, model=model),
+            {"x-goog-api-key": self._key},
+            {"contents": [{"parts": parts}], "generationConfig": config},
+        )
         try:
             texts = [
                 p.get("text", "") for p in body["candidates"][0]["content"]["parts"]

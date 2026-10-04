@@ -22,6 +22,7 @@ from app.domain.common import Precision, scoped
 from app.domain.memories import Memory, MemoryMention, MemoryPlace, join_event
 from app.domain.people import Person
 from app.domain.places import Place
+from app.jobs import queue
 from app.jobs.registry import JobContext, PermanentError, handler
 from app.placement.service import autofile
 
@@ -228,13 +229,13 @@ def extract(ctx: JobContext, payload: dict) -> dict:
         memory.extraction_state = "needs_details"
         ctx.session.commit()
         return {"state": "needs_details", "reason": "no transcript"}
-    provider, settings = ai_for(ctx.session, memory, "ai_extraction")
+    provider, settings = ai_for(ctx.session, memory, "ai_extraction", "extract")
     if provider is None:
         memory.extraction_state = "ai_off"
         ctx.session.commit()
         return {"state": "ai_off"}
     user = acting_user(ctx.session, memory)
-    model = registry.model_for(settings, "extract")
+    model = registry.model_for(settings, "extract", provider.name)
     text = prompt(memory.transcript, known_names(ctx.session, user))
     try:
         answer = recorded(
@@ -258,6 +259,13 @@ def extract(ctx: JobContext, payload: dict) -> dict:
     report = apply(ctx.session, user, memory, answer.data, answer.model)
     memory.extraction_state = "done"
     ctx.session.commit()
-    # Now that the date is known, a quick memory is filed where it belongs (once).
+    # Now that the date is known, a quick memory is filed where it belongs (once),
+    # and the interviewer asks about it.
     autofile(ctx.session, memory)
+    queue.enqueue(
+        ctx.session,
+        "questions.generate",
+        {"memory_id": memory.id},
+        idempotency_key=f"questions:{memory.id}",
+    )
     return {"state": "done", "created_people": report["created_people"]}

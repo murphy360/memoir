@@ -24,14 +24,18 @@ For a memory with a date, Memoir suggests, best first (`api/app/placement/sugges
 3. **Events of the people the memory mentions** at that time ("Mary's Move to Erie").
 4. **Something new**: a period for the memory's decade ("The 1960s") and an event in it.
 
-A memory without a date has no suggestion: it waits to be placed by hand.
+Before all of these, a memory recorded from a period (or answering a question about one) is suggested **a new event
+in that period**, with or without a date.
+
+A memory without a date, and no such period, has no suggestion: it waits to be placed by hand.
 
 The storyteller is the memory's storyteller, or else the person of the account that recorded it.
 
 ## Auto-filing
 
-A quick memory (one tap from home) is filed where the suggestion says, as soon as extraction has read its date,
-when the archive's "file quick memories automatically" setting is on (the default). It happens **once** per memory.
+A quick memory (one tap from home), or an answer to a question, is filed where the suggestion says, as soon as
+extraction has read its date, when the archive's "file quick memories automatically" setting is on (the default).
+It happens **once** per memory.
 Periods and events made for it are marked "created for this memory". They are ordinary rows from then on: no job
 ever makes them again, so deleting one sticks, and the memory goes back to the inbox. Other recordings are never
 filed without a person choosing.

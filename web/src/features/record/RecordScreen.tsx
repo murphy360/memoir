@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router";
 
 import { Button } from "../../components/Button";
 import { useToast } from "../../components/Toast";
+import { NextQuestionCard } from "../questions/NextQuestionCard";
 import { useStoredState } from "../../lib/storedState";
 import { Advanced, DEVICE_KEY } from "./Advanced";
 import { useContextLabel, useRecordContext } from "./context";
@@ -9,9 +11,63 @@ import { clock, size } from "./format";
 import { Level } from "./Level";
 import { TakePlayer } from "./TakePlayer";
 import { PendingUploads, UploadStatus } from "./UploadStatus";
+import type { Upload } from "./uploads";
 import { uploads } from "./uploads";
 import { useRecorder } from "./useRecorder";
 import { useUploads } from "./useUploads";
+
+/**
+ * The record screen, started afresh for each address: answering the next question
+ * opens it again with that question, and it starts recording at once.
+ */
+export function RecordRoute() {
+  const { search } = useLocation();
+  return <RecordScreen key={search} />;
+}
+
+/**
+ * Not recording: the take just made with its upload and the next question, or the
+ * button to start.
+ */
+function Ready({
+  recorder,
+  current,
+  onRecord,
+}: {
+  recorder: ReturnType<typeof useRecorder>;
+  current: Upload | undefined;
+  onRecord: () => void;
+}) {
+  const stopped = recorder.state === "stopped";
+  return (
+    <>
+      {recorder.error ? <p role="alert">{recorder.error}</p> : null}
+      {stopped && recorder.take ? (
+        <div className="take">
+          <TakePlayer src={recorder.take.url} />
+          {current ? (
+            <UploadStatus upload={current} />
+          ) : (
+            <p className="hint">
+              {clock(recorder.take.seconds)} · {size(recorder.take.blob.size)}
+            </p>
+          )}
+        </div>
+      ) : null}
+      {stopped && current?.memoryId ? (
+        <NextQuestionCard after={current.memoryId} />
+      ) : null}
+      <Button
+        variant={stopped ? "secondary" : "primary"}
+        className={stopped ? "button" : "button primary big"}
+        onClick={onRecord}
+      >
+        {stopped ? "Record another memory" : "Start recording"}
+      </Button>
+      <Advanced />
+    </>
+  );
+}
 
 /**
  * Record a memory. Opened with ?start=1 it begins at once, so from the home screen a
@@ -76,30 +132,11 @@ export function RecordScreen() {
       ) : null}
 
       {state === "idle" || state === "error" || state === "stopped" ? (
-        <>
-          {recorder.error ? <p role="alert">{recorder.error}</p> : null}
-          {state === "stopped" && recorder.take ? (
-            <div className="take">
-              <TakePlayer src={recorder.take.url} />
-              {current ? (
-                <UploadStatus upload={current} />
-              ) : (
-                <p className="hint">
-                  {clock(recorder.take.seconds)} ·{" "}
-                  {size(recorder.take.blob.size)}
-                </p>
-              )}
-            </div>
-          ) : null}
-          <Button
-            variant="primary"
-            className="button primary big"
-            onClick={() => void recorder.start(device || undefined)}
-          >
-            {state === "stopped" ? "Record another" : "Start recording"}
-          </Button>
-          <Advanced />
-        </>
+        <Ready
+          recorder={recorder}
+          current={current}
+          onRecord={() => void recorder.start(device || undefined)}
+        />
       ) : null}
 
       <PendingUploads all={all} except={uploadId ?? undefined} />

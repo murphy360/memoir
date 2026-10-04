@@ -8,6 +8,10 @@ import { ErrorText } from "../../components/Form";
 import { useToast } from "../../components/Toast";
 import { messageOf } from "../../lib/errors";
 import { SavedToLine } from "../place/SavedToLine";
+import {
+  AnsweredQuestion,
+  RaisedQuestions,
+} from "../questions/MemoryQuestions";
 
 type Memory = Awaited<ReturnType<typeof load>>;
 
@@ -178,12 +182,16 @@ export function MemoryPage() {
   return (
     <section aria-labelledby="memory-title" className="memory">
       <h1 id="memory-title">{m.title ?? "A memory"}</h1>
+      {m.response_to_question_id ? (
+        <AnsweredQuestion questionId={m.response_to_question_id} />
+      ) : null}
       {m.date_text ? <p className="hint">{m.date_text}</p> : null}
       {m.audio_state ? <Recording id={id} /> : null}
       <TranscriptState memory={m} onRetry={() => retry.mutate()} />
       <Transcript key={m.transcript ?? ""} memory={m} />
       <Details memory={m} />
       <SavedToLine memoryId={id} />
+      <RaisedQuestions memoryId={id} />
     </section>
   );
 }

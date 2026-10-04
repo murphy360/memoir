@@ -43,10 +43,25 @@ After a recording, Memoir says where it put the memory: **Saved to The 1960s, Fi
 chapter of your life and the moment in it. If that is wrong, tap **Change** and pick the right one. A memory Memoir
 cannot date waits under **Waiting to be placed** until someone places it ([docs/TIMELINE.md](docs/TIMELINE.md)).
 
+## Questions
+
+When a memory is saved, Memoir asks about it: "You said your brother drove. Which brother?" One tap on **Record
+your answer** records the answer, and the next question follows. **Questions for you** lists every question
+waiting; **Don't ask this again** dismisses one for good ([docs/INTERVIEWER.md](docs/INTERVIEWER.md)).
+
 ## AI
 
-Set `MEMOIR_GEMINI_API_KEY` for the API and the worker to have recordings transcribed and read for dates, people and
-places. Without it Memoir still records and keeps everything, and says "AI is off" ([docs/AI.md](docs/AI.md)).
+Set `MEMOIR_GEMINI_API_KEY` for the API and the worker to have recordings transcribed, read for dates, people and
+places, and followed by questions. `MEMOIR_OPENAI_API_KEY` does all of that too. `MEMOIR_ANTHROPIC_API_KEY` (Claude)
+and `MEMOIR_GROK_API_KEY` (Grok) can do the reading and the questions, but not transcription.
+`MEMOIR_AI_TRANSCRIBE_PROVIDER` and `MEMOIR_AI_PROVIDER` pick among them. Without a key Memoir
+still records and keeps everything, and says "AI is off" ([docs/AI.md](docs/AI.md)).
+
+## Deploy
+
+Production runs in the dontpanic stack at https://dontpanic.ddns.net/memoir. [docs/RUNBOOK.md](docs/RUNBOOK.md)
+covers the first deploy, new builds, nightly backups, restores, secrets and people. `deploy/` holds the reference
+compose file, the Caddy block and the backup and restore scripts.
 
 ## Develop
 

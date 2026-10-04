@@ -250,6 +250,11 @@ def test_the_owner_sees_what_ai_cost(session, tmp_path, ai):
         "model": "gemini-2.5-flash",
         "transcription": True,
         "extraction": True,
+        "questions": True,
+        "tasks": [
+            {"task": t, "provider": "fake", "model": "gemini-2.5-flash"}
+            for t in ("transcribe", "extract", "questions")
+        ],
     }
 
 

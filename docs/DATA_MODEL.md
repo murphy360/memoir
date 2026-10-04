@@ -43,7 +43,7 @@ erDiagram
 | Participant | `participants` | A person at an event: role (`participant`, `storyteller`, `mentioned`, `in_photo`), source (`confirmed`, `transcript`, `face`), whether a person confirmed it, and **their** period and epic for the event |
 | Memory | `memories`, `memory_mentions`, `memory_places` | A told story: storyteller, uploader, transcript, date, tone, visibility, the people and places it names. Belongs to one event once placed |
 | Asset | `assets`, `event_assets` | A file (photo, document, audio) and its record. Linked to any number of events as `evidence` or `recording` |
-| Question | `questions` | A follow-up prompt. Pending questions are unique by their text without case or extra spaces |
+| Question | `questions` | A follow-up prompt, for one storyteller (`asked_of_id`) or anyone. Pending questions are unique by their text without case, extra spaces or the closing mark |
 
 Every domain table carries `archive_id`, `created_at`, `created_by`, `updated_by`, `updated_at` and `deleted_at`.
 

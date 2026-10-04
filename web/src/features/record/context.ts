@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 
 import { api, unwrap } from "../../api/client";
+import { loadQuestion } from "../questions/api";
 import type { Context } from "./uploads";
 
 /** Where a recording was started from, read from the address (?event=9, ?person=7...). */
@@ -38,7 +39,10 @@ export function useContextLabel(context: Context): string | null {
         );
         return `Adding to: ${e.title}`;
       }
-      if (context.question_id) return "Answering a question";
+      if (context.question_id) {
+        const q = await loadQuestion(context.question_id);
+        return `Answering: ${q.text}`;
+      }
       if (context.period_id) {
         const p = unwrap(
           await api.GET("/api/periods/{period_id}", {

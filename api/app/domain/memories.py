@@ -98,6 +98,8 @@ class Memory(ArchiveRow, Base):
     extracted: Mapped[dict | None] = mapped_column(JSONB)
     # When auto-filing ran for this memory: it runs once, so what it made is not remade.
     autofiled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The follow-up questions: done, ai_off or failed; None while still to come.
+    questions_state: Mapped[str | None] = mapped_column(String(16))
 
 
 class MemoryMention(Base):

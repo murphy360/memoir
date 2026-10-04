@@ -6,7 +6,8 @@
 3. Otherwise something new: a period for the memory's decade and an event in it.
 
 Events of the people the memory mentions, in the same window, are offered too. A memory
-with no date can only be placed by hand.
+with no date can only be placed by hand, unless it was recorded from a period (an
+answer to a question about that time of life is suggested there first).
 """
 
 from dataclasses import dataclass, field
@@ -95,11 +96,12 @@ def decade_of(start: date) -> int:
 def suggest(
     session: Session, memory: Memory, storyteller_id: int | None
 ) -> list[Suggestion]:
-    """Best first. Empty when the memory has no date (it waits to be placed by hand)."""
+    """Best first. Empty when the memory has no date and was not recorded from a period
+    (it waits to be placed by hand)."""
+    out = started_in(session, memory)
     if memory.date_start is None:
-        return []
+        return out
     start, end = memory.date_start, memory.date_end or memory.date_start
-    out: list[Suggestion] = []
     period = (
         covering_period(session, storyteller_id, start, end) if storyteller_id else None
     )
@@ -139,6 +141,22 @@ def suggest(
         )
     )
     return out
+
+
+def started_in(session: Session, memory: Memory) -> list[Suggestion]:
+    """The period the recording was started from, if any: a new event in it."""
+    period_id = (memory.capture_context or {}).get("period_id")
+    period = session.get(Period, period_id) if period_id else None
+    if period is None or period.deleted_at is not None:
+        return []
+    why = (
+        "the question was about this time"
+        if memory.response_to_question_id
+        else "where it was recorded from"
+    )
+    return [
+        Suggestion("period", f"{period.title}, a new event", why, period_id=period.id)
+    ]
 
 
 def others(session: Session, memory: Memory, storyteller_id, start: date, end: date):

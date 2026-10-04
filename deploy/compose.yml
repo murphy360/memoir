@@ -1,0 +1,90 @@
+# Memoir in production, as the dontpanic stack (murphy360/dontpanic) runs it at
+# https://dontpanic.ddns.net/memoir. This file is the reference: CI validates it, and the stack's
+# docker-compose.yml carries the same four services. docs/RUNBOOK.md is how to run it.
+#
+# On the host:
+#   /docker/memoir/memoir.env    the app's secrets: MEMOIR_DATABASE_URL (AI keys: the stack's .env)
+#   /docker/memoir/postgres.env  POSTGRES_PASSWORD (the same password as in MEMOIR_DATABASE_URL)
+#   /docker/memoir/postgres      the database
+#   /docker/memoir/blobs         recordings and files, owned by uid 1000
+name: memoir
+services:
+  memoir-db:
+    image: postgres:17-alpine
+    container_name: memoir-db
+    env_file:
+      - path: /docker/memoir/postgres.env
+        required: false
+    environment:
+      POSTGRES_USER: memoir
+      POSTGRES_DB: memoir
+    volumes:
+      - /docker/memoir/postgres:/var/lib/postgresql/data
+    networks: [memoir]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memoir -d memoir"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  memoir-api:
+    # Applies the migrations on start (under a lock), then serves /api. Caddy sends
+    # /memoir/api/* here with /memoir stripped.
+    image: ghcr.io/murphy360/memoir-api:main
+    container_name: memoir-api
+    env_file: &secrets
+      - path: /docker/memoir/memoir.env
+        required: false
+    environment: &settings
+      TZ: ${TZ:-America/New_York}
+      MEMOIR_BLOB_ROOT: /data/blobs
+      MEMOIR_PUBLIC_URL: https://dontpanic.ddns.net/memoir/
+      MEMOIR_ALLOWED_ORIGINS: https://dontpanic.ddns.net
+      # Only Caddy and the web image reach the API (no port on the host): believe their
+      # X-Forwarded-For, so login rate limits count the real client.
+      MEMOIR_FORWARDED_ALLOW_IPS: "*"
+      # Memoir's own AI keys, from the stack's .env (docs/AI.md).
+      MEMOIR_GEMINI_API_KEY: ${GEMINI_API_KEY_MEMOIR:-}
+      MEMOIR_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY_MEMOIR:-}
+      MEMOIR_GROK_API_KEY: ${GROK_API_KEY_MEMOIR:-}
+      MEMOIR_OPENAI_API_KEY: ${OPENAI_API_KEY_MEMOIR:-}
+      # OpenAI transcribes and reads while the Gemini project has no credit. Set either in
+      # the stack's .env to change it (gemini, anthropic, grok or openai).
+      MEMOIR_AI_TRANSCRIBE_PROVIDER: ${MEMOIR_AI_TRANSCRIBE_PROVIDER:-openai}
+      MEMOIR_AI_PROVIDER: ${MEMOIR_AI_PROVIDER:-openai}
+    volumes: &blobs
+      - /docker/memoir/blobs:/data/blobs
+    networks: [memoir, media_network]
+    depends_on:
+      memoir-db: {condition: service_healthy}
+    restart: unless-stopped
+
+  memoir-worker:
+    # Background jobs: audio normalisation, transcription, extraction, questions.
+    image: ghcr.io/murphy360/memoir-worker:main
+    container_name: memoir-worker
+    env_file: *secrets
+    environment: *settings
+    volumes: *blobs
+    networks: [memoir]
+    depends_on:
+      memoir-api: {condition: service_healthy}
+    restart: unless-stopped
+
+  memoir-web:
+    # The app, built for /memoir. Caddy sends every other /memoir path here.
+    image: ghcr.io/murphy360/memoir-web:main
+    container_name: memoir-web
+    environment:
+      TZ: ${TZ:-America/New_York}
+    networks: [memoir, media_network]
+    depends_on:
+      - memoir-api
+    restart: unless-stopped
+
+networks:
+  memoir: {}
+  # Caddy's network in the dontpanic stack.
+  media_network:
+    external: true

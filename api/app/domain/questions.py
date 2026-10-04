@@ -1,13 +1,17 @@
 """Questions: follow-up prompts for the storytellers. A pending question's text is
-unique within the archive (compared without case or extra spaces), whatever made it.
+unique within the archive (compared without case, extra spaces or the closing mark),
+whatever made it, checked as it is written. A question Memoir writes itself is skipped
+when the same text was ever asked, so a dismissed question never comes back.
 """
 
 import re
 from enum import StrEnum
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import BigInteger, ForeignKey, Index, String, Text
+from sqlalchemy import BigInteger, ForeignKey, Index, String, Text, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.accounts.deps import require_role
@@ -66,6 +70,10 @@ class Question(ArchiveRow, Base):
     answered_by_memory_id: Mapped[int | None] = mapped_column(
         ForeignKey("memories.id", ondelete="SET NULL")
     )
+    # Whom it is for: the storyteller of the memory it came from. None: anyone.
+    asked_of_id: Mapped[int | None] = mapped_column(
+        ForeignKey("people.id", ondelete="SET NULL"), index=True
+    )
 
 
 class QuestionIn(BaseModel):
@@ -77,7 +85,9 @@ class QuestionIn(BaseModel):
 
 
 class QuestionPatch(BaseModel):
-    status: Status
+    status: Literal[Status.ANSWERED, Status.DISMISSED] = Field(
+        description="A pending question is answered or dismissed, for good"
+    )
     answered_by_memory_id: int | None = None
 
 
@@ -93,10 +103,15 @@ class QuestionOut(BaseModel):
     period_id: int | None
     person_id: int | None
     answered_by_memory_id: int | None
+    asked_of_id: int | None = None
+    about: str | None = Field(
+        None, description="What it asks about: the event, period, person or story"
+    )
 
 
 def normalize(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip().casefold()
+    """The text as compared: one space between words, no case, no closing mark."""
+    return re.sub(r"\s+", " ", text).strip().rstrip("?.!").strip().casefold()
 
 
 def _check_scope(session: Session, user: User, body: QuestionIn) -> None:
@@ -113,17 +128,46 @@ def _check_scope(session: Session, user: User, body: QuestionIn) -> None:
         live(session, model, ref, user, body.scope)
 
 
-def add(
-    session: Session, user: User, body: QuestionIn, source_memory_id: int | None = None
-):
-    """Add a pending question; an identical pending one is returned instead."""
-    _check_scope(session, user, body)
-    key = normalize(body.text)
-    same = session.scalars(
-        scoped(Question, user).where(
-            Question.normalized == key, Question.status == Status.PENDING
+def _pending(session: Session, archive_id: int, key: str) -> Question | None:
+    return session.scalars(
+        select(Question).where(
+            Question.archive_id == archive_id,
+            Question.normalized == key,
+            Question.status == Status.PENDING,
+            Question.deleted_at.is_(None),
         )
     ).first()
+
+
+def ever_asked(session: Session, archive_id: int, key: str) -> bool:
+    """Whether this text was ever a question here: pending, answered, dismissed or
+    deleted."""
+    return (
+        session.scalars(
+            select(Question.id).where(
+                Question.archive_id == archive_id, Question.normalized == key
+            )
+        ).first()
+        is not None
+    )
+
+
+def add(
+    session: Session,
+    user: User,
+    body: QuestionIn,
+    source_memory_id: int | None = None,
+    asked_of_id: int | None = None,
+    machine: bool = False,
+) -> Question | None:
+    """Add a pending question; an identical pending one is returned instead. A question
+    Memoir wrote (`machine`) is dropped, returning None, when the text was ever asked.
+    """
+    _check_scope(session, user, body)
+    key = normalize(body.text)
+    if machine and ever_asked(session, user.archive_id, key):
+        return None
+    same = _pending(session, user.archive_id, key)
     if same:
         return same
     question = Question(
@@ -135,10 +179,25 @@ def add(
         period_id=body.period_id,
         person_id=body.person_id,
         source_memory_id=source_memory_id,
+        asked_of_id=asked_of_id,
     )
-    session.add(question)
+    try:
+        # Two writers racing on the same text: the unique index decides, and the
+        # loser returns the winner's row.
+        with session.begin_nested():
+            session.add(question)
+    except IntegrityError:
+        return _pending(session, user.archive_id, key)
     session.commit()
     return question
+
+
+def answer(session: Session, question_id: int, memory_id: int) -> None:
+    """A recording answered the question: it leaves the pending list."""
+    question = session.get(Question, question_id)
+    if question is not None and question.status == Status.PENDING:
+        question.status = Status.ANSWERED
+        question.answered_by_memory_id = memory_id
 
 
 router = APIRouter(prefix="/api/questions", tags=["questions"])
@@ -152,6 +211,8 @@ def list_questions(
     scope: Scope | None = Query(None),
     event_id: int | None = Query(None),
     person_id: int | None = Query(None),
+    source_memory_id: int | None = Query(None, description="Raised by this memory"),
+    answered_by_memory_id: int | None = Query(None, description="Answered by it"),
     page: PageParams = Depends(),
     user: User = Depends(reader),
     db: Session = Depends(get_session),
@@ -159,10 +220,15 @@ def list_questions(
     stmt = scoped(Question, user).where(Question.status == status)
     if scope:
         stmt = stmt.where(Question.scope == scope)
-    if event_id:
-        stmt = stmt.where(Question.event_id == event_id)
-    if person_id:
-        stmt = stmt.where(Question.person_id == person_id)
+    filters = {
+        Question.event_id: event_id,
+        Question.person_id: person_id,
+        Question.source_memory_id: source_memory_id,
+        Question.answered_by_memory_id: answered_by_memory_id,
+    }
+    for column, value in filters.items():
+        if value:
+            stmt = stmt.where(column == value)
     rows, cursor = paginate(db, stmt, [Question.created_at, Question.id], page)
     return Page(items=rows, next_cursor=cursor)
 
@@ -184,6 +250,10 @@ def answer_or_dismiss(
     from app.domain.memories import visible
 
     question = live(db, Question, question_id, user, "question")
+    if question.status != Status.PENDING:
+        raise ApiError(
+            409, "not_pending", f"This question was already {question.status}."
+        )
     if body.answered_by_memory_id:
         visible(db, body.answered_by_memory_id, user)
     question.status = body.status
@@ -198,11 +268,3 @@ def remove_question(
 ) -> None:
     soft_delete(live(db, Question, question_id, user, "question"))
     db.commit()
-
-
-def first_pending(session: Session, user: User) -> Question | None:
-    return session.scalars(
-        scoped(Question, user)
-        .where(Question.status == Status.PENDING)
-        .order_by(Question.created_at, Question.id)
-    ).first()

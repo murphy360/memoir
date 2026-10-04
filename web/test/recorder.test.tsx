@@ -58,6 +58,7 @@ const LABELS = {
   "GET /api/events/9": ok({ id: 9, title: "The wedding", participants: [] }),
   "GET /api/people/7": ok({ id: 7, name: "Grandma", aliases: [] }),
   "GET /api/periods/3": ok({ id: 3, title: "Navy years" }),
+  "GET /api/questions/5": ok({ id: 5, text: "Which brother drove?" }),
 };
 
 describe.each([
@@ -65,7 +66,11 @@ describe.each([
   ["an event", "/record?start=1&event=9", "Adding to: The wedding"],
   ["a person", "/record?start=1&person=7", "A memory about: Grandma"],
   ["a period", "/record?start=1&period=3", "A memory in: Navy years"],
-  ["a question", "/record?start=1&question=5", "Answering a question"],
+  [
+    "a question",
+    "/record?start=1&question=5",
+    "Answering: Which brother drove?",
+  ],
 ])("started from %s", (_, path, label) => {
   test.each([
     ["phone", PHONE],
@@ -139,7 +144,7 @@ test("after Stop the take plays at once and its upload is shown", async () => {
   await new Promise((r) => setTimeout(r, 50));
   fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
   expect(
-    await screen.findByRole("button", { name: "Record another" }),
+    await screen.findByRole("button", { name: "Record another memory" }),
   ).toBeInTheDocument();
   expect(document.querySelector("audio")).toHaveAttribute("src", "blob:take");
   await waitFor(() =>

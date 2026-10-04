@@ -27,6 +27,8 @@ function api(extra = {}) {
       unplaced_events: 0,
     }),
     "GET /api/inbox": ok({ items: [], next_cursor: null }),
+    "GET /api/questions/next": ok({ question: null, waiting: false }),
+    "GET /api/questions/for-you": ok({ items: [] }),
     ...extra,
   });
 }

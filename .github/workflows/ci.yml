@@ -25,6 +25,15 @@ jobs:
       standards-ref: 5d52c5303ca6f7a1212d12d2385eb861badbd33b
   workflows:
     uses: murphy360/standards/.github/workflows/actionlint.yml@v2
+  shell:
+    uses: murphy360/standards/.github/workflows/shell-lint.yml@v2
+  deploy:
+    # The production compose file (deploy/compose.yml) must stay valid.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Validate the production compose file
+        run: docker compose -f deploy/compose.yml config -q
   test-api:
     uses: murphy360/standards/.github/workflows/test-docker.yml@v2
     with:
