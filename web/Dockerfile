@@ -20,7 +20,7 @@ RUN npm run build
 
 # The image: an unprivileged nginx serving the app under the base path. It also forwards
 # <base>api/ to the API, so the app works with no other proxy in front (local compose).
-FROM nginxinc/nginx-unprivileged:1.29-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 ARG VITE_BASE_PATH=/memoir/
 ENV BASE_PATH=$VITE_BASE_PATH API_UPSTREAM=http://memoir-api:8000
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
