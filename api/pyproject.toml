@@ -1,0 +1,38 @@
+# The standard ruff settings are ruff's defaults (88 columns, ruff format). Nothing to configure: add a
+# [tool.ruff] section only for a reason, and write the reason in a comment beside it.
+[project]
+name = "memoir-api"
+version = "0.1.0"
+description = "Memoir's API and job worker: one package, two processes."
+requires-python = ">=3.12"
+dependencies = [
+  "alembic==1.20.0",
+  "fastapi==0.142.2",
+  "psycopg[binary]==3.3.6",
+  "pydantic==2.13.5",
+  "pydantic-settings==2.15.0",
+  "sqlalchemy==2.1.3",
+  "uvicorn[standard]==0.54.0",
+]
+
+[project.optional-dependencies]
+# Installed in the `test` image target, where CI runs the tests and the lint.
+test = ["httpx2==2.13.1", "pytest==9.1.1", "ruff==0.6.9"]
+
+[project.scripts]
+memoir-cli = "app.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+"app.migrations" = ["script.py.mako"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The checkout is mounted read-only in spirit: CI's runner owns it, the image's user does not.
+addopts = "-p no:cacheprovider"

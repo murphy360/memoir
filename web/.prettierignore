@@ -1,0 +1,5 @@
+# Prettier also skips what .gitignore lists.
+package-lock.json
+# Generated: the API writes openapi.json (`make openapi`), openapi-typescript writes schema.d.ts.
+src/api/openapi.json
+src/api/schema.d.ts

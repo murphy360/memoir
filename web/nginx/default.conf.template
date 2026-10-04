@@ -1,0 +1,42 @@
+# Filled in at start by the nginx image (envsubst replaces only BASE_PATH and API_UPSTREAM).
+server {
+    listen 8080;
+    root /usr/share/nginx/html;
+
+    # Docker's resolver, so the API's address is looked up per request and nginx starts
+    # even when the API is not up yet.
+    resolver 127.0.0.11 valid=30s ipv6=off;
+    set $api_upstream ${API_UPSTREAM};
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location = / {
+        return 302 ${BASE_PATH};
+    }
+
+    location ${BASE_PATH}api/ {
+        rewrite ^${BASE_PATH}(api/.*)$ /$1 break;
+        proxy_pass $api_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Progress streams (server-sent events) must not wait in a buffer.
+        proxy_buffering off;
+        client_max_body_size 0;
+    }
+
+    # Hashed assets never change; everything else is the single-page app.
+    location ${BASE_PATH}assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    location ${BASE_PATH} {
+        add_header Cache-Control "no-cache";
+        try_files $uri $uri/ ${BASE_PATH}index.html;
+    }
+}
