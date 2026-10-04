@@ -109,10 +109,11 @@ going back past a migration means restoring last night's backup.
 - `blobs/`: every blob, copied with `rsync` and never deleted, so a file a purge removed stays recoverable.
 
 The database is dumped first and the blobs copied after. A blob is written before the row that names it, so every
-file the dump refers to is in the copy. Schedule it in root's crontab (`sudo crontab -e`):
+file the dump refers to is in the copy. It needs only the `docker` group, not root: on dontpanic it runs from
+murphy360's crontab (`crontab -l`), installed 2026-10-04:
 
 ```
-15 3 * * * /home/murphy360/Software/dontpanic/install/memoir-backup.sh >>/var/log/memoir-backup.log 2>&1
+15 3 * * * /home/murphy360/Software/dontpanic/install/memoir-backup.sh >>/home/murphy360/memoir-backup.log 2>&1
 ```
 
 `MEMOIR_BACKUP_TARGET` changes where backups go (default `/media/backups/memoir`).
@@ -138,8 +139,9 @@ rest. Skip creating the owner: the owner comes back with the data.
 | Date | Where | What was checked | Result |
 |---|---|---|---|
 | 2026-10-03 | Locally, two scratch compose projects on bind mounts under `/tmp`, the same images | Six recorded memories (audio, transcripts, questions, a placed event): `backup.sh`, then `restore.sh` into a new empty database and blob directory, then the app started on them | Same counts (6 memories, 9 questions, 12 blobs, 1 event, 1 user). The owner signed in. A restored recording played, and its SHA-256 matched its blob. A second restore was refused. Health ok with the worker seen |
+| 2026-10-04 | dontpanic, first deploy: the night's dump restored into a scratch `postgres:17-alpine` container and `/tmp/memoir-drill-blobs` | `restore.sh` with the commands below | Same as live: 1 user, 1 memory (the deleted smoke test), 2 questions, migration 0008. Scratch container and blobs removed |
 
-Repeat it on dontpanic after the first deploy, against a scratch database, and add a row:
+Repeat it now and then against a scratch database, and add a row:
 
 ```sh
 docker run -d --name memoir-drill-db -e POSTGRES_USER=memoir -e POSTGRES_DB=memoir \
