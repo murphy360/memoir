@@ -1,5 +1,5 @@
-"""A smoke run in a real browser: sign in, then every page of the shell in both postures,
-and the keyboard alone through the navigation.
+"""A smoke run in a real browser: the address without its trailing slash, sign in, then
+every page of the shell in both postures, and the keyboard alone through the navigation.
 
     make smoke      (starts nothing: run `make up` and create the owner first)
 
@@ -79,8 +79,18 @@ def keyboard(page, posture):
     print(f"ok   {posture:5} keyboard reaches all {len(want)} navigation links")
 
 
+def no_trailing_slash(page):
+    """The bare address (…/memoir) lands on the app, at the same origin: a redirect that
+    named the container's own port once sent people to another service."""
+    page.goto(BASE)
+    origin = re.match(r"^https?://[^/]+", BASE).group(0)
+    assert page.url.startswith(f"{origin}/"), f"{BASE} went to {page.url}"
+    print(f"ok   {BASE} stays on {origin}")
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch()
+    no_trailing_slash(browser.new_page())
     for posture, size in POSTURES.items():
         page = browser.new_page(viewport=size)
         sign_in(page)
