@@ -26,7 +26,8 @@ SELF_SERVICE = {
     ("PATCH", "/api/me"),
     ("POST", "/api/me/password"),
 }
-OWNER_ONLY = re.compile(r"^/api/(users|audit|invitations)(/|$)")
+OWNER_PATHS = re.compile(r"^/api/(users|audit|invitations)(/|$)")
+OWNER_ROUTES = {("PATCH", "/api/settings"), ("POST", "/api/trash/purge")}
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 
 
@@ -62,9 +63,13 @@ def test_a_viewer_changes_nothing(session, method, path):
     assert r.json()["error"]["code"] == "forbidden"
 
 
-@pytest.mark.parametrize(
-    "method,path", [r for r in ALL if OWNER_ONLY.match(r[1]) and r not in PUBLIC]
-)
+def owner_only(route) -> bool:
+    return route not in PUBLIC and (
+        bool(OWNER_PATHS.match(route[1])) or route in OWNER_ROUTES
+    )
+
+
+@pytest.mark.parametrize("method,path", [r for r in ALL if owner_only(r)])
 def test_owner_routes_refuse_a_contributor(session, method, path):
     owner(session)
     member(session, Role.CONTRIBUTOR)

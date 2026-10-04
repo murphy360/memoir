@@ -63,6 +63,9 @@ recording.
 - **Every route has a role check** from `api/app/accounts/deps.py` (`require_role(...)`, `require_executor`);
   only health, login and the invitation-accept routes are open. `tests/test_roles.py` fails when a route
   forgets. Tables people edit use the `Audited` mixin. `docs/ACCOUNTS.md` has the rules.
+- **The data model** is `docs/DATA_MODEL.md`: change it in the same PR as any migration. Domain entities
+  live in `api/app/domain/`, one module each; lists use `pagination.paginate`, memories go through
+  `memories.visible_to`, deletes are soft.
 - **Errors** are always `{"error": {"code", "message", "field"}}` (`api/app/core/errors.py`). Raise
   `ApiError` from routes and services.
 - **Background work is a job** (`api/app/jobs/`): register a handler with `@handler("area.kind")`, enqueue
