@@ -30,6 +30,12 @@ server {
         client_max_body_size 0;
     }
 
+    # The app manifest has its own type (not in nginx's list); browsers check it.
+    location = ${BASE_PATH}manifest.webmanifest {
+        default_type application/manifest+json;
+        add_header Cache-Control "no-cache";
+    }
+
     # Hashed assets never change; everything else is the single-page app.
     location ${BASE_PATH}assets/ {
         add_header Cache-Control "public, max-age=31536000, immutable";

@@ -3,6 +3,7 @@
 from app.accounts.models import AuditEvent, Invitation, LoginAttempt, User, UserSession
 from app.archive.models import Archive
 from app.blobs.models import Blob
+from app.capture.models import UploadSession
 from app.domain.assets import Asset, EventAsset
 from app.domain.epics import Epic
 from app.domain.events import Event
@@ -38,6 +39,7 @@ __all__ = [
     "Place",
     "Question",
     "Thread",
+    "UploadSession",
     "User",
     "UserSession",
     "WorkerHeartbeat",

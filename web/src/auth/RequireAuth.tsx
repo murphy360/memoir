@@ -46,9 +46,9 @@ export function RequireRole({
   if (!me.data) return null;
   if (!atLeast(me.data, role)) {
     return (
-      <main>
+      <section>
         <p role="alert">This page is for the archive&apos;s {role}s.</p>
-      </main>
+      </section>
     );
   }
   return <>{children}</>;

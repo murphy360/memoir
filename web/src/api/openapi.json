@@ -460,6 +460,63 @@
         "title": "Children",
         "type": "string"
       },
+      "Context": {
+        "description": "Where the recording was started: it travels with the upload.",
+        "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Id"
+          },
+          "quick": {
+            "default": false,
+            "description": "One tap from the home screen",
+            "title": "Quick",
+            "type": "boolean"
+          }
+        },
+        "title": "Context",
+        "type": "object"
+      },
       "CreateInvitation": {
         "properties": {
           "email": {
@@ -1565,6 +1622,28 @@
       },
       "MemoryOut": {
         "properties": {
+          "audio_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Seconds"
+          },
+          "audio_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio State"
+          },
           "date_end": {
             "anyOf": [
               {
@@ -1657,6 +1736,17 @@
             "format": "date-time",
             "title": "Recorded At",
             "type": "string"
+          },
+          "response_to_question_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response To Question Id"
           },
           "storyteller_id": {
             "anyOf": [
@@ -1865,6 +1955,29 @@
           "into_id"
         ],
         "title": "MergeInto",
+        "type": "object"
+      },
+      "OpenUpload": {
+        "properties": {
+          "content_type": {
+            "examples": [
+              "audio/webm;codecs=opus"
+            ],
+            "maxLength": 120,
+            "title": "Content Type",
+            "type": "string"
+          },
+          "context": {
+            "$ref": "#/components/schemas/Context",
+            "default": {
+              "quick": false
+            }
+          }
+        },
+        "required": [
+          "content_type"
+        ],
+        "title": "OpenUpload",
         "type": "object"
       },
       "Page_AssetOut_": {
@@ -3738,6 +3851,41 @@
         "title": "UpdateUser",
         "type": "object"
       },
+      "UploadOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "memory_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Id"
+          },
+          "received_bytes": {
+            "title": "Received Bytes",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "received_bytes",
+          "status",
+          "memory_id"
+        ],
+        "title": "UploadOut",
+        "type": "object"
+      },
       "UserOut": {
         "properties": {
           "created_at": {
@@ -4368,6 +4516,218 @@
         "summary": "Sign Out Everywhere Else",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/capture/uploads": {
+      "post": {
+        "operationId": "open_upload_api_capture_uploads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Upload",
+        "tags": [
+          "capture"
+        ]
+      }
+    },
+    "/api/capture/uploads/{upload_id}": {
+      "delete": {
+        "operationId": "abort_upload_api_capture_uploads__upload_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Abort Upload",
+        "tags": [
+          "capture"
+        ]
+      },
+      "get": {
+        "description": "How far an upload got: a client resumes from `received_bytes`.",
+        "operationId": "upload_state_api_capture_uploads__upload_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload State",
+        "tags": [
+          "capture"
+        ]
+      },
+      "put": {
+        "description": "The request body is the chunk's raw bytes (application/octet-stream).",
+        "operationId": "upload_chunk_api_capture_uploads__upload_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Where this chunk starts",
+            "in": "query",
+            "name": "offset",
+            "required": true,
+            "schema": {
+              "description": "Where this chunk starts",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Chunk",
+        "tags": [
+          "capture"
+        ]
+      }
+    },
+    "/api/capture/uploads/{upload_id}/finalize": {
+      "post": {
+        "operationId": "finalize_upload_api_capture_uploads__upload_id__finalize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Finalize Upload",
+        "tags": [
+          "capture"
         ]
       }
     },
@@ -6166,6 +6526,54 @@
         "summary": "Update Memory",
         "tags": [
           "memories"
+        ]
+      }
+    },
+    "/api/memories/{memory_id}/audio": {
+      "get": {
+        "description": "The recording, MP3 when normalised. Supports Range requests, so\nplayers can seek.",
+        "operationId": "memory_audio_api_memories__memory_id__audio_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The recording as it was made",
+            "in": "query",
+            "name": "original",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "The recording as it was made",
+              "title": "Original",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Memory Audio",
+        "tags": [
+          "capture"
         ]
       }
     },

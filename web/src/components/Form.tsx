@@ -1,6 +1,8 @@
 import type { InputHTMLAttributes, ReactNode } from "react";
 import { useId } from "react";
 
+import { messageOf } from "../lib/errors";
+
 type FieldProps = InputHTMLAttributes<HTMLInputElement> & {
   label: string;
   hint?: ReactNode;
@@ -26,7 +28,7 @@ export function Field({ label, hint, ...input }: FieldProps) {
 /** An error the user should read, announced to screen readers. */
 export function ErrorText({ error }: { error: unknown }) {
   if (!error) return null;
-  const message = error instanceof Error ? error.message : String(error);
+  const message = typeof error === "string" ? error : messageOf(error);
   return (
     <p role="alert" className="error">
       {message}

@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 import { safeNext } from "../src/auth/LoginPage";
 import { fail, fakeApi, ok, OWNER, VIEWER } from "./fakeApi";
-import { renderApp } from "./renderApp";
+import { renderApp, WIDE } from "./renderApp";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -83,14 +83,14 @@ test("a temporary password sends the user to choose a new one first", async () =
 
 test("a viewer sees no owner controls, and the owner page refuses them plainly", async () => {
   fakeApi({ "GET /api/me": ok(VIEWER) });
-  renderApp("/");
-  expect(await screen.findByText("Signed in as Ann.")).toBeInTheDocument();
+  renderApp("/", WIDE);
+  expect(await screen.findByRole("link", { name: "Ann" })).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "People with access" })).toBeNull();
 });
 
 test("the owner sees the owner link", async () => {
   fakeApi({ "GET /api/me": ok(OWNER) });
-  renderApp("/");
+  renderApp("/", WIDE);
   expect(
     await screen.findByRole("link", { name: "People with access" }),
   ).toBeInTheDocument();

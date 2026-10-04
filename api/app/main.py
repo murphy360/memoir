@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app import __version__
 from app.accounts.csrf import OriginCheckMiddleware
+from app.capture import router as capture
 from app.core import errors
 from app.core.logging import RequestIdMiddleware
 from app.core.settings import get_settings
@@ -27,6 +28,7 @@ from app.routers import auth, health, invitations, profile, users
 
 ROUTERS = (health, auth, profile, users, invitations)
 DOMAIN = (
+    capture,
     dates,
     people,
     places,
