@@ -18,11 +18,11 @@ jobs:
       format-only: ${{ contains(github.event.pull_request.labels.*.name, 'format-only') }}
   lint-web:
     # Pinned to murphy360/standards#2 until node-lint is released; then @v2 like the others.
-    uses: murphy360/standards/.github/workflows/node-lint.yml@5d52c5303ca6f7a1212d12d2385eb861badbd33b
+    uses: murphy360/standards/.github/workflows/node-lint.yml@1b8a062ac454e98fbd68b7a0c186442395a56f77
     with:
       working-directory: web
       format-check: true
-      standards-ref: 5d52c5303ca6f7a1212d12d2385eb861badbd33b
+      standards-ref: 1b8a062ac454e98fbd68b7a0c186442395a56f77
   workflows:
     uses: murphy360/standards/.github/workflows/actionlint.yml@v2
   shell:
