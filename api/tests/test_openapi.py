@@ -8,6 +8,5 @@ COMMITTED = Path(__file__).resolve().parents[2] / "web" / "src" / "api" / "opena
 
 
 def test_the_committed_openapi_document_is_current():
-    assert (
-        COMMITTED.read_text() == openapi_document()
-    ), "web/src/api/openapi.json is out of date: run `make openapi` and commit it"
+    stale = "web/src/api/openapi.json is out of date: run `make openapi` and commit it"
+    assert COMMITTED.read_text() == openapi_document(), stale
