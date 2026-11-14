@@ -58,9 +58,8 @@ def test_merging_events_moves_everything_and_fills_gaps(session):
     assert (merged["description"], merged["date_text"]) == ("In the rain", "June 2008")
     by_name = {p["name"]: p for p in merged["participants"]}
     assert set(by_name) == {"Corey", "Jane"}
-    assert (
-        by_name["Corey"]["period_id"] == navy["id"]
-    ), "the target took the source's placement"
+    placed = by_name["Corey"]["period_id"] == navy["id"]
+    assert placed, "the target took the source's placement"
     assert c.get(f"/api/memories/{m['id']}").json()["event_id"] == dst["id"]
     linked = c.get("/api/assets", params={"event_id": dst["id"]}).json()["items"]
     assert sorted(a["id"] for a in linked) == sorted([shared["id"], own["id"]])
