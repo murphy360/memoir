@@ -1,48 +1,50 @@
 ---
 name: Ticket
-about: A work item with what to build, how to test it, the docs to update and what done means
-title: ""
-labels: ""
-assignees: ""
+about: One piece of work, written as the whole brief for whoever takes it
 ---
+
+<!-- From templates/ISSUE_TEMPLATE/ticket.md in murphy360/standards. Keep every section, and write "none" where one has nothing. Short sentences, one idea each. -->
 
 ## Problem
 
-State the problem in short sentences. Say what happens now. Say why it matters.
+<!-- The owner's direction, quoted, with its date, where there is one. Otherwise what is wrong or missing today, and for whom. -->
 
 ## What to build
 
-1. List the required changes in run order.
-2. Name the files, tests, docs and behaviour that define done.
+<!-- The change, as a short list: what exists when this is done that does not exist now. -->
+
+## Acceptance
+
+<!-- What must be true, as a checklist someone else can verify without asking the implementer. -->
+
+- [ ]
 
 ## For the implementer
 
 ### Read first
 
-- Read `CLAUDE.md` before you change code.
-- Read the whole ticket before you start.
-- Ask on the ticket if the owner kept a design choice.
+<!-- The files, documents and tickets to read before any code. -->
 
 ### Build
 
-- Make the smallest change that solves the ticket.
-- Keep the code rules and the file-size limit in mind while you edit.
+<!-- Where the change goes, in what order, and what must stay as it is. -->
 
 ### Tests
 
-- Add or update the unit tests the ticket needs.
-- Run the tests in Docker and paste the end of the output in the PR body.
+<!-- The tests that prove each acceptance line, and how to run them. -->
 
 ### Docs
 
-- Update the spec for the area.
-- Update the user manual, and the training material where the project has it.
-- Update any run sheet the change alters.
+<!-- The documents this changes, or "none: this is internal". -->
 
-## Done
+### Done
 
-- [ ] The change is in, small and readable.
-- [ ] Tests for every new behaviour pass in Docker.
-- [ ] `python3 code_rules.py` (from murphy360/standards) prints OK.
-- [ ] The docs are updated in the same PR.
-- [ ] One PR opened with `Closes #N`, with every `Note:` line the deployer needs.
+<!-- Where the work stops: what the one pull request holds, and what is left to the owner (a deploy, a setting, a release). -->
+
+## Out of scope
+
+<!-- What this ticket leaves alone, and the ticket that covers it where there is one. -->
+
+## Owner decision
+
+<!-- Each decision the owner reserves, with a recommendation. An agent asks in one comment and takes the next ticket; it never guesses. -->

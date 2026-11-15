@@ -1,26 +1,15 @@
-<!-- Delete the hints in the comments when you fill this in. -->
+<!-- Copy to .github/pull_request_template.md. Fill in every section; delete none. -->
 
 ## What and why
 
-<!-- One paragraph. What changed, and why. -->
-
-Closes #N
-
-## Tests
-
-<!-- The command you ran and the last lines of its output, pasted. -->
-
-```
-```
+<!-- One or two sentences: what changed, and why. -->
 
 ## Docs touched
 
-<!-- The spec, the user manual, the training material, the run sheets. Say "none" and why, if none. -->
+<!-- Which docs this pull request updates, or "none: this is internal". -->
 
 ## Known issues
 
-<!-- Anything left undone, each with its ticket. Say "none" if none. -->
+<!-- A known gap left, with its ticket, or "none". -->
 
-## Note for the deployer
-
-<!-- An image rebuild, a config change, a migration. Say "none" if none. -->
+Closes #
