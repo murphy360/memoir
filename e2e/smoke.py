@@ -28,7 +28,10 @@ PAGES = {
     "/gallery": "Design pieces",
     "/settings/users": "People with access",
 }
-POSTURES = {"phone": {"width": 390, "height": 844}, "wide": {"width": 1280, "height": 900}}
+POSTURES = {
+    "phone": {"width": 390, "height": 844},
+    "wide": {"width": 1280, "height": 900},
+}
 
 
 def sign_in(page):
@@ -50,7 +53,9 @@ def every_page(page, posture):
             expect(heading).to_be_visible()
         except AssertionError:
             page.screenshot(path=f"{SHOTS}/failed-{posture}.png", full_page=True)
-            raise AssertionError(f"{posture} {path}: no heading matching {title!r}") from None
+            raise AssertionError(
+                f"{posture} {path}: no heading matching {title!r}"
+            ) from None
         assert page.get_by_role("main").count() == 1, f"{path}: one main landmark"
         page.reload()
         expect(heading).to_be_visible()

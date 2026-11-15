@@ -23,13 +23,14 @@ test-web: images
 
 lint: lint-api lint-web
 
-# The API, as python-lint runs it: formatting, ruff with the standard limits, and no noqa.
+# The API: formatting, ruff with the standard limits, and no noqa. --select, not --extend-select: since ruff 0.16
+# the defaults are about 400 rules. `pre-commit run --all-files` runs exactly what CI runs.
 # (CI also checks file sizes with code_rules.py --all from murphy360/standards.)
 lint-api: images
 	docker run --rm $(MOUNT) -w /src/api $(API_TEST) \
 		sh -c "! grep -rn --include='*.py' '# *noqa' . && ruff format --no-cache --check . \
 		&& ruff check --no-cache --ignore-noqa \
-		--extend-select E,W,F,C901,PLR0912,PLR0915 --config lint.mccabe.max-complexity=15 \
+		--select E,W,F,C901,PLR0912,PLR0915 --config lint.mccabe.max-complexity=15 \
 		--config lint.pylint.max-branches=15 --config lint.pylint.max-statements=60 ."
 
 lint-web: images

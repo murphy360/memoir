@@ -1,5 +1,5 @@
 # CI from murphy360/standards (templates/ci.yml), for a repository with two parts: api/ (Python) and web/
-# (TypeScript). Every job calls a shared workflow; any other action must be pinned to a full commit SHA.
+# (TypeScript). Every action outside the standards is pinned to a full commit SHA.
 name: ci
 on:
   push:
@@ -7,27 +7,57 @@ on:
   pull_request:
 permissions:
   contents: read
+
+# One run per ref. A pull request's superseded run is cancelled; a push to main or a tag always finishes what it
+# started.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  standards:
-    uses: murphy360/standards/.github/workflows/standards-check.yml@v2
-  lint-api:
-    uses: murphy360/standards/.github/workflows/python-lint.yml@v2
-    with:
-      format-check: true
-      paths: api
-      format-only: ${{ contains(github.event.pull_request.labels.*.name, 'format-only') }}
-  lint-web:
-    uses: murphy360/standards/.github/workflows/node-lint.yml@v2
-    with:
-      working-directory: web
-      format-check: true
-  workflows:
-    uses: murphy360/standards/.github/workflows/actionlint.yml@v2
-  shell:
-    uses: murphy360/standards/.github/workflows/shell-lint.yml@v2
+  # The quick checks in one job (murphy360/standards, actions/checks): standards-check, the lint, shellcheck,
+  # actionlint and the secret scan. One runner and one checkout; every check runs, also after one failed, and the
+  # last lines of the step say which failed.
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      # A self-hosted runner keeps its workspace: this takes back the files a container of the job before left
+      # there, so that the checkout can replace them. On a GitHub-hosted runner it does nothing.
+      - uses: murphy360/standards/actions/take-ownership@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0  # the secret scan reads the commits of the change, so it needs the history
+      - uses: murphy360/standards/actions/checks@v2
+        with:
+          format-check: true
+          working-directory: api
+          format-only: ${{ contains(github.event.pull_request.labels.*.name, 'format-only') }}
+          silencers: true    # a skip, an xfail, a type ignore, a `# pragma: no cover` and a `# shellcheck disable=`
+          #                  # each carry a reason, and the last line counts them
+          project-ruff: true    # lint with the ruff the project pins, so that Dependabot's pull request
+          #                     # here is where a new ruff's findings show up
+          check-pr-template: true          # also requires .github/pull_request_template.md
+          check-pre-commit-config: true    # also requires .pre-commit-config.yaml
+          check-ticket-template: true      # also requires an issue template in .github/ISSUE_TEMPLATE
+          check-templates: true            # the shared text of AGENTS.md is the template's (tools/sync_templates.py)
+          check-agent-settings: true       # also requires .claude/settings.json with the guard hook
+          check-ruff-version: true         # every ruff version the project names is the same one
+      # The web part's lint, a second step in the same job. It runs after a failure too.
+      - if: ${{ !cancelled() }}
+        uses: murphy360/standards/actions/checks@v2
+        with:
+          checks: node-lint
+          working-directory: web
+          format-check: true
+          silencers: true          # a `.skip` in a test carries its reason, and `.only` is a problem
+          no-inline-config: true   # an eslint-disable comment hides nothing and is a problem
+
   deploy:
     # The production compose file (deploy/compose.yml) must stay valid.
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Validate the production compose file
@@ -47,7 +77,7 @@ jobs:
       target: test
       command: "cd web && npm run typecheck && npm test"
   image-api:
-    needs: [lint-api, test-api]
+    needs: [checks, test-api]
     uses: murphy360/standards/.github/workflows/image.yml@v2
     with:
       image: memoir-api
@@ -59,7 +89,7 @@ jobs:
       contents: read
       packages: write
   image-worker:
-    needs: [lint-api, test-api]
+    needs: [checks, test-api]
     uses: murphy360/standards/.github/workflows/image.yml@v2
     with:
       image: memoir-worker
@@ -71,7 +101,7 @@ jobs:
       contents: read
       packages: write
   image-web:
-    needs: [lint-web, test-web]
+    needs: [checks, test-web]
     uses: murphy360/standards/.github/workflows/image.yml@v2
     with:
       image: memoir-web
@@ -85,7 +115,7 @@ jobs:
   result:
     name: result
     if: always()
-    needs: [standards, lint-api, lint-web, workflows, shell, deploy, test-api, test-web, image-api, image-worker, image-web]
+    needs: [checks, deploy, test-api, test-web, image-api, image-worker, image-web]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
