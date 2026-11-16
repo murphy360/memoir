@@ -28,10 +28,10 @@ from app.accounts.deps import require_role
 from app.accounts.models import Role, User
 from app.core.db import Base, get_session, utcnow
 from app.core.errors import ApiError
+from app.domain.common import live, scoped
 from app.domain.epics import Epic
 from app.domain.events import Event, EventOut, ParticipantOut, date_key, out
 from app.domain.pagination import Page, PageParams, paginate
-from app.domain.common import live, scoped
 from app.domain.people import Person
 from app.domain.periods import Period
 

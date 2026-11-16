@@ -1,6 +1,6 @@
 """Every file Memoir keeps is a blob: audio, photos, documents, thumbnails."""
 
-from sqlalchemy import BigInteger, CHAR, String
+from sqlalchemy import CHAR, BigInteger, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base, Timestamped

@@ -139,8 +139,10 @@ def test_weight_is_one_to_ten(session, engine):
     )
     assert c.post("/api/events", json={"title": "x", "weight": 0}).status_code == 422
     ev = event(c, "Fine", weight=10)
-    with pytest.raises(IntegrityError, match="ck_events_weight_1_10"):
-        with engine.begin() as conn:
-            conn.execute(
-                text("UPDATE events SET weight = 11 WHERE id = :i"), {"i": ev["id"]}
-            )
+    with (
+        pytest.raises(IntegrityError, match="ck_events_weight_1_10"),
+        engine.begin() as conn,
+    ):
+        conn.execute(
+            text("UPDATE events SET weight = 11 WHERE id = :i"), {"i": ev["id"]}
+        )

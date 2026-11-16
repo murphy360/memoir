@@ -11,8 +11,8 @@ from enum import StrEnum
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import (
-    BigInteger,
     CHAR,
+    BigInteger,
     Date,
     Float,
     ForeignKey,
