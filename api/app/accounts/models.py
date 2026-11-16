@@ -4,9 +4,9 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import (
+    CHAR,
     BigInteger,
     Boolean,
-    CHAR,
     DateTime,
     ForeignKey,
     Index,

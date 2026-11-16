@@ -1,5 +1,7 @@
 """The interviewer's routes: the next question, the list for you, one question."""
 
+import contextlib
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -42,10 +44,9 @@ def next_question(
     interviewer.seed(db, user)
     waiting = False
     if after_memory_id:
-        try:
+        # deleted (a silent take, say): nothing to wait for
+        with contextlib.suppress(ApiError):
             waiting = interviewer.still_coming(visible(db, after_memory_id, user))
-        except ApiError:
-            pass  # deleted (a silent take, say): nothing to wait for
     found = interviewer.pending_for(db, user, limit=1)
     question = interviewer.out(db, found[0]) if found else None
     return NextQuestion(question=question, waiting=waiting)

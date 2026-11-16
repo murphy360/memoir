@@ -7,7 +7,6 @@ others are added meanwhile. It is opaque to clients: base64 of a small JSON list
 import base64
 import json
 from datetime import date
-from typing import Generic, TypeVar
 
 from fastapi import Query
 from pydantic import BaseModel
@@ -16,12 +15,11 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError
 
-T = TypeVar("T")
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 
 
-class Page(BaseModel, Generic[T]):
+class Page[T](BaseModel):
     items: list[T]
     next_cursor: str | None = None
 

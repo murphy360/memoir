@@ -11,6 +11,7 @@ from app.accounts.deps import require_role
 from app.accounts.models import Role, User
 from app.core.db import get_session
 from app.core.errors import ApiError
+from app.dates.store import set_range
 from app.domain import memories, people
 from app.domain.common import LAST_DAY, live, scoped
 from app.domain.epics import Epic
@@ -18,7 +19,6 @@ from app.domain.events import Event
 from app.domain.pagination import Page, PageParams, paginate
 from app.domain.participants import Participant
 from app.domain.people import Person
-from app.dates.store import set_range
 from app.domain.periods import Period, PeriodOut, _slug
 from app.placement import service
 from app.placement.suggest import Suggestion, suggest
@@ -206,7 +206,7 @@ def inbox(
     keys = [memories.Memory.created_at, memories.Memory.id]
     rows, cursor = paginate(db, stmt, keys, page)
     items = []
-    for memory, out in zip(rows, memories.out(db, rows)):
+    for memory, out in zip(rows, memories.out(db, rows), strict=True):
         options = suggest(db, memory, service.storyteller_of(db, memory))
         items.append(
             InboxItem(memory=out, suggestion=_out(options[0]) if options else None)

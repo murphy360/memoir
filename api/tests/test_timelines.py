@@ -56,12 +56,14 @@ def test_the_database_refuses_a_placement_in_someone_elses_period(session, engin
     navy = period(c, corey["id"], "Navy years")
     ev = event(c, "Shore leave")
     place(c, ev["id"], jane["id"])
-    with pytest.raises(IntegrityError, match="fk_participants_own_period"):
-        with engine.begin() as conn:
-            conn.execute(
-                text("UPDATE participants SET period_id = :p WHERE person_id = :j"),
-                {"p": navy["id"], "j": jane["id"]},
-            )
+    with (
+        pytest.raises(IntegrityError, match="fk_participants_own_period"),
+        engine.begin() as conn,
+    ):
+        conn.execute(
+            text("UPDATE participants SET period_id = :p WHERE person_id = :j"),
+            {"p": navy["id"], "j": jane["id"]},
+        )
 
 
 def test_the_database_refuses_an_epic_from_another_period(session, engine):
@@ -71,11 +73,11 @@ def test_the_database_refuses_an_epic_from_another_period(session, engine):
     norfolk = epic(c, navy["id"], "Norfolk")
     ev = event(c, "Prom")
     place(c, ev["id"], corey["id"], period_id=school["id"])
-    with pytest.raises(IntegrityError, match="fk_participants_epic_in_period"):
-        with engine.begin() as conn:
-            conn.execute(
-                text("UPDATE participants SET epic_id = :e"), {"e": norfolk["id"]}
-            )
+    with (
+        pytest.raises(IntegrityError, match="fk_participants_epic_in_period"),
+        engine.begin() as conn,
+    ):
+        conn.execute(text("UPDATE participants SET epic_id = :e"), {"e": norfolk["id"]})
 
 
 def test_a_memory_brings_its_storyteller_and_the_people_it_names(session):
