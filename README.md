@@ -49,6 +49,12 @@ When a memory is saved, Memoir asks about it: "You said your brother drove. Whic
 your answer** records the answer, and the next question follows. **Questions for you** lists every question
 waiting; **Don't ask this again** dismisses one for good ([docs/INTERVIEWER.md](docs/INTERVIEWER.md)).
 
+## Through your own assistant
+
+Claude, or another assistant that takes a remote MCP server, can read and tell stories as you. Add
+`https://dontpanic.ddns.net/memoir/mcp` as a connector and sign in with your Memoir account. **Your account** lists
+connected agents, and disconnects them ([docs/AGENTS_MCP.md](docs/AGENTS_MCP.md)).
+
 ## AI
 
 Set `MEMOIR_GEMINI_API_KEY` for the API and the worker to have recordings transcribed, read for dates, people and

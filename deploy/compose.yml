@@ -29,8 +29,10 @@ services:
     restart: unless-stopped
 
   memoir-api:
-    # Applies the migrations on start (under a lock), then serves /api. Caddy sends
-    # /memoir/api/* here with /memoir stripped.
+    # Applies the migrations on start (under a lock), then serves /api, and /mcp for agents
+    # (docs/AGENTS_MCP.md). Caddy sends /memoir/api/*, /memoir/mcp and /memoir/.well-known/*
+    # here with /memoir stripped, and the two root OAuth documents for /memoir as they are
+    # (deploy/Caddyfile).
     image: ghcr.io/murphy360/memoir-api:main
     container_name: memoir-api
     env_file: &secrets
@@ -41,6 +43,9 @@ services:
       MEMOIR_BLOB_ROOT: /data/blobs
       MEMOIR_PUBLIC_URL: https://dontpanic.ddns.net/memoir/
       MEMOIR_ALLOWED_ORIGINS: https://dontpanic.ddns.net
+      # Where agents may send a person back after they connect: claude.ai's by default.
+      # Add another assistant's callback here, comma-separated (docs/AGENTS_MCP.md).
+      # MEMOIR_AGENT_REDIRECT_URIS: https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback
       # Only Caddy and the web image reach the API (no port on the host): believe their
       # X-Forwarded-For, so login rate limits count the real client.
       MEMOIR_FORWARDED_ALLOW_IPS: "*"

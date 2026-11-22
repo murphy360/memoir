@@ -197,6 +197,9 @@ export function MemoryPage() {
         <AnsweredQuestion questionId={m.response_to_question_id} />
       ) : null}
       {m.date_text ? <p className="hint">{m.date_text}</p> : null}
+      {m.told_through ? (
+        <p className="hint">Told through {m.told_through}</p>
+      ) : null}
       {m.audio_state ? <Recording id={id} /> : null}
       <TranscriptState memory={m} onRetry={() => retry.mutate()} />
       <Transcript key={m.transcript ?? ""} memory={m} />

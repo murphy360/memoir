@@ -7,6 +7,7 @@ import type { Me } from "../api/types";
 import { ErrorText, Field } from "../components/Form";
 import { useOptimisticMutation } from "../lib/optimistic";
 import { ChangePasswordForm } from "./ChangePasswordPage";
+import { ConnectedAgents } from "./ConnectedAgents";
 import { ME, useMe } from "./useMe";
 
 function NameForm({ me }: { me: Me }) {
@@ -102,6 +103,7 @@ export function ProfilePage() {
         <ChangePasswordForm onDone={() => undefined} />
       </section>
       <Sessions />
+      <ConnectedAgents />
     </section>
   );
 }

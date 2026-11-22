@@ -101,6 +101,9 @@ class Memory(ArchiveRow, Base):
     autofiled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # The follow-up questions: done, ai_off or failed; None while still to come.
     questions_state: Mapped[str | None] = mapped_column(String(16))
+    # The agent it was told through (its OAuth client's name), for a story an agent
+    # wrote with tell_story; None for one recorded or typed in the app.
+    told_through: Mapped[str | None] = mapped_column(String(120))
 
 
 class MemoryMention(Base):
@@ -184,6 +187,9 @@ class MemoryOut(BaseModel):
         None, description="Why the last analysis failed, in the provider's words"
     )
     response_to_question_id: int | None = None
+    told_through: str | None = Field(
+        None, description="The agent it was told through, if an agent wrote it"
+    )
     mentioned_ids: list[int] = []
     place_ids: list[int] = []
 

@@ -125,3 +125,17 @@ test("a memory that is not there says so", async () => {
   renderApp("/memories/9");
   expect(await screen.findByRole("alert")).toHaveTextContent("No such memory.");
 });
+
+test("a story told through an agent says which one", async () => {
+  fakeApi({
+    "GET /api/me": ok(OWNER),
+    "GET /api/memories/5": ok({
+      ...BASE,
+      audio_state: null,
+      told_through: "Claude",
+    }),
+  });
+  renderApp("/memories/5", WIDE);
+  expect(await screen.findByText("Told through Claude")).toBeInTheDocument();
+  expect(document.querySelector("audio")).toBeNull();
+});

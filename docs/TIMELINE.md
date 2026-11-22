@@ -35,7 +35,8 @@ The storyteller is the memory's storyteller, or else the person of the account t
 
 A quick memory (one tap from home), or an answer to a question, is filed where the suggestion says, as soon as
 extraction has read its date, when the archive's "file quick memories automatically" setting is on (the default).
-It happens **once** per memory.
+It happens **once** per memory. A story an agent tells with `tell_story` is a quick memory too: filed at once when
+it carries a date (or answers a question about a period), otherwise after extraction (`AGENTS_MCP.md`).
 Periods and events made for it are marked "created for this memory". They are ordinary rows from then on: no job
 ever makes them again, so deleting one sticks, and the memory goes back to the inbox. Other recordings are never
 filed without a person choosing.

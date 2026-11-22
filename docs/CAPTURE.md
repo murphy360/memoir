@@ -44,4 +44,9 @@ made. Transcription marks it `empty` (`docs/AI.md`): the record screen says "Not
 with **Delete it**, the memory page says so too, and "Waiting to be placed" offers Delete instead of Place. Every
 memory page has **Delete this memory**: the memory leaves every list at once and is erased after 30 days.
 
+**Told in words.** An agent's `tell_story` (`AGENTS_MCP.md`) makes a memory by the same rules as Finish, with no
+recording: the words are its transcript (`transcript_source` is `agent`, never replaced by a job), the context is
+`quick` (and the question, if it answers one), and `told_through` names the agent. Extraction and questions follow
+as for a recording.
+
 A 45-minute recording (11.8 MB of Opus) uploads in 12 chunks and normalises in about 8 seconds to a 43 MB MP3.
