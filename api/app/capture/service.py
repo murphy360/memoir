@@ -3,6 +3,7 @@
 Chunks land in a part file under the blob root's `uploads/`. A chunk at the wrong offset
 is refused with the offset the server has, so a client that lost track (a reload, a
 dropped connection) resumes exactly there. Finalizing twice returns the same memory.
+A story an agent tells in words (`tell`) becomes a memory by the same rules.
 """
 
 import uuid
@@ -11,20 +12,24 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.accounts.models import User
+from app.analysis.common import ai_for
 from app.blobs.store import BlobStore
 from app.capture.models import UploadSession
 from app.core.db import utcnow
 from app.core.errors import ApiError
 from app.core.settings import Settings
-from app.domain.common import live
+from app.dates.store import MANUAL, set_point
+from app.domain.common import clean, live
 from app.domain.events import Event
 from app.domain.memories import Memory, MemoryMention, join_event
 from app.domain.people import Person
 from app.domain.periods import Period
 from app.domain.questions import Question, Scope, answer
 from app.jobs import queue
+from app.placement.service import autofile
 
 MAX_CHUNK = 8 * 1024 * 1024
+MAX_STORY = 50_000
 AUDIO_TYPES = ("audio/", "video/webm", "video/mp4")
 TARGETS = ("event_id", "period_id", "person_id")
 
@@ -166,16 +171,25 @@ def finalize(
 
 
 def _memory(session: Session, user: User, row: UploadSession, original: str) -> Memory:
-    context = row.context or {}
+    return _start(
+        session,
+        user,
+        row.context or {},
+        original_audio_sha256=original,
+        audio_state="normalising",
+    )
+
+
+def _start(session: Session, user: User, context: dict, **fields) -> Memory:
+    """A new memory where its context points, with its question answered."""
     memory = Memory(
         archive_id=user.archive_id,
         uploaded_by=user.id,
         storyteller_id=_storyteller(session, user),
         event_id=context.get("event_id"),
         response_to_question_id=context.get("question_id"),
-        original_audio_sha256=original,
-        audio_state="normalising",
         capture_context=context,
+        **fields,
     )
     session.add(memory)
     session.flush()
@@ -185,6 +199,57 @@ def _memory(session: Session, user: User, row: UploadSession, original: str) -> 
     join_event(session, memory)
     if memory.response_to_question_id:
         answer(session, memory.response_to_question_id, memory.id)
+    return memory
+
+
+def tell(
+    session: Session,
+    user: User,
+    story: str,
+    *,
+    title: str | None = None,
+    date_text: str | None = None,
+    question_id: int | None = None,
+    told_through: str | None = None,
+) -> Memory:
+    """A memory told in words instead of recorded (an agent's `tell_story`).
+
+    It is a quick memory, or an answer, like a recording: the same context rules, then
+    filed once by placement. Filed now when Memoir already knows enough (a date, or a
+    question about a period) or no AI will read it; otherwise once extraction has read
+    the words, as a quick recording is.
+    """
+    words = (story or "").strip()
+    if not words:
+        raise ApiError(422, "empty_story", "Tell the story in words first.", "story")
+    if len(words) > MAX_STORY:
+        raise ApiError(
+            422, "story_too_long", "Tell it in parts of 50,000 characters.", "story"
+        )
+    asked = {"question_id": question_id} if question_id else {}
+    context = _check_context(session, user, asked | {"quick": True})
+    memory = _start(
+        session,
+        user,
+        context,
+        title=clean(title, 180),
+        transcript=words,
+        transcript_state="done",
+        transcript_source="agent",
+        told_through=told_through,
+    )
+    set_point(memory, "date", date_text, MANUAL, keep=True)
+    session.commit()
+    provider, _ = ai_for(session, memory, "ai_extraction", "extract")
+    if memory.date_start or context.get("period_id") or provider is None:
+        autofile(session, memory)
+    queue.enqueue(
+        session,
+        "analysis.extract",
+        {"memory_id": memory.id},
+        idempotency_key=f"extract:{memory.id}",
+        requested_by=user.id,
+    )
     return memory
 
 

@@ -10,7 +10,7 @@ validated in CI, and `deploy/Caddyfile` is the Caddy block. Commands below run o
 | Service | Image | What |
 |---|---|---|
 | `memoir-db` | `postgres:17-alpine` | The database, in `/docker/memoir/postgres`. Only the `memoir` network reaches it |
-| `memoir-api` | `ghcr.io/murphy360/memoir-api:main` | The API. Applies migrations on start, under a lock. Caddy sends `/memoir/api/*` here with `/memoir` stripped |
+| `memoir-api` | `ghcr.io/murphy360/memoir-api:main` | The API, and the MCP server for agents. Applies migrations on start, under a lock. Caddy sends `/memoir/api/*`, `/memoir/mcp` and `/memoir/.well-known/*` here with `/memoir` stripped, and two OAuth documents at the root as they are ("Agents" below) |
 | `memoir-worker` | `ghcr.io/murphy360/memoir-worker:main` | Background jobs. Healthy while its heartbeat is under a minute old (`memoir-cli worker-alive`) |
 | `memoir-web` | `ghcr.io/murphy360/memoir-web:main` | The app, built for `/memoir`. Caddy sends every other `/memoir` path here |
 
@@ -101,6 +101,36 @@ To go back, run the previous image: `docker images ghcr.io/murphy360/memoir-api`
 `docker compose up -d` with the old image's digest in place of `:main` runs it. A migration has run by then, so
 going back past a migration means restoring last night's backup.
 
+## Agents
+
+Assistants such as Claude connect to `https://dontpanic.ddns.net/memoir/mcp` and sign in with a person's Memoir
+account (`AGENTS_MCP.md`). The API serves it all; Caddy needs these routes, which `deploy/Caddyfile` has:
+
+| Path | Caddy |
+|---|---|
+| `/memoir/mcp`, `/memoir/.well-known/*` | In the `@memoir_api` matcher, with `/memoir` stripped, like `/memoir/api/*` |
+| `/.well-known/oauth-authorization-server/memoir`, `/.well-known/oauth-protected-resource/memoir/mcp` | Their own matcher, outside the `/memoir` block, sent to `memoir-api:8000` unchanged |
+
+The OAuth endpoints themselves are under `/memoir/api/oauth/`, so they need nothing new. To deploy the first time,
+merge the dontpanic pull request with these routes, then deploy the new build (below) and
+`docker compose up -d --force-recreate caddy`. Check:
+
+```sh
+curl -s https://dontpanic.ddns.net/.well-known/oauth-authorization-server/memoir
+# {"issuer":"https://dontpanic.ddns.net/memoir","authorization_endpoint":...}
+curl -si https://dontpanic.ddns.net/memoir/mcp -X POST | head -1
+# HTTP/2 401   (with WWW-Authenticate: Bearer resource_metadata="...")
+```
+
+Then add `https://dontpanic.ddns.net/memoir/mcp` as a custom connector in claude.ai, sign in, and ask Claude
+"who am I in Memoir?".
+
+- **Another assistant.** Memoir sends people back only to claude.ai's callbacks and to this computer. To allow
+  another assistant, set `MEMOIR_AGENT_REDIRECT_URIS` on the API (comma-separated, claude.ai's two included) in the
+  stack's compose file, and recreate `memoir-api`.
+- **Someone lost a device with an agent on it.** They press **Disconnect** on *Your account*, or change their
+  password, which disconnects every agent. The owner setting them a temporary password does the same.
+
 ## Backups
 
 `install/memoir-backup.sh` in the dontpanic repository (the same as `deploy/backup.sh` here) writes:
@@ -175,7 +205,7 @@ stack's `.env` (for example `MEMOIR_AI_PROVIDER=anthropic`, or `gemini` for both
   ```
 
 - **Everyone's sessions.** A user signs out everywhere from their account page; the owner removing a user ends
-  theirs.
+  theirs, and disconnects their agents.
 
 ## People
 

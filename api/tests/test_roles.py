@@ -18,6 +18,16 @@ PUBLIC = {
     ("POST", "/api/auth/login"),
     ("GET", "/api/invitations/accept/{token}"),
     ("POST", "/api/invitations/accept/{token}"),
+    # OAuth for agents (docs/AGENTS_MCP.md): an agent registers and gets its tokens
+    # before anyone is signed in, and the consent page is where the person signs in.
+    # Each checks its own credential instead: a client secret, a code with its PKCE
+    # verifier, a refresh token, or the person's password. /mcp and the discovery
+    # documents are not in the OpenAPI document; test_agents_*.py covers them.
+    ("GET", "/api/oauth/authorize"),
+    ("POST", "/api/oauth/authorize"),
+    ("POST", "/api/oauth/register"),
+    ("POST", "/api/oauth/token"),
+    ("POST", "/api/oauth/revoke"),
 }
 # A viewer may still manage their own account, and use read-only previews.
 SELF_SERVICE = {
@@ -26,6 +36,7 @@ SELF_SERVICE = {
     ("POST", "/api/auth/logout-all"),
     ("PATCH", "/api/me"),
     ("POST", "/api/me/password"),
+    ("DELETE", "/api/me/agents/{agent_id}"),
 }
 OWNER_PATHS = re.compile(r"^/api/(users|audit|invitations)(/|$)")
 OWNER_ROUTES = {("PATCH", "/api/settings"), ("POST", "/api/trash/purge")}

@@ -34,6 +34,7 @@ erDiagram
 |---|---|---|
 | Archive | `archives`, `archive_settings` | One family's memoir, and the settings the owner may change (requirements 3.4) |
 | User | `users` | A login (see `ACCOUNTS.md`) |
+| Connected agent | `oauth_clients`, `agent_grants`, `oauth_codes`, `oauth_tokens` | An assistant that registered itself (its name and redirect addresses), a person's connection of it (Disconnect ends it), and the codes and tokens under that connection, kept only as SHA-256 hashes (see `AGENTS_MCP.md`). Removing the login or the client removes them |
 | Person | `people`, `person_aliases` | Someone in the family's life, with or without a login. Name unique in the archive, case-insensitive. Aliases are unique per person; one alias may name several people ("the kids"); an alias cannot be someone else's name. At most one person per login |
 | Place | `places` | A named location, unique per archive, with optional coordinates |
 | Thread | `threads` | A theme across time. Title and slug unique per archive. Tags epics and events, never periods |
@@ -41,7 +42,7 @@ erDiagram
 | Epic | `epics` | An arc inside one period. Weight 1 to 10 |
 | Event | `events` | A moment. It has no period of its own: each participant places it. Weight 1 to 10 |
 | Participant | `participants` | A person at an event: role (`participant`, `storyteller`, `mentioned`, `in_photo`), source (`confirmed`, `transcript`, `face`), whether a person confirmed it, and **their** period and epic for the event |
-| Memory | `memories`, `memory_mentions`, `memory_places` | A told story: storyteller, uploader, transcript, date, tone, visibility, the people and places it names. Belongs to one event once placed |
+| Memory | `memories`, `memory_mentions`, `memory_places` | A told story: storyteller, uploader, transcript, date, tone, visibility, the people and places it names. Belongs to one event once placed. `told_through` is the name of the agent that wrote it with `tell_story`, or empty |
 | Asset | `assets`, `event_assets` | A file (photo, document, audio) and its record. Linked to any number of events as `evidence` or `recording` |
 | Question | `questions` | A follow-up prompt, for one storyteller (`asked_of_id`) or anyone. Pending questions are unique by their text without case, extra spaces or the closing mark |
 

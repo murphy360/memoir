@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.accounts import audit, sessions
 from app.accounts.models import Role, User
 from app.accounts.passwords import check_rules, hash_password
+from app.agents import grants
 from app.core.db import utcnow
 from app.core.errors import ApiError
 
@@ -91,6 +92,7 @@ def set_temporary_password(
     )
     session.commit()
     sessions.revoke_all(session, user.id)
+    grants.end_all(session, user.id)
 
 
 def remove(session: Session, owner: User, user: User) -> None:
@@ -107,3 +109,4 @@ def remove(session: Session, owner: User, user: User) -> None:
     )
     session.commit()
     sessions.revoke_all(session, user.id)
+    grants.end_all(session, user.id)

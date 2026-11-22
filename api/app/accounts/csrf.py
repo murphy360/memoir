@@ -14,6 +14,10 @@ from starlette.responses import JSONResponse, Response
 from app.core.settings import get_settings
 
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
+# Called by an agent's own servers, which send no Origin. None of them reads a cookie:
+# each carries its own credential (a client secret, a code, a bearer token), so there is
+# nothing for a forged request to borrow. The consent form is not here: it is checked.
+NO_COOKIES = {"/api/oauth/register", "/api/oauth/token", "/api/oauth/revoke", "/mcp"}
 CSRF_COOKIE = "memoir_csrf"
 CSRF_HEADER = "x-csrf-token"
 
@@ -44,6 +48,7 @@ class OriginCheckMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         if (
             request.method in UNSAFE
+            and request.url.path not in NO_COOKIES
             and origin_of(request) not in get_settings().origins
         ):
             return refused()

@@ -41,6 +41,15 @@ class Settings(BaseSettings):
     # The proxies whose X-Forwarded-For uvicorn believes ("*" behind Caddy or nginx).
     forwarded_allow_ips: str = "127.0.0.1"
 
+    # Agents (docs/AGENTS_MCP.md). Where an agent may send a person back after they
+    # sign in (comma-separated); loopback addresses, for desktop apps, always may.
+    agent_redirect_uris: str = (
+        "https://claude.ai/api/mcp/auth_callback,"
+        "https://claude.com/api/mcp/auth_callback"
+    )
+    agent_access_minutes: int = 60
+    agent_refresh_days: int = 90
+
     # Text and audio AI (requirements 6.1). No key: AI is off, and nothing fails.
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-2.5-flash"
@@ -70,6 +79,15 @@ class Settings(BaseSettings):
     ai_extract_provider: str = ""
     ai_questions_provider: str = ""
     ai_timeout_seconds: float = 180.0
+
+    @property
+    def base_url(self) -> str:
+        """The app's address without the closing slash: the OAuth issuer."""
+        return self.public_url.rstrip("/")
+
+    @property
+    def redirect_uris(self) -> set[str]:
+        return {u.strip() for u in self.agent_redirect_uris.split(",") if u.strip()}
 
     @property
     def origins(self) -> set[str]:

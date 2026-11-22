@@ -29,6 +29,17 @@ Who can get in, how, and what each person may do. Requirements section 9 is the 
 - Sign-in is refused, with the same message as a wrong password, after 5 failures from one address within a
   minute, or 10 failures on one account within 15 minutes.
 
+## Agents act as the person
+
+An assistant such as Claude can be connected to Memoir (`AGENTS_MCP.md`). The person signs in on Memoir's own consent
+page, with their own email and password, under the same rate limits. The agent then acts as that person, with that
+person's role: a viewer's agent reads, a contributor's agent can also tell stories. There is no separate agent role.
+
+- *Your account* lists **Connected agents**, each with **Disconnect**.
+- Changing your password, a temporary password from the owner, and being removed disconnect every agent. *Sign out
+  everywhere else* ends browser sessions only.
+- A person who must choose a new password cannot connect an agent, and their agents are refused until they do.
+
 ## Roles
 
 | Role | May |
@@ -52,7 +63,8 @@ header to every change by itself.
 ## The audit log
 
 Logins (and failed ones), owner creation, invitations made, revoked and accepted, role and executor changes,
-temporary passwords, password changes, removals and "sign out everywhere" are recorded with who, whom, when and from
+temporary passwords, password changes, removals, "sign out everywhere", and agents connected and disconnected are
+recorded with who, whom, when and from
 which address. The owner reads it at `GET /api/audit`.
 
 ## For developers
@@ -65,4 +77,7 @@ which address. The owner reads it at `GET /api/audit`.
   `updated_at` and `deleted_at` are filled from the request's user automatically. Removal sets `deleted_at`.
 - Settings: `MEMOIR_PUBLIC_URL` (for invitation links), `MEMOIR_ALLOWED_ORIGINS`, `MEMOIR_COOKIE_SECURE` (off only
   on plain-http localhost), `MEMOIR_SESSION_IDLE_DAYS`, `MEMOIR_INVITATION_DAYS`, the `MEMOIR_LOGIN_*` limits, and
-  `MEMOIR_FORWARDED_ALLOW_IPS` (the proxies whose X-Forwarded-For is believed).
+  `MEMOIR_FORWARDED_ALLOW_IPS` (the proxies whose X-Forwarded-For is believed), and for agents
+  `MEMOIR_AGENT_REDIRECT_URIS`, `MEMOIR_AGENT_ACCESS_MINUTES` and `MEMOIR_AGENT_REFRESH_DAYS`.
+- The OAuth endpoints (`/api/oauth/...`) are open routes: each checks its own credential. `tests/test_roles.py`
+  lists them with the reason. The connected agents routes (`/api/me/agents`) need a signed-in user.

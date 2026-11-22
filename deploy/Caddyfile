@@ -1,8 +1,17 @@
 # The Caddy block for Memoir, inside the site block for dontpanic.ddns.net. The app has its own
 # login, so there is no basic auth here: an unauthenticated API call gets the app's 401.
+#
+# Agents (docs/AGENTS_MCP.md): the OAuth discovery documents, at the host's root with Memoir's
+# path after the well-known name. They go to the API as they are.
+@memoir_oauth path /.well-known/oauth-authorization-server/memoir /.well-known/oauth-protected-resource/memoir/mcp
+handle @memoir_oauth {
+	reverse_proxy memoir-api:8000
+}
 @memoir path /memoir /memoir/*
 handle @memoir {
-	@memoir_api path /memoir/api/*
+	# The API, the MCP server, and the discovery documents under Memoir's own path:
+	# /memoir is stripped on the way in.
+	@memoir_api path /memoir/api/* /memoir/mcp /memoir/.well-known/*
 	handle @memoir_api {
 		uri strip_prefix /memoir
 		reverse_proxy memoir-api:8000

@@ -11,6 +11,7 @@ from app.accounts.passwords import (
     hash_password,
     verify_password,
 )
+from app.agents import grants
 from app.core.errors import ApiError
 from app.core.settings import Settings
 
@@ -25,18 +26,20 @@ def find_user(session: Session, email: str) -> User | None:
     ).first()
 
 
-def login(
+def check_password(
     session: Session,
     email: str,
     password: str,
     *,
     ip: str,
-    user_agent: str | None,
     settings: Settings,
-) -> tuple[User, UserSession, str]:
-    """Check the password and the rate limits, then start a session.
+    kind: str = "login.succeeded",
+    **detail,
+) -> User:
+    """The account these match, after the rate limits; a 401 otherwise.
 
-    Every refusal looks the same, so an attacker learns nothing from it.
+    Every refusal looks the same, so an attacker learns nothing from it. Signing in to
+    the app and connecting an agent both come through here, under the same limits.
     """
     email_key = email.strip().lower()
     user = find_user(session, email_key)
@@ -49,8 +52,22 @@ def login(
         _refuse(session, email_key, ip, user, "login.failed")
     ratelimit.note(session, ip, email_key, True)
     audit.record(
-        session, "login.succeeded", archive_id=user.archive_id, actor_id=user.id, ip=ip
+        session, kind, archive_id=user.archive_id, actor_id=user.id, ip=ip, **detail
     )
+    return user
+
+
+def login(
+    session: Session,
+    email: str,
+    password: str,
+    *,
+    ip: str,
+    user_agent: str | None,
+    settings: Settings,
+) -> tuple[User, UserSession, str]:
+    """Check the password and the rate limits, then start a session."""
+    user = check_password(session, email, password, ip=ip, settings=settings)
     row, token = sessions.start(session, user, ip, user_agent)
     return user, row, token
 
@@ -92,3 +109,4 @@ def change_password(
     )
     session.commit()
     sessions.revoke_all(session, user.id, except_id=keep_session_id)
+    grants.end_all(session, user.id)

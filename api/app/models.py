@@ -1,6 +1,7 @@
 """Imports every model, so `Base.metadata` is complete for Alembic and the tests."""
 
 from app.accounts.models import AuditEvent, Invitation, LoginAttempt, User, UserSession
+from app.agents.models import AgentGrant, OAuthClient, OAuthCode, OAuthToken
 from app.ai.costs import AICall
 from app.archive.models import Archive
 from app.blobs.models import Blob
@@ -20,6 +21,7 @@ from app.jobs.models import Job, WorkerHeartbeat
 
 __all__ = [
     "AICall",
+    "AgentGrant",
     "Archive",
     "ArchiveSettings",
     "Asset",
@@ -34,6 +36,9 @@ __all__ = [
     "Memory",
     "MemoryMention",
     "MemoryPlace",
+    "OAuthClient",
+    "OAuthCode",
+    "OAuthToken",
     "Participant",
     "Period",
     "Person",
