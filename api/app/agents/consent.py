@@ -8,8 +8,17 @@ from urllib.parse import urlsplit
 from fastapi.responses import HTMLResponse
 
 # Hidden fields that carry the authorization request through the form, checked again
-# when it comes back.
-CARRIED = ("client_id", "redirect_uri", "code_challenge", "state", "resource", "scope")
+# when it comes back. Every field of oauth.AuthorizeRequest: the check reads them all.
+CARRIED = (
+    "response_type",
+    "client_id",
+    "redirect_uri",
+    "code_challenge",
+    "code_challenge_method",
+    "state",
+    "scope",
+    "resource",
+)
 HEADERS = {
     "Cache-Control": "no-store",
     # No form-action: browsers apply it to the redirect back to the agent too.

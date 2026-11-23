@@ -6,6 +6,7 @@ import base64
 import contextlib
 import hashlib
 import json
+from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlsplit
 
 from fastapi.testclient import TestClient
@@ -64,9 +65,26 @@ def authorize_params(client_id: str, **extra) -> dict:
     }
 
 
+class _Hidden(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.fields: dict[str, str] = {}
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "input" and a.get("type") == "hidden":
+            self.fields[a["name"]] = a.get("value") or ""
+
+
 def sign_in_to_connect(browser, client_id: str, email: str, password=PASSWORD, **kw):
-    """The person's browser posting the consent form."""
-    form = authorize_params(client_id, **kw) | {"email": email, "password": password}
+    """The person's browser: it opens the consent page and posts back only what the
+    page's form carries, as a real browser does."""
+    page = browser.get("/api/oauth/authorize", params=authorize_params(client_id, **kw))
+    if page.status_code != 200:
+        return page
+    hidden = _Hidden()
+    hidden.feed(page.text)
+    form = hidden.fields | {"email": email, "password": password}
     return browser.post("/api/oauth/authorize", data=form, follow_redirects=False)
 
 
