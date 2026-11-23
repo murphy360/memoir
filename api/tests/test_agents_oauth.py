@@ -6,7 +6,9 @@ from datetime import timedelta
 from sqlalchemy import update
 
 from app.accounts.models import AuditEvent, Role
+from app.agents import consent
 from app.agents.models import AgentGrant, OAuthCode
+from app.agents.oauth import AuthorizeRequest
 from app.core.db import utcnow
 from tests.accounts import member, owner
 from tests.agents import (
@@ -82,6 +84,10 @@ def test_the_consent_page_names_the_agent_and_where_it_returns(engine):
     assert "Connect Claude &lt;b&gt; to Memoir" in r.text
     assert "claude.ai" in r.text
     assert r.headers["x-frame-options"] == "DENY"
+
+
+def test_the_consent_form_carries_every_field_of_the_request(engine):
+    assert set(consent.CARRIED) == set(AuthorizeRequest.model_fields)
 
 
 def test_a_bad_client_or_redirect_is_shown_not_followed(engine):
