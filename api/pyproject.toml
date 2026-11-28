@@ -8,21 +8,21 @@ requires-python = ">=3.12"
 dependencies = [
   "alembic==1.20.1",
   "argon2-cffi==25.1.0",
-  "email-validator==2.3.0",
-  "fastapi==0.162.4",
+  "email-validator==2.4.0",
+  "fastapi==0.165.0",
   "httpx==0.28.1",
   # The MCP server (app/agents/server.py): Streamable HTTP, mounted on the API.
   "mcp==2.3.0",
-  "psycopg[binary]==3.3.8",
-  "pydantic==2.14.3",
-  "pydantic-settings==2.16.2",
-  "sqlalchemy==2.1.8",
+  "psycopg[binary]==3.3.9",
+  "pydantic==2.14.4",
+  "pydantic-settings==2.16.3",
+  "sqlalchemy==2.1.9",
   "uvicorn[standard]==0.54.0",
 ]
 
 [project.optional-dependencies]
 # Installed in the `test` image target, where CI runs the tests and the lint.
-test = ["httpx2==2.16.0", "pytest==9.2.0", "ruff==0.17.4"]
+test = ["httpx2==2.16.2", "pytest==9.2.0", "ruff==0.17.6"]
 
 [project.scripts]
 memoir-cli = "app.cli:main"
